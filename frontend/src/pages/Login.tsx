@@ -4,20 +4,33 @@ import { Lock, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError]       = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
       setError('Please enter both username and password.');
       return;
     }
-    navigate('/projects');
+    setIsLoading(true);
+    setError('');
+    try {
+      await login(username, password);
+      navigate('/projects');
+    } catch {
+      setError('Invalid username or password.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -38,10 +51,11 @@ const Login = () => {
               </Label>
               <Input
                 type="text"
-                placeholder="admin@tms.pro"
+                placeholder="admin"
                 value={username}
                 onChange={(e) => { setUsername(e.target.value); setError(''); }}
                 className="bg-secondary border-0 h-11 focus-visible:ring-1 focus-visible:ring-accent/40"
+                disabled={isLoading}
               />
             </div>
 
@@ -56,6 +70,7 @@ const Login = () => {
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(''); }}
                   className="bg-secondary border-0 h-11 pr-10 focus-visible:ring-1 focus-visible:ring-accent/40"
+                  disabled={isLoading}
                 />
                 <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
               </div>
@@ -65,8 +80,12 @@ const Login = () => {
               <p className="text-destructive text-sm">{error}</p>
             )}
 
-            <Button type="submit" className="w-full h-11 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground font-semibold border-0">
-              Sign In
+            <Button
+              type="submit"
+              className="w-full h-11 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground font-semibold border-0"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Signing in…' : 'Sign In'}
             </Button>
           </form>
         </div>
