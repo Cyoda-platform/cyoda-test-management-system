@@ -1,0 +1,304 @@
+import { useState, useEffect } from 'react';
+import Breadcrumbs from '@/components/Breadcrumbs';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Plus, ExternalLink, Trash2, Lock, Search, AlertTriangle, Pencil } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { mockTestRuns, mockProjects, type TestRun } from '@/data/mockData';
+
+const StatusBadge = ({ status }: { status: string }) => {
+  const cls = status === 'initial' ? 'badge-status-initial' : status === 'active' ? 'badge-status-active' : 'badge-status-completed';
+  return (
+    <span className={`${cls} inline-flex items-center gap-1`}>
+      {status === 'completed' && <Lock className="h-3 w-3" strokeWidth={1.5} />}
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+};
+
+const ProgressBar = ({ passed, failed, untested }: { passed: number; failed: number; untested: number }) => {
+  const total = passed + failed + untested;
+  if (total === 0) return <div className="h-1.5 rounded-full bg-secondary w-full" />;
+  return (
+    <div className="flex h-1.5 rounded-full overflow-hidden w-full bg-secondary" title={`Passed: ${passed} | Failed: ${failed} | Untested: ${untested}`}>
+      {passed > 0 && <div className="bg-success" style={{ width: `${(passed / total) * 100}%` }} />}
+      {failed > 0 && <div className="bg-destructive" style={{ width: `${(failed / total) * 100}%` }} />}
+      {untested > 0 && <div className="bg-muted-foreground/20" style={{ width: `${(untested / total) * 100}%` }} />}
+    </div>
+  );
+};
+
+const TestRuns = () => {
+  const { projectId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const project = mockProjects.find((p) => p.id === projectId);
+  const [runs, setRuns] = useState<TestRun[]>(mockTestRuns.filter((r) => r.projectId === projectId));
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [envFilter, setEnvFilter] = useState('all');
+  const [search, setSearch] = useState('');
+
+  // Handle new test run from Repository
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.newRun) {
+      setRuns((prev) => [state.newRun, ...prev]);
+      // Clear the state so it doesn't re-add on navigation
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate]);
+
+
+
+  // Edit modal
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<TestRun | null>(null);
+
+  // Delete modal
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TestRun | null>(null);
+
+  const filtered = runs
+    .filter((r) => {
+      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (envFilter !== 'all' && r.environment !== envFilter) return false;
+      if (search && !r.name.toLowerCase().includes(search.toLowerCase()) && !r.id.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const openCreate = () => {
+    navigate(`/projects/${projectId}/runs/create`);
+  };
+
+  const handleEdit = () => {
+    if (!editTarget) return;
+    setRuns(runs.map((r) => (r.id === editTarget.id ? {
+      ...r,
+      name: editTarget.name,
+      environment: editTarget.environment,
+      buildVersion: editTarget.buildVersion,
+      description: editTarget.description,
+    } : r)));
+    setEditOpen(false);
+    setEditTarget(null);
+  };
+
+  const openEdit = (run: TestRun) => {
+    setEditTarget(run);
+    setEditOpen(true);
+  };
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    setRuns(runs.filter((r) => r.id !== deleteTarget.id));
+    setDeleteOpen(false);
+    setDeleteTarget(null);
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex-1 overflow-auto surface-base">
+        <div className="max-w-7xl mx-auto w-full px-6 py-6">
+          {/* Breadcrumbs & Title */}
+          <div className="mb-4">
+            <div className="mb-2">
+              <Breadcrumbs segments={[
+                { label: 'Projects', href: '/projects' },
+                { label: project?.name || 'Project', href: `/projects/${projectId}/repository` },
+                { label: 'Test Runs' },
+              ]} />
+            </div>
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold text-foreground tracking-[-0.02em]">Test Runs</h1>
+              <Button size="sm" className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground gap-1.5 border-0" onClick={openCreate}>
+                <Plus className="h-3.5 w-3.5" strokeWidth={1.5} /> Create Test Run
+              </Button>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="py-3 mb-4 flex items-center gap-3">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+              <Input
+                placeholder="Filter by Run name or ID"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-9 bg-card border border-border focus-visible:ring-1 focus-visible:ring-accent/40"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-36 h-9 bg-card border border-border"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent className="glass-surface border-0">
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="initial">Initial</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={envFilter} onValueChange={setEnvFilter}>
+              <SelectTrigger className="w-36 h-9 bg-card border border-border"><SelectValue placeholder="Environment" /></SelectTrigger>
+              <SelectContent className="glass-surface border-0">
+                <SelectItem value="all">All Envs</SelectItem>
+                <SelectItem value="Staging">Staging</SelectItem>
+                <SelectItem value="Production">Production</SelectItem>
+                <SelectItem value="QA-Env">QA-Env</SelectItem>
+                <SelectItem value="Dev">Dev</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Table */}
+          <div className="bg-card rounded-lg shadow-soft overflow-hidden">
+            <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-200 dark:bg-slate-700 sticky top-0 z-10">
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">ID</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Name</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Environment</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Status</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-40">Progress</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((run) => (
+              <tr key={run.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50">
+                <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">{run.id}</td>
+                <td className="px-5 py-3.5 font-medium text-foreground">
+                  <button
+                    className="hover:text-primary transition-colors text-left cursor-pointer"
+                    onClick={() => navigate(`/projects/${projectId}/runs/${run.id}`)}
+                  >
+                    {run.name}
+                  </button>
+                </td>
+                <td className="px-5 py-3.5 text-muted-foreground">{run.environment}</td>
+                <td className="px-5 py-3.5"><StatusBadge status={run.status} /></td>
+                <td className="px-5 py-3.5">
+                  <ProgressBar passed={run.passed} failed={run.failed} untested={run.untested} />
+                </td>
+                <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap text-[10px] font-mono tracking-wider">{run.createdAt}</td>
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => navigate(`/projects/${projectId}/runs/${run.id}`)}>
+                      <ExternalLink className="h-4 w-4" strokeWidth={1.5} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => openEdit(run)}>
+                      <Pencil className="h-4 w-4" strokeWidth={1.5} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => { setDeleteTarget(run); setDeleteOpen(true); }}>
+                      <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+          </div>
+        </div>
+      </div>
+
+
+      {/* Edit Test Run Modal */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-[600px] bg-card border-0 shadow-elevated rounded-xl p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4">
+            <DialogTitle className="text-lg font-bold text-foreground tracking-[-0.02em]">Edit Test Run</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              Update test run details.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-6 pb-4 space-y-4">
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">Name</Label>
+              <Input
+                value={editTarget?.name ?? ''}
+                onChange={(e) => setEditTarget(t => t ? { ...t, name: e.target.value } : t)}
+                placeholder="e.g. Sprint 12 Regression"
+                className="mt-1.5 h-9 bg-secondary border-0 focus-visible:ring-1 focus-visible:ring-accent/40"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">Environment</Label>
+              <Select value={editTarget?.environment ?? 'Staging'} onValueChange={(v) => setEditTarget(t => t ? { ...t, environment: v } : t)}>
+                <SelectTrigger className="mt-1.5 h-9 bg-secondary border-0 focus-visible:ring-1 focus-visible:ring-accent/40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass-surface border-0">
+                  <SelectItem value="Staging">Staging</SelectItem>
+                  <SelectItem value="Production">Production</SelectItem>
+                  <SelectItem value="QA-Env">QA-Env</SelectItem>
+                  <SelectItem value="Dev">Dev</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">Build / Version</Label>
+              <Input
+                value={editTarget?.buildVersion ?? ''}
+                onChange={(e) => setEditTarget(t => t ? { ...t, buildVersion: e.target.value } : t)}
+                placeholder="e.g. v2.4.0-rc1"
+                className="mt-1.5 h-9 bg-secondary border-0 focus-visible:ring-1 focus-visible:ring-accent/40"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">Description</Label>
+              <Textarea
+                value={editTarget?.description ?? ''}
+                onChange={(e) => setEditTarget(t => t ? { ...t, description: e.target.value } : t)}
+                placeholder="Describe the purpose of this test run..."
+                className="mt-1.5 bg-secondary border-0 focus-visible:ring-1 focus-visible:ring-accent/40 min-h-[70px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="px-6 py-4 border-t border-border">
+            <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0"
+              onClick={handleEdit}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-sm bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-3">
+              <AlertTriangle className="h-6 w-6 text-destructive shrink-0" strokeWidth={1.5} />
+              Delete Test Run
+            </DialogTitle>
+            <DialogDescription className="text-sm text-foreground mt-3">
+              Are you sure you want to delete <span className="font-bold">"{deleteTarget?.name}"</span>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-6">
+            <Button variant="outline" onClick={() => { setDeleteOpen(false); setDeleteTarget(null); }}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default TestRuns;

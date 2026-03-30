@@ -1,0 +1,175 @@
+# Java Client Template
+
+> A structured template for building scalable web clients using Spring Boot, designed for seamless integration with Cyoda over gRPC and REST. Features workflow-driven backend interactions with fluent serialization APIs for type-safe processing.
+
+## Documentation
+
+default branch: main
+- [README](https://github.com/Cyoda-platform/java-client-template/${branch}/README.md): Complete project documentation including setup, architecture, and workflow configuration
+- [Usage Rules](https://github.com/Cyoda-platform/java-client-template/${branch}/usage-rules.md): Developer and AI agent guidelines for following project conventions
+- [Augment Guidelines](https://github.com/Cyoda-platform/java-client-template/${branch}/.augment-guidelines): Project overview and development workflow guidelines
+
+## Code Examples
+
+- Complete examples and templates for all components
+  - [Code Examples](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/): Implementation examples
+    - [Controllers](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/controller/): REST controller patterns
+    - [Entities](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/entity/): Entity class implementations
+    - [Processors](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/processor/): Workflow processor examples
+    - [Criteria](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/criterion/): Workflow criteria examples
+    - [Patterns](https://github.com/Cyoda-platform/java-client-template/${branch}/llm_example/code/patterns/): Patterns and anti-patterns guide
+  - [Configuration Examples](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/resources/example/config/): Configuration templates
+    - [Workflow Configs](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/resources/example/config/workflow/): Workflow JSON configuration templates
+
+```
+java-client-template/
+├── src/main/java/com/java_template/
+│   ├── common/                          # Framework code - DO NOT MODIFY
+│   └── application/                     # Your business logic (usually empty in template)
+      ├── controller/                    # REST endpoints (usually empty in template)
+      ├── entity/                        # Domain entities (usually empty in template)
+      ├── processor/                     # Workflow processors (usually empty in template)
+      └── criterion/                     # Workflow criteria (usually empty in template)
+│   └── resources/                       # Configuration files (usually empty in template)
+│       └── workflow/                    # Workflow configurations (usually empty in template)
+├── src/test/java/com/example/           # Compilable examples and templates
+│   ├── application/                     # Example implementations
+│   │   ├── controller/                  # REST controller examples
+│   │   ├── entity/                      # Entity implementation examples
+│   │   ├── processor/                   # Processor implementation examples
+│   │   └── criterion/                   # Criterion implementation examples
+│   ├── test/resources/example/config/workflow/ # Workflow configuration examples
+```
+
+## Requirements & Specifications
+
+- [Functional Requirements](https://github.com/Cyoda-platform/java-client-template/${branch}/src/main/java/com/java_template/prototype/functional_requirement.md): Detailed functional requirements for the user application
+- [User Requirements](https://github.com/Cyoda-platform/java-client-template/${branch}/src/main/java/com/java_template/prototype/user_requirement.md): User-focused requirements specification for the user application
+
+## Configuration
+
+- [Build Configuration](https://github.com/Cyoda-platform/java-client-template/${branch}/build.gradle): Gradle build configuration with dependencies and plugins
+- [Application Configuration](https://github.com/Cyoda-platform/java-client-template/${branch}/src/main/resources/application.yml): Base Spring Boot configuration with defaults
+- [Workflow Schema](https://github.com/Cyoda-platform/java-client-template/${branch}/src/main/resources/schema/common/statemachine/conf/WorkflowConfiguration.json): Workflow configuration schema defining states, transitions, processors, and criteria structure
+
+---
+
+# README.md
+
+# Java Client Template
+
+A structured template for building scalable web clients using **Spring Boot**, designed for seamless integration with **Cyoda** over **gRPC** and **REST**.
+
+---
+
+## 🚀 Features
+
+- **Spring Boot**-based fast backend starter.
+- Modular, extensible structure for rapid iteration.
+- Built-in support for **gRPC** and **REST** APIs.
+- Integration with **Cyoda**: workflow-driven backend interactions.
+- Serialization architecture with fluent APIs for type-safe processing.
+
+---
+
+## 🛠️ Getting Started
+
+> ☕ **Java 21 Required**
+> Make sure Java 21 is installed and set as the active version.
+
+### 1. Clone the Project
+
+```bash
+git clone https://github.com/Cyoda-platform/java-client-template.git
+cd java-client-template
+```
+
+### 2. ⚙️ Configure the Application
+
+Configuration is managed via Spring Boot YAML files. For local development:
+
+```bash
+# Option 1: Create a local profile
+# For example, create src/main/resources/application-local.yml with your settings
+./gradlew runApp --args='--spring.profiles.active=local'
+
+# Option 2: Use environment variables
+export APP_CONFIG_CYODA_HOST=your-cyoda-host:8443
+export APP_CONFIG_CYODA_CLIENT_ID=your-client-id
+export APP_CONFIG_CYODA_CLIENT_SECRET=your-client-secret
+```
+
+### 3. 🧰 Run Workflow Import Tool
+
+#### Option 1: Run via Gradle (recommended for local development)
+```bash
+./gradlew runApp -PmainClass=com.java_template.common.tool.WorkflowImportTool --args='--spring.profiles.active=local'
+```
+
+#### Option 2: Build and Run JAR (recommended for CI or scripting)
+```bash
+./gradlew bootJarWorkflowImport
+java -jar build/libs/java-client-template-1.0-SNAPSHOT-workflow-import.jar --spring.profiles.active=local
+```
+
+### 4. ▶️ Run the Application
+
+#### Option 1: Run via Gradle
+```bash
+./gradlew runApp --args='--spring.profiles.active=local'
+```
+
+#### Option 2: Run Manually After Build
+```bash
+./gradlew build
+java -jar build/libs/java-client-template-1.0-SNAPSHOT.jar --spring.profiles.active=local
+```
+
+> Access the app: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+>
+> **Note**: The default port is 8080 as configured in `src/main/resources/application.yml`. You can change this by setting the `server.port` property.
+
+---
+
+## 🧩 Project Structure
+
+This template follows a clear separation between **framework code** (that you don't modify) and **application code** (where you implement your business logic).
+
+### `src/main/java/com/java_template/common/` - Framework Code (DO NOT MODIFY)
+
+**Core Framework Components:**
+- `auth/` – Authentication & token management for Cyoda integration
+- `config/` – Configuration classes using Spring Boot's configuration management
+- `dto/` – Data transfer objects including `EntityWithMetadata<T>` wrapper
+- `grpc/` – gRPC client integration with Cyoda platform
+- `repository/` – Data access layer for Cyoda REST API operations
+- `service/` – `EntityService` interface and implementation for all Cyoda operations
+- `serializer/` – Serialization framework with fluent APIs (`ProcessorSerializer`, `CriterionSerializer`)
+- `tool/` – Utility tools like `WorkflowImportTool` for importing workflow configurations
+- `util/` – Various utility functions and helpers
+- `workflow/` – Core interfaces: `CyodaEntity`, `CyodaProcessor`, `CyodaCriterion`
+
+**Key Framework Interfaces:**
+- **`CyodaEntity`** - Base interface for all domain entities
+- **`CyodaProcessor`** - Interface for workflow business logic components
+- **`CyodaCriterion`** - Interface for workflow condition evaluation components
+- **`EntityService`** - Service interface for all Cyoda data operations
+
+> ⚠️ **IMPORTANT**: Never modify anything in the `common/` directory. This is framework code.
+
+### `src/main/java/com/java_template/application/` - Your Business Logic (ADD AS NEEDED)
+
+**Your Implementation Areas:**
+- `controller/` – REST endpoints and HTTP API controllers
+- `entity/` – Domain entities implementing `CyodaEntity` interface
+- `processor/` – Workflow processors implementing `CyodaProcessor` interface
+- `criterion/` – Workflow criteria implementing `CyodaCriterion` interface
+
+## Code Examples and Best Practices
+**All examples and templates are in the `src/test/java/com/example/` and `src/test/resources/example/` directories:**
+- `src/test/java/com/example/application/controller/` - REST controller patterns
+- `src/test/java/com/example/application/entity/`     - Entity class implementations
+- `src/test/java/com/example/application/processor/`  - Workflow processor examples
+- src/test/java/com/example/application/criterion/`   - Workflow criteria examples
+- `src/test/java/com/example/application/patterns/`   - Patterns and anti-patterns guide
+- `src/test/java/com/example/config/workflow/`        - Workflow JSON configuration templates
