@@ -16,7 +16,7 @@ public class TestStepDTO {
     private UUID id;
     private UUID testCaseId;
     private Integer stepNumber;
-    @JsonProperty("description")
+    @JsonProperty("action")
     private String action;
     private String expectedResult;
     private String status;

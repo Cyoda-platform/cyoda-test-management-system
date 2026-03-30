@@ -43,8 +43,8 @@ app:
     allowed-headers: Authorization,Content-Type,Accept,Origin,X-Requested-With,Cache-Control
     # Headers exposed to the client (empty by default for security)
     exposed-headers:
-    # Allow credentials (cookies, auth headers) - false is more secure
-    allow-credentials: false
+    # Allow credentials (cookies, auth headers) - required for httpOnly cookie auth
+    allow-credentials: true
     # Preflight cache duration in seconds (3600 = 1 hour)
     max-age-seconds: 3600
     # URL pattern to apply CORS to

@@ -5,20 +5,22 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.stereotype.Component;
-import org.springframework.web.method.HandlerMethod;
-import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+
 import java.io.IOException;
-import java.lang.reflect.Method;
 
 /**
- * Authorization filter for API endpoints
- * Validates JWT tokens and checks @RequireRole annotations
- * Allows public endpoints like /api/login without token
+ * Authorization filter for API endpoints.
+ * Accepts tokens via:
+ *   1. httpOnly cookie "auth-token" (preferred — set by /auth/login)
+ *   2. Authorization: Bearer <token> header (kept for backwards compatibility / Swagger UI)
  */
 public class AuthorizationFilter implements Filter {
+
+    private static final String COOKIE_NAME = "auth-token";
+
     private final JwtTokenProvider tokenProvider;
 
     public AuthorizationFilter(JwtTokenProvider tokenProvider) {
@@ -28,46 +30,66 @@ public class AuthorizationFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
+
         HttpServletRequest httpRequest = (HttpServletRequest) request;
         HttpServletResponse httpResponse = (HttpServletResponse) response;
 
         String path = httpRequest.getRequestURI();
 
-        // Allow public endpoints without token
+        // Allow public endpoints without a token
         if (isPublicEndpoint(path)) {
             chain.doFilter(request, response);
             return;
         }
 
-        // Extract and validate token
-        String authHeader = httpRequest.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            httpResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            httpResponse.setContentType("application/json");
-            httpResponse.getWriter().write("{\"error\": \"Missing or invalid Authorization header\"}");
+        // 1. Try httpOnly cookie first
+        String token = extractFromCookie(httpRequest);
+
+        // 2. Fall back to Authorization: Bearer header (Swagger UI / API clients)
+        if (token == null) {
+            String authHeader = httpRequest.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                token = authHeader.substring(7);
+            }
+        }
+
+        if (token == null) {
+            unauthorized(httpResponse, "No authentication token provided");
             return;
         }
 
-        String token = authHeader.substring(7);
         if (!tokenProvider.validateToken(token)) {
-            httpResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            httpResponse.setContentType("application/json");
-            httpResponse.getWriter().write("{\"error\": \"Invalid or expired token\"}");
+            unauthorized(httpResponse, "Invalid or expired token");
             return;
         }
 
-        String username = tokenProvider.getUsernameFromToken(token);
-        String role = tokenProvider.getRoleFromToken(token);
-
-        // Set user context in request
-        httpRequest.setAttribute("username", username);
-        httpRequest.setAttribute("role", role);
+        // Attach user context to request attributes for use in controllers
+        httpRequest.setAttribute("username", tokenProvider.getUsernameFromToken(token));
+        httpRequest.setAttribute("role", tokenProvider.getRoleFromToken(token));
 
         chain.doFilter(request, response);
     }
 
+    private String extractFromCookie(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) return null;
+        for (Cookie cookie : cookies) {
+            if (COOKIE_NAME.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
+    }
+
+    private void unauthorized(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"error\": \"" + message + "\"}");
+    }
+
     private boolean isPublicEndpoint(String path) {
-        return path.contains("/login") ||
+        return path.contains("/auth/login") ||
+               path.contains("/auth/logout") ||
                path.contains("/actuator") ||
                path.contains("/health") ||
                path.contains("/swagger") ||
@@ -77,4 +99,3 @@ public class AuthorizationFilter implements Filter {
                path.equals("/api/");
     }
 }
-
