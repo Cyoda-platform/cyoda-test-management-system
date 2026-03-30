@@ -36,6 +36,7 @@ public class ProjectDTO implements CyodaEntity {
     private String description;
 
     private String status;
+    private boolean deleted;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
