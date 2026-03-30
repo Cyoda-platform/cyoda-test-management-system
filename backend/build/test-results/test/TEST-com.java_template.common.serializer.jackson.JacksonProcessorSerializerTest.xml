@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.common.serializer.jackson.JacksonProcessorSerializerTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.004">
+  <properties/>
+  <testcase name="extractEntity should handle payload without metadata gracefully" classname="com.java_template.common.serializer.jackson.JacksonProcessorSerializerTest" time="0.001"/>
+  <testcase name="extractEntity should properly extract entity and metadata from payload" classname="com.java_template.common.serializer.jackson.JacksonProcessorSerializerTest" time="0.001"/>
+  <testcase name="extractEntity should handle null payload gracefully" classname="com.java_template.common.serializer.jackson.JacksonProcessorSerializerTest" time="0.001"/>
+  <testcase name="extractEntity should propagate JsonProcessingException for invalid entity data" classname="com.java_template.common.serializer.jackson.JacksonProcessorSerializerTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.common.serializer.EvaluationOutcomeTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.065">
+  <properties/>
+  <testcase name="Should short-circuit allOf() with suppliers on first failure" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.031"/>
+  <testcase name="Should chain outcomes with OR logic - success or failure" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should demonstrate that anyOf convenience overload evaluates all arguments" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.027"/>
+  <testcase name="Should demonstrate complex chaining scenarios" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should short-circuit chained or() calls on first success" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.001"/>
+  <testcase name="Should use allOf for all successful outcomes" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should short-circuit anyOf() with suppliers on first success" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.001"/>
+  <testcase name="Should use anyOf for multiple OR operations" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.001"/>
+  <testcase name="Should use allOf for multiple AND operations" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should chain outcomes with AND logic - success and success" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should chain outcomes with OR logic - failure or success" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should chain outcomes with AND logic - failure and success" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should short-circuit chained and() calls on first failure" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should provide convenience methods for checking outcome type" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should chain outcomes with AND logic - success and failure" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should chain outcomes with OR logic - failure or failure returns last" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.001"/>
+  <testcase name="Should chain outcomes with AND logic - failure and failure returns first" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should use anyOf for all failed outcomes" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.0"/>
+  <testcase name="Should demonstrate that allOf convenience overload evaluates all arguments" classname="com.java_template.common.serializer.EvaluationOutcomeTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.application.serializer.ResponseBuilderTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.108">
+  <properties/>
+  <testcase name="ProcessorResponseBuilder should create error response" classname="com.java_template.application.serializer.ResponseBuilderTest" time="0.1"/>
+  <testcase name="CriterionResponseBuilder should create successful non-match response" classname="com.java_template.application.serializer.ResponseBuilderTest" time="0.002"/>
+  <testcase name="CriterionResponseBuilder should create successful match response" classname="com.java_template.application.serializer.ResponseBuilderTest" time="0.001"/>
+  <testcase name="ProcessorResponseBuilder should create successful response with JSON data" classname="com.java_template.application.serializer.ResponseBuilderTest" time="0.001"/>
+  <testcase name="CriterionResponseBuilder should create error response" classname="com.java_template.application.serializer.ResponseBuilderTest" time="0.001"/>
+  <testcase name="ProcessorResponseBuilder should create successful response with entity" classname="com.java_template.application.serializer.ResponseBuilderTest" time="0.001"/>
+  <testcase name="Factory methods should return correct builder types" classname="com.java_template.application.serializer.ResponseBuilderTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

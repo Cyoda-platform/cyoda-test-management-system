@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.common.util.CyodaExceptionUtilTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.008">
+  <properties/>
+  <testcase name="testFormatErrorResponse_withoutErrorCode()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.001"/>
+  <testcase name="testExtractErrorCode_withNullException()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.0"/>
+  <testcase name="testExtractErrorMessage_withoutExternalErrorPrefix()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.004"/>
+  <testcase name="testExtractErrorMessage_withNullException()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.0"/>
+  <testcase name="testFormatErrorResponse_withErrorCode()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.001"/>
+  <testcase name="testExtractErrorMessage_withExternalErrorPattern()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.0"/>
+  <testcase name="testExtractErrorMessage_withPlainException()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.0"/>
+  <testcase name="testExtractErrorCode_withoutErrorCodePattern()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.0"/>
+  <testcase name="testExtractErrorMessage_complexNestedMessage()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.0"/>
+  <testcase name="testExtractErrorMessage_withStatusRuntimeExceptionOnly()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.001"/>
+  <testcase name="testExtractErrorCode_withErrorCodePattern()" classname="com.java_template.common.util.CyodaExceptionUtilTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

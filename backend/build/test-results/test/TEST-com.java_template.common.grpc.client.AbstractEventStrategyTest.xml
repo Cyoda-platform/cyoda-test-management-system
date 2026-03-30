@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.common.grpc.client.AbstractEventStrategyTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.124">
+  <properties/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_MixedQuotes()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.117"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_CorruptedJsonWithPartialRequestId()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.001"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_ValidJsonNoSpaces()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.001"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_MultilineJson()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.0"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_UuidFallbackPattern()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.001"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_SingleQuotes()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.0"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_ValidJsonWithQuotes()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.001"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_NullCloudEvent()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.0"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_RequestIdWithSpecialCharacters()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.001"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_NoRequestIdField()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.0"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_CaseInsensitive()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.001"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_GeneralPatternFallback()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.001"/>
+  <testcase name="testRecoverRequestIdFromCloudEvent_EmptyTextData()" classname="com.java_template.common.grpc.client.AbstractEventStrategyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

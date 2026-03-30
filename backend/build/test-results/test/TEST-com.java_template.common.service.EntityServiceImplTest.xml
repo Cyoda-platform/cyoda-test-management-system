@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.common.service.EntityServiceImplTest" tests="45" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.125">
+  <properties/>
+  <testcase name="streamAll should handle repository failure on first page" classname="com.java_template.common.service.EntityServiceImplTest" time="0.044"/>
+  <testcase name="save should return EntityWithMetadata when successful" classname="com.java_template.common.service.EntityServiceImplTest" time="0.004"/>
+  <testcase name="streamAll should support count operation" classname="com.java_template.common.service.EntityServiceImplTest" time="0.004"/>
+  <testcase name="saveAll should handle repository failure with non-empty collection" classname="com.java_template.common.service.EntityServiceImplTest" time="0.0"/>
+  <testcase name="update should pass null transition directly to repository" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="updateByBusinessId should handle repository failure during find" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="deleteByBusinessId should return false when entity not found" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="getEntityStatsByState should return stats map when successful" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="search should call repository.findAllByCriteria with search condition" classname="com.java_template.common.service.EntityServiceImplTest" time="0.003"/>
+  <testcase name="getEntityStatsByState with specific states should return filtered stats" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="search should handle repository failure" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="streamAll should stream all entities across multiple pages" classname="com.java_template.common.service.EntityServiceImplTest" time="0.005"/>
+  <testcase name="deleteById should return entity ID when successful" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="saveAll should call repository.saveAll with non-empty collection" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="getById should handle repository failure gracefully" classname="com.java_template.common.service.EntityServiceImplTest" time="0.0"/>
+  <testcase name="findByBusinessId should call repository.findAllByCriteria with correct search condition" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="updateAll should return empty list when no entities provided" classname="com.java_template.common.service.EntityServiceImplTest" time="0.0"/>
+  <testcase name="getById should return EntityWithMetadata when successful" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="streamAll should respect pointInTime parameter" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="updateByBusinessId should handle entity not found" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="streamAll should provide accurate size estimation from the start" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="getEntityStatsByState should return empty map when no entities exist" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="streamAll should support filtering with stream operations" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="streamAll should support mapping with stream operations" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="update should use provided transition when not null" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="findAll should handle repository failure" classname="com.java_template.common.service.EntityServiceImplTest" time="0.0"/>
+  <testcase name="getEntityStatsByState with pointInTime should return stats map when successful" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="deleteByBusinessId should successfully delete entity when found" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="save should handle repository failure gracefully" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="streamAll should handle repository failure on subsequent page" classname="com.java_template.common.service.EntityServiceImplTest" time="0.003"/>
+  <testcase name="findByBusinessId should handle repository failure" classname="com.java_template.common.service.EntityServiceImplTest" time="0.0"/>
+  <testcase name="saveAll should return empty list when no entities provided" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="update should handle repository failure gracefully" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="updateByBusinessId should successfully update entity when found" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="deleteAll should sum deletion counts correctly" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="updateAll should pass null transition directly to repository" classname="com.java_template.common.service.EntityServiceImplTest" time="0.004"/>
+  <testcase name="deleteByBusinessId should handle repository failure during find" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="getItems should handle repository failure" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="streamAll should handle empty result set" classname="com.java_template.common.service.EntityServiceImplTest" time="0.0"/>
+  <testcase name="deleteAll with model parameters should work correctly" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="deleteAll with model parameters should handle repository failure" classname="com.java_template.common.service.EntityServiceImplTest" time="0.001"/>
+  <testcase name="deleteAll should handle repository failure" classname="com.java_template.common.service.EntityServiceImplTest" time="0.0"/>
+  <testcase name="deleteById should handle repository failure gracefully" classname="com.java_template.common.service.EntityServiceImplTest" time="0.0"/>
+  <testcase name="findAll should call repository.findAll with correct model parameters" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <testcase name="streamAll should handle single page result" classname="com.java_template.common.service.EntityServiceImplTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

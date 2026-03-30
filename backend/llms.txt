@@ -1,0 +1,32 @@
+# Java Client Template
+
+> A structured template for building scalable web clients using Spring Boot, designed for seamless integration with Cyoda over gRPC and REST. Features workflow-driven backend interactions with fluent serialization APIs for type-safe processing.
+
+## Documentation
+
+default branch: main
+
+- [README](https://github.com/Cyoda-platform/java-client-template/${branch}/README.md): Complete project documentation including setup, architecture, and workflow configuration
+- [Usage Rules](https://github.com/Cyoda-platform/java-client-template/${branch}/usage-rules.md): Developer and AI agent guidelines for following project conventions
+- [Augment Guidelines](https://github.com/Cyoda-platform/java-client-template/${branch}/.augment-guidelines): Project overview and development workflow guidelines
+
+## Code Examples
+
+- Complete examples and templates for all components
+  - [Code Examples](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/): Implementation examples
+    - [Controllers](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/controller/): REST controller patterns
+    - [Entities](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/entity/): Entity class implementations
+    - [Processors](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/processor/): Workflow processor examples
+    - [Criteria](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/java/com/example/criterion/): Workflow criteria examples
+    - [Patterns](https://github.com/Cyoda-platform/java-client-template/${branch}/llm_example/code/patterns/): Patterns and anti-patterns guide
+  - [Configuration Examples](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/resources/example/config/): Configuration templates
+    - [Workflow Configs](https://github.com/Cyoda-platform/java-client-template/${branch}/src/test/resources/example/config/workflow/): Workflow JSON configuration templates
+
+## Configuration
+
+- [Build Configuration](https://github.com/Cyoda-platform/java-client-template/${branch}/build.gradle): Gradle build configuration with dependencies and plugins
+- [Application Configuration](https://github.com/Cyoda-platform/java-client-template/${branch}/src/main/resources/application.yml): Base Spring Boot configuration with defaults
+
+## API Documentation
+
+- [llms-full.txt](https://github.com/Cyoda-platform/java-client-template/${branch}/llms-full.txt): Complete embedded documentation for single-pass AI ingestion

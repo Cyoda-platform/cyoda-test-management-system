@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.application.serializer.ProcessingChainTest" tests="45" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.039">
+  <properties/>
+  <testcase name="toEntity should skip when error already exists" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="complete should handle entityToJsonNode conversion exception" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="toJsonFlow should skip when error already exists" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="ProcessingChain should handle map transformation error" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="EntityProcessingChain should transform entity" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should use custom error handler" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain should handle null entity after extraction" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should handle custom converter error" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="complete with converter should skip when error already exists" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should handle toJsonFlow conversion error" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain should handle payload extraction error" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="complete with converter should handle converter exception with custom error handler" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should handle context access in entity transformations" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should handle validation failure" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="toJsonFlow should skip conversion when processedEntity is null" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should handle entity validation" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain should handle multiple error handlers (last one wins)" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="validate with custom message should handle null processedEntity" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="complete should handle null processedEntity in EntityProcessingChain" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="complete with converter should handle null converter" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain should handle executeFunction" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain map should transform JSON payload" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="validate should handle null processedEntity" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="Error should propagate through mixed JSON and entity operations" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="complete with converter should handle null processedEntity" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="EntityProcessingChain should handle validation failure with custom message" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="validate should skip when error already exists" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain should handle error in first transformation and skip subsequent ones" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain toEntityResponse should extract entity and switch to entity response flow" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="extractEntity should handle payload without metadata" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should handle complete with custom converter" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should handle toJsonFlow transition" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain should handle executeFunction with error" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain should initialize with extracted payload" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="ProcessingChain should use custom error handler" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="Error should propagate through multiple entity operations" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="ProcessingChain should handle context access in transformations" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="EntityProcessingChain complete should use custom error handler when entityToJsonNode fails" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain should handle entity transformation error" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="EntityProcessingChain complete with converter should use custom error handler when error exists" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="ProcessingChain should handle multiple chained transformations" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.0"/>
+  <testcase name="complete with converter should handle converter exception" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="withErrorHandler should work correctly when called after error occurs" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <testcase name="extractEntity should properly extract metadata from payload" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.002"/>
+  <testcase name="ProcessingChain should handle entity extraction error" classname="com.java_template.application.serializer.ProcessingChainTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.common.serializer.ErrorInfoTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.004">
+  <properties/>
+  <testcase name="ErrorInfo.fromException should handle exception with null message" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.0"/>
+  <testcase name="ErrorInfo should reject null code" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.001"/>
+  <testcase name="ErrorInfo should reject empty code" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.0"/>
+  <testcase name="ErrorInfo should not be equal when code or message differ" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.0"/>
+  <testcase name="ErrorInfo.validationError should create validation error" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.001"/>
+  <testcase name="ErrorInfo.evaluationError should create evaluation error" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.0"/>
+  <testcase name="ErrorInfo.fromException should create ErrorInfo from exception" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.001"/>
+  <testcase name="ErrorInfo should be equal when code and message are the same" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.0"/>
+  <testcase name="ErrorInfo.processingError should create processing error" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.0"/>
+  <testcase name="ErrorInfo should reject whitespace-only code" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.0"/>
+  <testcase name="ErrorInfo should reject null message" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.001"/>
+  <testcase name="ErrorInfo should create successfully with valid code and message" classname="com.java_template.common.serializer.ErrorInfoTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

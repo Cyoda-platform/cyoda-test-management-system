@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="ExampleEntityController Tests" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:25" hostname="MacBook-Pro-Mac1.local" time="1.697">
+  <properties/>
+  <testcase name="Should delete entity by business ID successfully" classname="com.example.tests.ExampleEntityControllerTest" time="1.006"/>
+  <testcase name="Should approve entity" classname="com.example.tests.ExampleEntityControllerTest" time="0.275"/>
+  <testcase name="Should return OK with null when entity has no change metadata" classname="com.example.tests.ExampleEntityControllerTest" time="0.019"/>
+  <testcase name="Should return not found when entity does not exist" classname="com.example.tests.ExampleEntityControllerTest" time="0.016"/>
+  <testcase name="Should return not found when business ID does not exist" classname="com.example.tests.ExampleEntityControllerTest" time="0.017"/>
+  <testcase name="Should delete entity by ID successfully" classname="com.example.tests.ExampleEntityControllerTest" time="0.013"/>
+  <testcase name="Should get entity change metadata" classname="com.example.tests.ExampleEntityControllerTest" time="0.063"/>
+  <testcase name="Should search entities by category (low volume in-memory)" classname="com.example.tests.ExampleEntityControllerTest" time="0.016"/>
+  <testcase name="Should update entity successfully" classname="com.example.tests.ExampleEntityControllerTest" time="0.074"/>
+  <testcase name="Should get entity by business ID successfully" classname="com.example.tests.ExampleEntityControllerTest" time="0.017"/>
+  <testcase name="Should get entity by ID with point in time" classname="com.example.tests.ExampleEntityControllerTest" time="0.018"/>
+  <testcase name="Should update entity with workflow transition" classname="com.example.tests.ExampleEntityControllerTest" time="0.02"/>
+  <testcase name="Should create entity successfully when no duplicate exists" classname="com.example.tests.ExampleEntityControllerTest" time="0.021"/>
+  <testcase name="Should search with pagination (high volume pageable)" classname="com.example.tests.ExampleEntityControllerTest" time="0.036"/>
+  <testcase name="Should return conflict when duplicate business ID exists" classname="com.example.tests.ExampleEntityControllerTest" time="0.041"/>
+  <testcase name="Should return not found when deleting non-existent business ID" classname="com.example.tests.ExampleEntityControllerTest" time="0.01"/>
+  <testcase name="Should get entity by technical ID successfully" classname="com.example.tests.ExampleEntityControllerTest" time="0.011"/>
+  <testcase name="Should return bad request when create fails" classname="com.example.tests.ExampleEntityControllerTest" time="0.017"/>
+  <system-out><![CDATA[14:11:26.230 [Test worker] INFO org.hibernate.validator.internal.util.Version -- HV000001: Hibernate Validator 8.0.2.Final
+14:11:26.882 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:26.882 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:26.884 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 2 ms
+14:11:26.947 [Test worker] INFO com.example.application.controller.ExampleEntityController -- ExampleEntity deleted with business ID: TEST-001
+14:11:26.989 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:26.990 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:26.990 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:26.991 [Test worker] INFO com.example.application.controller.ExampleEntityController -- ExampleEntity approved with ID: 45d428bc-e9c7-4fb1-9375-643e978b226d
+14:11:27.265 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.265 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.265 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.282 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.282 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.282 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.298 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.299 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.299 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.313 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.314 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.314 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.315 [Test worker] INFO com.example.application.controller.ExampleEntityController -- ExampleEntity deleted with ID: 2bb0e266-482c-470c-9c68-a371866d35f5
+14:11:27.326 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.326 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.326 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.388 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.388 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.388 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.390 [Test worker] INFO com.example.application.controller.ExampleEntityController -- Found 2 entities in category 'PREMIUM'
+14:11:27.406 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.406 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.407 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+14:11:27.465 [Test worker] INFO com.example.application.controller.ExampleEntityController -- ExampleEntity updated with ID: 8ea43c45-71cd-4b43-8af2-07d3d257be37
+14:11:27.480 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.481 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.481 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.498 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.498 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.498 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.515 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.515 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.515 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.522 [Test worker] INFO com.example.application.controller.ExampleEntityController -- ExampleEntity updated with ID: 6b765fc0-d0ce-40d9-b88c-6ddb8d0fed65
+14:11:27.535 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.535 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.535 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.542 [Test worker] INFO com.example.application.controller.ExampleEntityController -- ExampleEntity created with ID: 930d4cde-7238-4f03-b2cc-224b723ba65d
+14:11:27.556 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.556 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.556 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.561 [Test worker] INFO com.example.application.controller.ExampleEntityController -- Search returned page 0 of 1 (total: 1 entities, searchId: f32a3e6b-1849-4bd3-9a36-31bdbb51a7cf)
+14:11:27.593 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.593 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.593 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.600 [Test worker] WARN com.example.application.controller.ExampleEntityController -- ExampleEntity with business ID TEST-001 already exists
+14:11:27.635 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.635 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.635 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.643 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.644 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.644 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+14:11:27.655 [Test worker] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+14:11:27.655 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+14:11:27.656 [Test worker] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

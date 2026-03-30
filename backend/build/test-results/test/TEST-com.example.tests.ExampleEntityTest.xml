@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="ExampleEntity Tests" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:27" hostname="MacBook-Pro-Mac1.local" time="0.009">
+  <properties/>
+  <testcase name="Should set and get timestamp fields" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="Should handle items list" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="Should support Lombok toString" classname="com.example.tests.ExampleEntityTest" time="0.003"/>
+  <testcase name="Should handle contact with nested address" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="ExampleAddress should set and get all fields" classname="com.example.tests.ExampleEntityTest" time="0.001"/>
+  <testcase name="Should have correct entity version constant" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="Should have correct entity name constant" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="Should be invalid when exampleId is null" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="Should return correct model key" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="ExampleContact should set and get all fields" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="Should be valid when exampleId is set" classname="com.example.tests.ExampleEntityTest" time="0.001"/>
+  <testcase name="Should support Lombok equals and hashCode" classname="com.example.tests.ExampleEntityTest" time="0.001"/>
+  <testcase name="Should set and get all basic fields" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="Should handle null optional fields" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <testcase name="ExampleItem should set and get all fields" classname="com.example.tests.ExampleEntityTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

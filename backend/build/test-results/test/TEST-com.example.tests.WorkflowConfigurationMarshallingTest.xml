@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Workflow Configuration Marshalling Tests" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:27" hostname="MacBook-Pro-Mac1.local" time="0.025">
+  <properties/>
+  <testcase name="Should successfully marshall all workflow JSON files with strict ObjectMapper" classname="com.example.tests.WorkflowConfigurationMarshallingTest" time="0.025"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

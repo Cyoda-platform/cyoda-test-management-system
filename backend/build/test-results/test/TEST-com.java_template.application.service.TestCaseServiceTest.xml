@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.application.service.TestCaseServiceTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.004">
+  <properties/>
+  <testcase name="testGetTestCaseById()" classname="com.java_template.application.service.TestCaseServiceTest" time="0.001"/>
+  <testcase name="testCreateTestCase()" classname="com.java_template.application.service.TestCaseServiceTest" time="0.001"/>
+  <testcase name="testSoftDeleteTestCase()" classname="com.java_template.application.service.TestCaseServiceTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

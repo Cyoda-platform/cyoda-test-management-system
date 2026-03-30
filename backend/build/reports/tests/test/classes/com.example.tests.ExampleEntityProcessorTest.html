@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - ExampleEntityProcessor Tests</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>ExampleEntityProcessor Tests</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/com.example.tests.html">com.example.tests</a> &gt; ExampleEntityProcessorTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">10</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">0.045s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="tabs">
+<ul class="tabLinks">
+<li>
+<a href="#tab0">Tests</a>
+</li>
+<li>
+<a href="#tab1">Standard output</a>
+</li>
+</ul>
+<div id="tab0" class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Method name</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">Should not support different operation name</td>
+<td class="success">testDoesNotSupportDifferentOperation()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should handle entity with complete nested structures</td>
+<td class="success">testProcessEntityWithCompleteStructure()</td>
+<td class="success">0.006s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should handle entity with empty items list</td>
+<td class="success">testProcessEntityWithEmptyItems()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should process entity with items and calculate totals</td>
+<td class="success">testProcessEntityWithItems()</td>
+<td class="success">0.008s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should handle items with null itemTotal</td>
+<td class="success">testProcessEntityWithNullItemTotals()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should handle entity with null items list</td>
+<td class="success">testProcessEntityWithNullItems()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should fail processing when entity is invalid</td>
+<td class="success">testProcessInvalidEntity()</td>
+<td class="success">0.009s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should process valid entity successfully</td>
+<td class="success">testProcessValidEntity()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should populate response metadata correctly</td>
+<td class="success">testResponseMetadata()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">Should support correct operation specification</td>
+<td class="success">testSupports()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div id="tab1" class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>14:11:27.731 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- Processing ExampleEntity for request: test-request-123
+14:11:27.739 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- Processing ExampleEntity for request: test-request-123
+14:11:27.744 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- ExampleEntity TEST-002 processed successfully
+14:11:27.747 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- Processing ExampleEntity for request: test-request-123
+14:11:27.749 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- ExampleEntity TEST-001 processed successfully
+14:11:27.751 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- Processing ExampleEntity for request: test-request-123
+14:11:27.753 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- ExampleEntity TEST-004 processed successfully
+14:11:27.756 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- Processing ExampleEntity for request: custom-id-123
+14:11:27.759 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- ExampleEntity TEST-006 processed successfully
+14:11:27.762 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- Processing ExampleEntity for request: test-request-123
+14:11:27.765 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- ExampleEntity TEST-007 processed successfully
+14:11:27.767 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- Processing ExampleEntity for request: test-request-123
+14:11:27.769 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- ExampleEntity TEST-003 processed successfully
+14:11:27.771 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- Processing ExampleEntity for request: test-request-123
+14:11:27.773 [Test worker] INFO com.example.application.processor.ExampleEntityProcessor -- ExampleEntity TEST-005 processed successfully
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="http://www.gradle.org">Gradle 8.7</a> at 20 мар. 2026 г., 14:11:29</p>
+</div>
+</div>
+</body>
+</html>

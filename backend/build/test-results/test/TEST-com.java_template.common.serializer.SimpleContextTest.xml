@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.java_template.common.serializer.SimpleContextTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-03-20T17:11:29" hostname="MacBook-Pro-Mac1.local" time="0.002">
+  <properties/>
+  <testcase name="testCriterionEvaluateWithContext()" classname="com.java_template.common.serializer.SimpleContextTest" time="0.001"/>
+  <testcase name="testProcessorMapWithContext()" classname="com.java_template.common.serializer.SimpleContextTest" time="0.001"/>
+  <system-out><![CDATA[Context evaluation called!
+Entity ID: entity-123
+Transaction ID: txn-456
+Test field: testValue
+Numeric field: 42
+Returning success
+Response success: true
+Response matches: true
+Response error: null
+Response warnings: []
+Processor context evaluation called!
+Entity ID: entity-789
+Transaction ID: txn-123
+Processor response success: true
+Processor response error: null
+Processor response warnings: []
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
