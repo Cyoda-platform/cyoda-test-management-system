@@ -57,6 +57,8 @@ public class ProjectService {
 
     public ProjectDTO createProject(ProjectDTO project) {
         project.setStatus("ACTIVE");
+        project.setCreatedAt(java.time.LocalDateTime.now());
+        project.setUpdatedAt(java.time.LocalDateTime.now());
         return withId(entityService.create(project));
     }
 
