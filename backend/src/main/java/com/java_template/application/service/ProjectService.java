@@ -36,6 +36,15 @@ public class ProjectService {
     private ProjectDTO withId(EntityWithMetadata<ProjectDTO> result) {
         ProjectDTO entity = result.entity();
         entity.setId(result.getId());
+
+        // Set timestamps from metadata if not already set
+        if (entity.getCreatedAt() == null && result.metadata().getTimeOfChange() != null) {
+            entity.setCreatedAt(result.metadata().getTimeOfChange());
+        }
+        if (entity.getUpdatedAt() == null && result.metadata().getTimeOfChange() != null) {
+            entity.setUpdatedAt(result.metadata().getTimeOfChange());
+        }
+
         return entity;
     }
 
