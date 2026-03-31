@@ -32,9 +32,10 @@ import {
 
 export const keys = {
   projects: {
-    all:    ()           => ['projects']                    as const,
-    list:   (page = 0)   => ['projects', 'list', page]     as const,
-    detail: (id: string) => ['projects', 'detail', id]     as const,
+    all:    ()           => ['projects']                      as const,
+    lists:  ()           => ['projects', 'list']              as const,  // For invalidating ALL pages
+    list:   (page = 0)   => ['projects', 'list', page]       as const,
+    detail: (id: string) => ['projects', 'detail', id]       as const,
   },
   suites: {
     all:    (projectId: string)              => ['suites', projectId]             as const,
@@ -85,7 +86,7 @@ export function useCreateProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Pick<Project, 'name' | 'description'>) => projectsApi.create(body),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: keys.projects.all() }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: keys.projects.lists() }),
   });
 }
 
@@ -95,7 +96,7 @@ export function useUpdateProject() {
     mutationFn: ({ id, body }: { id: string; body: Partial<Project> }) =>
       projectsApi.update(id, body),
     onSuccess: (_data, { id }) => {
-      qc.invalidateQueries({ queryKey: keys.projects.all() });
+      qc.invalidateQueries({ queryKey: keys.projects.lists() });
       qc.invalidateQueries({ queryKey: keys.projects.detail(id) });
     },
   });
@@ -105,7 +106,7 @@ export function useDeleteProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => projectsApi.delete(id),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: keys.projects.all() }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: keys.projects.lists() }),
   });
 }
 
