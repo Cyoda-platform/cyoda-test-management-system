@@ -54,10 +54,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   console.log(`[API] ${method} ${url} → ${res.status}`);
 
   if (res.status === 401) {
-    // Session expired or no token — bounce to login
-    console.warn('[API] Unauthorized - redirecting to login');
+    // Session expired or no token
+    console.warn('[API] 401 Unauthorized received');
     setAuthToken(null);
-    window.location.href = '/';
+    // Don't redirect here - let the caller handle it (AuthContext or ProtectedRoute)
     throw new Error('Unauthorized');
   }
 

@@ -20,10 +20,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    authApi.me()
-      .then(setUser)
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
+    // Try to restore session on mount
+    const restoreSession = async () => {
+      try {
+        const userData = await authApi.me();
+        console.log('[Auth] Session restored:', userData);
+        setUser(userData);
+      } catch (err) {
+        // Expected if not logged in - just set user to null
+        console.log('[Auth] No session found (expected on first load)');
+        setUser(null);
+      } finally {
+        console.log('[Auth] Auth initialization complete');
+        setIsLoading(false);
+      }
+    };
+
+    restoreSession();
   }, []);
 
   const login = async (username: string, password: string) => {
