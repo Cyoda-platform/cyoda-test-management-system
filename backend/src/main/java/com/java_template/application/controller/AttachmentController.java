@@ -33,7 +33,7 @@ public class AttachmentController {
 
     @PostMapping(consumes = "multipart/form-data")
     @Operation(summary = "Upload attachment file to Cyoda EdgeMessage")
-    public ResponseEntity<AttachmentDTO> uploadAttachment(
+    public ResponseEntity<?> uploadAttachment(
             @PathVariable UUID projectId,
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "caseId", required = false) UUID caseId) {
@@ -41,7 +41,8 @@ public class AttachmentController {
             AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, file);
             return ResponseEntity.status(HttpStatus.CREATED).body(uploaded);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(java.util.Map.of("error", e.getMessage() != null ? e.getMessage() : "Upload failed"));
         }
     }
 
