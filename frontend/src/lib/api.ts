@@ -158,6 +158,8 @@ export const suitesApi = {
 
 export interface TestCase {
   id: string;
+  displayId?: string;
+  shortId?: string;
   projectId: string;
   suiteId: string;
   title: string;

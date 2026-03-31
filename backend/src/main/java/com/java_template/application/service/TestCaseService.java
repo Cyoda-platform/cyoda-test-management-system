@@ -66,7 +66,8 @@ public class TestCaseService {
 
     public Optional<TestCaseDTO> getTestCaseById(UUID id) {
         try {
-            return Optional.of(withId(entityService.getById(id, MODEL_SPEC, TestCaseDTO.class)));
+            return Optional.of(withId(entityService.getById(id, MODEL_SPEC, TestCaseDTO.class)))
+                    .filter(testCase -> !testCase.isDeleted());
         } catch (Exception e) {
             return Optional.empty();
         }
@@ -74,14 +75,36 @@ public class TestCaseService {
 
     public PageResult<TestCaseDTO> getTestCasesBySuiteId(UUID suiteId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
-                .pageNumber(page).pageSize(size).build();
-        return toPage(entityService.search(MODEL_SPEC, conditionByField("suiteId", suiteId.toString()),
-                TestCaseDTO.class, params));
+                .pageNumber(0).pageSize(1000).build();
+
+        PageResult<EntityWithMetadata<TestCaseDTO>> allTestCases = entityService.findAll(
+                MODEL_SPEC,
+                TestCaseDTO.class,
+                params);
+
+        List<TestCaseDTO> filtered = allTestCases.data().stream()
+                .map(this::withId)
+                .filter(testCase -> suiteId.equals(testCase.getSuiteId()))
+                .filter(testCase -> !testCase.isDeleted())
+                .skip((long) page * size)
+                .limit(size)
+                .toList();
+
+        long total = allTestCases.data().stream()
+                .map(this::withId)
+                .filter(testCase -> suiteId.equals(testCase.getSuiteId()))
+                .filter(testCase -> !testCase.isDeleted())
+                .count();
+
+        return PageResult.of(allTestCases.searchId(), filtered, page, size, total);
     }
 
     public List<TestCaseDTO> getAllTestCases() {
         return entityService.findAll(MODEL_SPEC, TestCaseDTO.class).data()
-                .stream().map(this::withId).toList();
+                .stream()
+                .map(this::withId)
+                .filter(testCase -> !testCase.isDeleted())
+                .toList();
     }
 
     public TestCaseDTO updateTestCase(UUID id, TestCaseDTO testCase) {

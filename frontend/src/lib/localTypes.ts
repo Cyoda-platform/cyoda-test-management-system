@@ -17,6 +17,7 @@ export interface LocalStep {
 
 export interface LocalCase {
   id: string;
+  displayId?: string;
   suiteId: string;
   title: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW';

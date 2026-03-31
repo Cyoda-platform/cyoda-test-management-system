@@ -3,6 +3,7 @@ package com.java_template.application.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.common.dto.EntityWithMetadata;
+import com.java_template.common.dto.PageResult;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.EntityMetadata;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -81,6 +83,18 @@ public class TestCaseServiceTest {
     }
 
     @Test
+    public void testGetDeletedTestCaseByIdReturnsEmpty() {
+        testCase.setId(caseId);
+        testCase.setDeleted(true);
+        when(entityService.getById(eq(caseId), any(), eq(TestCaseDTO.class)))
+                .thenReturn(entityWithMetadata(testCase, caseId));
+
+        Optional<TestCaseDTO> retrieved = testCaseService.getTestCaseById(caseId);
+
+        assertTrue(retrieved.isEmpty());
+    }
+
+    @Test
     public void testSoftDeleteTestCase() {
         testCase.setId(caseId);
         when(entityService.getById(eq(caseId), any(), eq(TestCaseDTO.class)))
@@ -93,6 +107,46 @@ public class TestCaseServiceTest {
 
         assertTrue(deleted);
         verify(entityService).update(eq(caseId), argThat((TestCaseDTO tc) -> tc.isDeleted()), isNull());
+    }
+
+    @Test
+    public void testGetTestCasesBySuiteIdFiltersInMemory() {
+        UUID otherCaseId = UUID.randomUUID();
+        UUID deletedCaseId = UUID.randomUUID();
+        UUID otherSuiteId = UUID.randomUUID();
+
+        TestCaseDTO matching = new TestCaseDTO();
+        matching.setSuiteId(suiteId);
+        matching.setName("Matching case");
+
+        TestCaseDTO deleted = new TestCaseDTO();
+        deleted.setSuiteId(suiteId);
+        deleted.setName("Deleted case");
+        deleted.setDeleted(true);
+
+        TestCaseDTO other = new TestCaseDTO();
+        other.setSuiteId(otherSuiteId);
+        other.setName("Other case");
+
+        when(entityService.findAll(any(), eq(TestCaseDTO.class), any()))
+                .thenReturn(PageResult.of(
+                        null,
+                        List.of(
+                                entityWithMetadata(matching, caseId),
+                                entityWithMetadata(deleted, deletedCaseId),
+                                entityWithMetadata(other, otherCaseId)
+                        ),
+                        0,
+                        1000,
+                        3
+                ));
+
+        PageResult<TestCaseDTO> result = testCaseService.getTestCasesBySuiteId(suiteId, 0, 20);
+
+        assertEquals(1, result.data().size());
+        assertEquals(caseId, result.data().getFirst().getId());
+        assertEquals(suiteId, result.data().getFirst().getSuiteId());
+        verify(entityService).findAll(any(), eq(TestCaseDTO.class), any());
     }
 }
 
