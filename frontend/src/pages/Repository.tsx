@@ -112,9 +112,7 @@ const Repository = () => {
         deleted:       c.deleted,
       })),
     }));
-  // caseQueries is a stable array ref — join data references for the dep
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiSuitesData, ...caseQueries.map(q => q.data)]);
+  }, [apiSuitesData, caseQueries]);
 
   const isLoadingRepo = suitesLoading2 || caseQueries.some(q => q.isLoading && !q.data);
 
@@ -130,6 +128,16 @@ const Repository = () => {
       });
     }
   }, [apiSuitesData]);
+
+  // Auto-select first case when data loads
+  useEffect(() => {
+    if (suites.length > 0 && !selectedCase) {
+      const firstCase = suites[0]?.cases?.[0];
+      if (firstCase) {
+        setSelectedCase(firstCase);
+      }
+    }
+  }, [suites]);
 
   // 3. Fetch steps for the selected case (lazy)
   const selectedCaseSuiteId = useMemo(
@@ -173,15 +181,11 @@ const Repository = () => {
 
   // Panel sizes from localStorage - only save left and right when selectedCase exists
   const [panelSizes, setPanelSizes] = useState<{ left: number; middle: number; right: number }>(() => {
-    const saved = localStorage.getItem('repository-panel-sizes-v4');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const left = parsed.left || 18;
-      const right = parsed.right || 32;
-      const middle = 100 - left - right;
-      return { left, middle, right };
-    }
-    return { left: 18, middle: 50, right: 32 };
+    // Clear all old version keys to force reset to new defaults
+    localStorage.removeItem('repository-panel-sizes-v4');
+    localStorage.removeItem('repository-panel-sizes-v5');
+
+    return { left: 15, middle: 50, right: 35 };
   });
 
   // Save panel sizes to localStorage only when all 3 panels are visible
@@ -189,7 +193,7 @@ const Repository = () => {
   const handlePanelResize = (sizes: { left: number; middle: number; right: number }) => {
     setPanelSizes(sizes);
     if (selectedCase) {
-      localStorage.setItem('repository-panel-sizes-v4', JSON.stringify({ left: sizes.left, right: sizes.right }));
+      localStorage.setItem('repository-panel-sizes-v5', JSON.stringify({ left: sizes.left, right: sizes.right }));
     }
   };
 
@@ -874,7 +878,7 @@ const Repository = () => {
           <ResizableHandle withHandle />
 
           {/* Case List */}
-          <ResizablePanel defaultSize={selectedCase ? panelSizes.middle : 82} minSize={30}>
+          <ResizablePanel defaultSize={panelSizes.middle} minSize={30}>
             <div className="h-full min-w-0 overflow-auto bg-card">
               {filteredSuites.map((suite) => (
                 <div key={suite.id} id={`suite-section-${suite.id}`} className="border-b border-border/40 last:border-b-0">
@@ -956,11 +960,16 @@ const Repository = () => {
             </div>
           </ResizablePanel>
 
-          {/* Case Detail Panel */}
-          {selectedCase && (
-            <>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={panelSizes.right} minSize={20} maxSize={50}>
+          {/* Case Detail Panel - Always render, but hide when no selection */}
+          <>
+            <ResizableHandle withHandle className={selectedCase ? '' : 'hidden'} />
+            <ResizablePanel
+              defaultSize={panelSizes.right}
+              minSize={20}
+              maxSize={50}
+              className={selectedCase ? '' : 'hidden'}
+            >
+              {selectedCase && (
                 <div className="h-full surface-low overflow-auto flex flex-col">
                   <div className="p-4 flex flex-col flex-1 min-h-0 gap-0">
                     {/* Compact Header: Title + metadata + actions in one block */}
@@ -1055,9 +1064,9 @@ const Repository = () => {
                     )}
                   </div>
                 </div>
+              )}
               </ResizablePanel>
             </>
-          )}
         </ResizablePanelGroup>
       </div>
 
