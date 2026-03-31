@@ -64,7 +64,7 @@ public class ProjectController {
     @Operation(summary = "Delete a project (Admin only)")
     public ResponseEntity<Void> deleteProject(@PathVariable UUID id, HttpServletRequest request) {
         String role = (String) request.getAttribute("role");
-        if (!"Admin".equals(role)) {
+        if (!"ADMIN".equals(role)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         if (projectService.deleteProject(id)) {
