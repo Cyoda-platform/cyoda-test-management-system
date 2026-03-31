@@ -15,8 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
  * Unit tests for AuthController
@@ -46,12 +45,14 @@ public class AuthControllerTest {
 
         LoginRequest request = new LoginRequest("admin", "admin123");
 
-        mockMvc.perform(post("/login")
+        mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists())
-                .andExpect(jsonPath("$.username").value("admin"));
+                // token is no longer returned in body — it is set as an httpOnly cookie
+                .andExpect(jsonPath("$.token").doesNotExist())
+                .andExpect(jsonPath("$.username").value("admin"))
+                .andExpect(cookie().exists(AuthController.COOKIE_NAME));
     }
 
     @Test
@@ -60,10 +61,16 @@ public class AuthControllerTest {
 
         LoginRequest request = new LoginRequest("admin", "wrongpassword");
 
-        mockMvc.perform(post("/login")
+        mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
     }
-}
 
+    @Test
+    public void testLogout() throws Exception {
+        mockMvc.perform(post("/auth/logout"))
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge(AuthController.COOKIE_NAME, 0));
+    }
+}
