@@ -32,7 +32,7 @@ public class MessageUploadController {
             @PathVariable UUID projectId,
             @RequestParam("file") MultipartFile file) {
         try {
-            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, null, file);
+            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, file);
             return ResponseEntity.status(HttpStatus.CREATED).body(uploaded);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
