@@ -12,6 +12,7 @@ interface Attachment {
   name: string;
   size: number;
   type: string;
+  file: File;
 }
 
 interface CaseFormPageProps {
@@ -21,7 +22,7 @@ interface CaseFormPageProps {
   initialCase?: TestCase;
   projectName?: string;
   projectId?: string;
-  onSave: (suiteId: string, data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: TestStep[] }) => void;
+  onSave: (suiteId: string, data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: TestStep[]; files: File[] }) => void;
   onCancel: () => void;
 }
 
@@ -101,6 +102,7 @@ const CaseFormPage = ({ mode, suites, initialSuiteId, initialCase, projectName, 
       name: f.name,
       size: f.size,
       type: f.type,
+      file: f,
     }));
     setAttachments((prev) => [...prev, ...newAttachments]);
   };
@@ -123,6 +125,7 @@ const CaseFormPage = ({ mode, suites, initialSuiteId, initialCase, projectName, 
       description: description.trim(),
       preconditions: preconditions.trim(),
       steps,
+      files: attachments.map((a) => a.file),
     });
   };
 

@@ -195,7 +195,7 @@ export interface TestStep {
 
 export const testStepsApi = {
   list:   (projectId: string, suiteId: string, caseId: string) =>
-    api.get<{ data: TestStep[] }>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps`),
+    api.get<TestStep[]>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps`),
   create: (projectId: string, suiteId: string, caseId: string, body: Partial<TestStep>) =>
     api.post<TestStep>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps`, body),
   update: (projectId: string, suiteId: string, caseId: string, id: string, body: Partial<TestStep>) =>
@@ -277,16 +277,23 @@ export interface Attachment {
 }
 
 export const attachmentsApi = {
-  list:   (projectId: string) =>
+  list:       (projectId: string) =>
     api.get<{ data: Attachment[] }>(`/projects/${projectId}/attachments`),
+  listByCase: (projectId: string, caseId: string) =>
+    api.get<Attachment[]>(`/projects/${projectId}/attachments/by-case/${caseId}`),
   delete: (projectId: string, id: string) =>
     api.delete<void>(`/projects/${projectId}/attachments/${id}`),
-  upload: (projectId: string, file: File) => {
+  upload: (projectId: string, file: File, caseId?: string) => {
     const form = new FormData();
     form.append('file', file);
+    if (caseId) form.append('caseId', caseId);
+    const token = getAuthToken();
+    const headers: HeadersInit = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     return fetch(`${BASE_URL}/projects/${projectId}/attachments`, {
       method: 'POST',
       credentials: 'include',
+      headers,
       body: form,
       // no Content-Type header — browser sets multipart boundary automatically
     }).then(r => r.json() as Promise<Attachment>);

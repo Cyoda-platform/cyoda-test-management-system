@@ -252,7 +252,6 @@ export function useTestSteps(projectId: string, suiteId: string, caseId: string)
     queryKey: keys.steps.all(projectId, suiteId, caseId),
     queryFn:  () => testStepsApi.list(projectId, suiteId, caseId),
     enabled:  !!projectId && !!suiteId && !!caseId,
-    select:   (res) => res.data,
   });
 }
 
