@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Plus, Pencil, Copy, Trash2, MoreHorizontal, Download, Upload, X, AlertTriangle, FileText, Image, Paperclip, Loader2, File, Search, Play } from 'lucide-react';
@@ -129,11 +129,13 @@ const Repository = () => {
     }
   }, [apiSuitesData]);
 
-  // Auto-select first case when data loads
+  // Auto-select first case only once when data first loads
+  const autoSelectedRef = useRef(false);
   useEffect(() => {
-    if (suites.length > 0 && !selectedCase) {
+    if (!autoSelectedRef.current && suites.length > 0) {
       const firstCase = suites[0]?.cases?.[0];
       if (firstCase) {
+        autoSelectedRef.current = true;
         setSelectedCase(firstCase);
       }
     }
@@ -179,35 +181,8 @@ const Repository = () => {
   const deleteCaseMut = useDeleteTestCase();
   const createRunMut   = useCreateTestRun();
 
-  // Panel sizes from localStorage - only save left and right when selectedCase exists
-  const [panelSizes, setPanelSizes] = useState<{ left: number; middle: number; right: number }>(() => {
-    // Try to load from v5 (new format)
-    const savedV5 = localStorage.getItem('repository-panel-sizes-v5');
-    if (savedV5) {
-      try {
-        const parsed = JSON.parse(savedV5);
-        const left = parsed.left || 15;
-        const right = parsed.right || 35;
-        const middle = 100 - left - right;
-        return { left, middle, right };
-      } catch {
-        // Invalid JSON, use defaults
-      }
-    }
-
-    // First load - use new defaults and clean up old keys
-    localStorage.removeItem('repository-panel-sizes-v4');
-    return { left: 15, middle: 50, right: 35 };
-  });
-
-  // Save panel sizes to localStorage only when all 3 panels are visible
-  // Only save left and right sizes, middle is always computed based on selectedCase
-  const handlePanelResize = (sizes: { left: number; middle: number; right: number }) => {
-    setPanelSizes(sizes);
-    if (selectedCase) {
-      localStorage.setItem('repository-panel-sizes-v5', JSON.stringify({ left: sizes.left, right: sizes.right }));
-    }
-  };
+  // Fixed panel sizes
+  const panelSizes = { left: 15, middle: 50, right: 35 };
 
   // Local search
   const [localSearch, setLocalSearch] = useState('');
@@ -840,12 +815,9 @@ const Repository = () => {
         <ResizablePanelGroup
           direction="horizontal"
           className="h-full"
-          onLayout={(sizes) => {
-            handlePanelResize({ left: sizes[0], middle: sizes[1], right: sizes[2] || 0 });
-          }}
         >
           {/* Suite Tree */}
-          <ResizablePanel defaultSize={panelSizes.left} minSize={10} maxSize={30}>
+          <ResizablePanel id="left" order={1} defaultSize={panelSizes.left} minSize={10} maxSize={30}>
             <div className="h-full surface-low overflow-auto">
               <div className="flex items-center justify-between p-3 group">
                 <div className="flex items-center gap-2">
@@ -894,7 +866,7 @@ const Repository = () => {
           <ResizableHandle withHandle />
 
           {/* Case List */}
-          <ResizablePanel defaultSize={panelSizes.middle} minSize={30}>
+          <ResizablePanel id="middle" order={2} defaultSize={selectedCase ? panelSizes.middle : 100 - panelSizes.left} minSize={30}>
             <div className="h-full min-w-0 overflow-auto bg-card">
               {filteredSuites.map((suite) => (
                 <div key={suite.id} id={`suite-section-${suite.id}`} className="border-b border-border/40 last:border-b-0">
@@ -976,16 +948,11 @@ const Repository = () => {
             </div>
           </ResizablePanel>
 
-          {/* Case Detail Panel - Always render, but hide when no selection */}
-          <>
-            <ResizableHandle withHandle className={selectedCase ? '' : 'hidden'} />
-            <ResizablePanel
-              defaultSize={panelSizes.right}
-              minSize={20}
-              maxSize={50}
-              className={selectedCase ? '' : 'hidden'}
-            >
-              {selectedCase && (
+          {/* Case Detail Panel - Conditionally rendered */}
+          {selectedCase && (
+            <>
+              <ResizableHandle withHandle />
+              <ResizablePanel id="right" order={3} defaultSize={panelSizes.right} minSize={20} maxSize={50}>
                 <div className="h-full surface-low overflow-auto flex flex-col">
                   <div className="p-4 flex flex-col flex-1 min-h-0 gap-0">
                     {/* Compact Header: Title + metadata + actions in one block */}
@@ -1080,9 +1047,9 @@ const Repository = () => {
                     )}
                   </div>
                 </div>
-              )}
               </ResizablePanel>
             </>
+          )}
         </ResizablePanelGroup>
       </div>
 
