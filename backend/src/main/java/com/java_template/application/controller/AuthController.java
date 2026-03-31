@@ -55,6 +55,7 @@ public class AuthController {
         cookie.setHttpOnly(true);
         cookie.setPath("/");
         cookie.setMaxAge(COOKIE_MAX_AGE);
+        cookie.setAttribute("SameSite", "Lax");  // Allow cookie in cross-site requests (for Vite proxy)
         httpResponse.addCookie(cookie);
 
         LocalDateTime expiresAt = LocalDateTime.ofInstant(
@@ -76,6 +77,7 @@ public class AuthController {
         cookie.setHttpOnly(true);
         cookie.setPath("/");
         cookie.setMaxAge(0); // delete immediately
+        cookie.setAttribute("SameSite", "Lax");  // Match login cookie settings
         httpResponse.addCookie(cookie);
         return ResponseEntity.noContent().build();
     }
