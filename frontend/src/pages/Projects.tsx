@@ -33,7 +33,7 @@ const Projects = () => {
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
 
-  const { data: projects = [], isLoading, isError, error } = useProjects(page);
+  const { data: projects = [], isLoading, isError, error, refetch } = useProjects(page);
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
@@ -77,7 +77,12 @@ const Projects = () => {
         toast.success('Project deleted');
         setDeleteProject(null);
         // If we deleted the last item on a page beyond 0, go back one page
-        if (projects.length === 1 && page > 0) setPage(page - 1);
+        if (projects.length === 1 && page > 0) {
+          setPage(page - 1);
+        } else {
+          // Refetch to update the list
+          refetch();
+        }
       },
       onError: (e) => toast.error(e.message),
     });
