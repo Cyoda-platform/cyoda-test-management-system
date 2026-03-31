@@ -1,0 +1,31 @@
+{
+  "name": "cyoda-test-management-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cyoda TMS — monorepo containing the React frontend and Spring Boot backend",
+  "scripts": {
+    "dev":              "concurrently --names \"frontend,backend\" --prefix-colors \"cyan,yellow\" \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "build":            "npm run build:frontend && npm run build:backend",
+    "test":             "concurrently --names \"frontend,backend\" --prefix-colors \"cyan,yellow\" \"npm run test:frontend\" \"npm run test:backend\"",
+
+    "dev:frontend":     "npm --prefix frontend run dev",
+    "dev:backend":      "dotenv -e .env -- sh -c 'cd backend && ./gradlew bootRun'",
+
+    "build:frontend":   "npm --prefix frontend run build",
+    "build:backend":    "dotenv -e .env -- sh -c 'cd backend && ./gradlew build'",
+
+    "test:frontend":    "npm --prefix frontend run test",
+    "test:backend":     "dotenv -e .env -- sh -c 'cd backend && ./gradlew test'",
+
+    "install:frontend": "npm --prefix frontend install",
+    "lint:frontend":    "npm --prefix frontend run lint"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "dotenv-cli": "^7.4.4"
+  },
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  }
+}

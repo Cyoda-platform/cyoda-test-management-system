@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { LogOut } from 'lucide-react';
 import {
   Dialog,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface LogoutModalProps {
   open: boolean;
@@ -16,11 +17,18 @@ interface LogoutModalProps {
 }
 
 const LogoutModal = ({ open, onClose }: LogoutModalProps) => {
-  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleLogout = () => {
-    onClose();
-    navigate('/');
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      // AuthContext sets user=null → ProtectedRoute redirects to /
+    } finally {
+      setIsLoggingOut(false);
+      onClose();
+    }
   };
 
   return (
@@ -36,8 +44,10 @@ const LogoutModal = ({ open, onClose }: LogoutModalProps) => {
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="destructive" onClick={handleLogout} className="border-0">Log Out</Button>
+          <Button variant="ghost" onClick={onClose} disabled={isLoggingOut}>Cancel</Button>
+          <Button variant="destructive" onClick={handleLogout} disabled={isLoggingOut} className="border-0">
+            {isLoggingOut ? 'Logging out…' : 'Log Out'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
