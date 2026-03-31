@@ -10,6 +10,8 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.cyoda.cloud.api.event.common.condition.GroupCondition;
 import org.cyoda.cloud.api.event.common.condition.Operation;
 import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,6 +24,7 @@ import java.util.UUID;
 @Service
 public class ProjectService {
 
+    private static final Logger logger = LoggerFactory.getLogger(ProjectService.class);
     private static final ModelSpec MODEL_SPEC =
             new ModelSpec().withName(ProjectDTO.ENTITY_NAME).withVersion(ProjectDTO.ENTITY_VERSION);
 
@@ -37,12 +40,18 @@ public class ProjectService {
         ProjectDTO entity = result.entity();
         entity.setId(result.getId());
 
-        // Set timestamps from metadata if not already set
-        if (entity.getCreatedAt() == null && result.metadata().getTimeOfChange() != null) {
-            entity.setCreatedAt(result.metadata().getTimeOfChange());
+        // Timestamps are already set as strings in the entity
+        // If somehow they're still null, set them to current time
+        if (entity.getCreatedAt() == null) {
+            String now = java.time.LocalDateTime.now().toString() + "Z";
+            entity.setCreatedAt(now);
+            logger.warn("[Project] Setting createdAt to current time: {}", now);
         }
-        if (entity.getUpdatedAt() == null && result.metadata().getTimeOfChange() != null) {
-            entity.setUpdatedAt(result.metadata().getTimeOfChange());
+
+        if (entity.getUpdatedAt() == null) {
+            String now = java.time.LocalDateTime.now().toString() + "Z";
+            entity.setUpdatedAt(now);
+            logger.warn("[Project] Setting updatedAt to current time: {}", now);
         }
 
         return entity;
@@ -66,9 +75,28 @@ public class ProjectService {
 
     public ProjectDTO createProject(ProjectDTO project) {
         project.setStatus("ACTIVE");
-        project.setCreatedAt(java.time.LocalDateTime.now());
-        project.setUpdatedAt(java.time.LocalDateTime.now());
-        return withId(entityService.create(project));
+
+        // Set timestamps as ISO-8601 strings BEFORE saving to Cyoda
+        String now = java.time.LocalDateTime.now().toString() + "Z";
+        project.setCreatedAt(now);
+        project.setUpdatedAt(now);
+
+        logger.info("[Project] Creating project: {} with timestamp: {}", project.getName(), now);
+
+        try {
+            EntityWithMetadata<ProjectDTO> result = entityService.create(project);
+            ProjectDTO entity = result.entity();
+            entity.setId(result.getId());
+
+            // Timestamps should already be set from project object above
+            logger.info("[Project] Created project: id={}, createdAt={}, updatedAt={}",
+                entity.getId(), entity.getCreatedAt(), entity.getUpdatedAt());
+
+            return entity;
+        } catch (Exception e) {
+            logger.error("[Project] Failed to create project: {}", project.getName(), e);
+            throw e;
+        }
     }
 
     public Optional<ProjectDTO> getProjectById(UUID id) {
