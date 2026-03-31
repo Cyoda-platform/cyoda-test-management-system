@@ -100,11 +100,29 @@ public class ProjectService {
     }
 
     public Optional<ProjectDTO> getProjectById(UUID id) {
-        try {
-            return Optional.of(withId(entityService.getById(id, MODEL_SPEC, ProjectDTO.class)));
-        } catch (Exception e) {
-            return Optional.empty();
+        logger.info("[Project] Fetching project by ID: {}", id);
+
+        // Retry logic: Cyoda might not have indexed the entity yet
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                EntityWithMetadata<ProjectDTO> result = entityService.getById(id, MODEL_SPEC, ProjectDTO.class);
+                logger.info("[Project] Found project on attempt {}: {}", attempt, id);
+                return Optional.of(withId(result));
+            } catch (Exception e) {
+                logger.warn("[Project] Failed to fetch project on attempt {}: {} - {}", attempt, id, e.getMessage());
+                if (attempt < 3) {
+                    try {
+                        Thread.sleep(500); // Wait 500ms before retry
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
         }
+
+        logger.error("[Project] Project not found after 3 attempts: {}", id);
+        return Optional.empty();
     }
 
     public PageResult<ProjectDTO> getAllProjects(int page, int size) {
