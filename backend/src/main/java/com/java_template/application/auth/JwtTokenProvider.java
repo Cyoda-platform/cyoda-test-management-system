@@ -42,24 +42,58 @@ public class JwtTokenProvider {
 
     /**
      * Get username from token
+     * Falls back to decoding from token if not in store (e.g., after server restart)
      */
     public String getUsernameFromToken(String token) {
+        // Try to get from store first
         TokenData data = tokenStore.get(token);
-        if (data == null || data.expiresAt <= System.currentTimeMillis()) {
-            return null;
+        if (data != null && data.expiresAt > System.currentTimeMillis()) {
+            return data.username;
         }
-        return data.username;
+
+        // Fallback: decode from token (Base64 format: username|role|issuedAt|expiresAt)
+        try {
+            String payload = new String(Base64.getDecoder().decode(token));
+            String[] parts = payload.split("\\|");
+            if (parts.length >= 2) {
+                long expiresAt = Long.parseLong(parts[3]);
+                if (expiresAt > System.currentTimeMillis()) {
+                    return parts[0]; // Return username
+                }
+            }
+        } catch (Exception e) {
+            // Token is not valid Base64 or wrong format
+        }
+
+        return null;
     }
 
     /**
      * Get role from token
+     * Falls back to decoding from token if not in store (e.g., after server restart)
      */
     public String getRoleFromToken(String token) {
+        // Try to get from store first
         TokenData data = tokenStore.get(token);
-        if (data == null || data.expiresAt <= System.currentTimeMillis()) {
-            return null;
+        if (data != null && data.expiresAt > System.currentTimeMillis()) {
+            return data.role;
         }
-        return data.role;
+
+        // Fallback: decode from token (Base64 format: username|role|issuedAt|expiresAt)
+        try {
+            String payload = new String(Base64.getDecoder().decode(token));
+            String[] parts = payload.split("\\|");
+            if (parts.length >= 2) {
+                long expiresAt = Long.parseLong(parts[3]);
+                if (expiresAt > System.currentTimeMillis()) {
+                    return parts[1]; // Return role
+                }
+            }
+        } catch (Exception e) {
+            // Token is not valid Base64 or wrong format
+        }
+
+        return null;
     }
 
     private static class TokenData {

@@ -8,6 +8,8 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -20,6 +22,7 @@ import java.io.IOException;
 public class AuthorizationFilter implements Filter {
 
     private static final String COOKIE_NAME = "auth-token";
+    private static final Logger logger = LoggerFactory.getLogger(AuthorizationFilter.class);
 
     private final JwtTokenProvider tokenProvider;
 
@@ -64,8 +67,13 @@ public class AuthorizationFilter implements Filter {
         }
 
         // Attach user context to request attributes for use in controllers
-        httpRequest.setAttribute("username", tokenProvider.getUsernameFromToken(token));
-        httpRequest.setAttribute("role", tokenProvider.getRoleFromToken(token));
+        String username = tokenProvider.getUsernameFromToken(token);
+        String role = tokenProvider.getRoleFromToken(token);
+
+        logger.debug("[Auth] Token validated - username: {}, role: {}", username, role);
+
+        httpRequest.setAttribute("username", username);
+        httpRequest.setAttribute("role", role);
 
         chain.doFilter(request, response);
     }
