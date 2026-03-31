@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Plus, Pencil, Copy, Trash2, MoreHorizontal, Download, Upload, X, AlertTriangle, FileText, Image, Paperclip, Loader2, File, Search, Play } from 'lucide-react';
@@ -16,22 +16,107 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { mockSuites as initialSuites, mockProjects, mockTestRuns, type TestCase, type TestRun, type Suite } from '@/data/mockData';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
+import {
+  useProject, useCreateSuite, useUpdateSuite, useDeleteSuite,
+  useCreateTestRun,
+  keys,
+} from '@/hooks/useApi';
+import { suitesApi, testCasesApi, testStepsApi } from '@/lib/api';
+import type { LocalCase as TestCase, LocalStep, LocalSuite as Suite } from '@/lib/localTypes';
+// TestRun type only needed for legacy Create Run handler shape — removed, using API directly
 
 const Repository = () => {
-  const { projectId } = useParams();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const project = mockProjects.find((p) => p.id === projectId);
-  const [suites, setSuites] = useState<Suite[]>(initialSuites.filter((s) => s.projectId === projectId));
-  const [expandedSuites, setExpandedSuites] = useState<Set<string>>(new Set(suites.map((s) => s.id)));
-  // Initialize selectedCase synchronously so the panel layout is correct on first render
-  const [selectedCase, setSelectedCase] = useState<TestCase | null>(() => {
-    const filteredSuites = initialSuites.filter((s) => s.projectId === projectId);
-    if (filteredSuites.length > 0 && filteredSuites[0].cases.length > 0) {
-      return filteredSuites[0].cases[0];
-    }
-    return null;
+  const queryClient = useQueryClient();
+
+  // ── API data ──────────────────────────────────────────────────────────────
+  const { data: project } = useProject(projectId!);
+
+  // 1. Fetch suites list
+  const suitesQuery = useQueries({
+    queries: [{ queryKey: keys.suites.all(projectId!), queryFn: () => suitesApi.list(projectId!), enabled: !!projectId, select: (r: { data: { id: string; projectId: string; name: string; description?: string }[] }) => r.data }],
   });
+  const apiSuitesData = suitesQuery[0]?.data ?? [];
+  const suitesLoading2 = suitesQuery[0]?.isLoading ?? true;
+
+  // 2. Fetch cases for each suite in parallel
+  const caseQueries = useQueries({
+    queries: apiSuitesData.map(suite => ({
+      queryKey: keys.cases.all(projectId!, suite.id),
+      queryFn:  () => testCasesApi.list(projectId!, suite.id),
+      enabled:  !!projectId && apiSuitesData.length > 0,
+      select:   (r: { data: { id: string; suiteId: string; title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; deleted: boolean }[] }) => r.data,
+    })),
+  });
+
+  // Build the nested Suite[] that the UI expects (same shape as old mockData)
+  const suites: Suite[] = useMemo(() => {
+    return apiSuitesData.map((s, i) => ({
+      id:        s.id,
+      projectId: s.projectId,
+      name:      s.name,
+      cases:     (caseQueries[i]?.data ?? []).map(c => ({
+        id:            c.id,
+        suiteId:       c.suiteId,
+        title:         c.title,
+        priority:      c.priority,
+        description:   c.description,
+        preconditions: c.preconditions,
+        steps:         [],    // loaded lazily when a case is selected
+        deleted:       c.deleted,
+      })),
+    }));
+  // caseQueries is a stable array ref — join data references for the dep
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiSuitesData, ...caseQueries.map(q => q.data)]);
+
+  const isLoadingRepo = suitesLoading2 || caseQueries.some(q => q.isLoading && !q.data);
+
+  const [selectedCase, setSelectedCase] = useState<TestCase | null>(null);
+
+  // Expand all suites once they first load
+  const [expandedSuites, setExpandedSuites] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (apiSuitesData.length > 0) {
+      setExpandedSuites(prev => {
+        if (prev.size === 0) return new Set(apiSuitesData.map(s => s.id));
+        return prev;
+      });
+    }
+  }, [apiSuitesData]);
+
+  // 3. Fetch steps for the selected case (lazy)
+  const selectedCaseSuiteId = useMemo(
+    () => suites.find(s => s.cases.some(c => c.id === selectedCase?.id))?.id ?? '',
+    [suites, selectedCase?.id]
+  );
+  const stepsQuery = useQueries({
+    queries: selectedCase && selectedCaseSuiteId
+      ? [{
+          queryKey: keys.steps.all(projectId!, selectedCaseSuiteId, selectedCase.id),
+          queryFn:  () => testStepsApi.list(projectId!, selectedCaseSuiteId, selectedCase.id),
+          select:   (r: { data: { id: string; stepNumber: number; action: string; expectedResult: string; status: string }[] }) => r.data,
+        }]
+      : [],
+  });
+  const stepsForSelectedCase: LocalStep[] = useMemo(
+    () => (stepsQuery[0]?.data ?? []).map(s => ({
+      id:             s.id,
+      order:          s.stepNumber,
+      action:         s.action,
+      expectedResult: s.expectedResult,
+      status:         s.status,
+    })),
+    [stepsQuery[0]?.data]
+  );
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+  const createSuiteMut = useCreateSuite();
+  const updateSuiteMut = useUpdateSuite();
+  const deleteSuiteMut = useDeleteSuite();
+  const createRunMut   = useCreateTestRun();
 
   // Panel sizes from localStorage - only save left and right when selectedCase exists
   const [panelSizes, setPanelSizes] = useState<{ left: number; middle: number; right: number }>(() => {
@@ -70,27 +155,6 @@ const Repository = () => {
   const [newRunEnv, setNewRunEnv] = useState('Staging');
   const [newRunBuildVersion, setNewRunBuildVersion] = useState('');
   const [newRunDesc, setNewRunDesc] = useState('');
-
-  // Generate next test case ID(s)
-  const generateTestCaseId = (count = 1) => {
-    const allCases = suites.flatMap((s) => s.cases);
-    let maxNum = 0;
-    allCases.forEach((c) => {
-      const match = c.id.match(/TC-(\d+)/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
-      }
-    });
-    if (count === 1) {
-      return `TC-${(maxNum + 1).toString().padStart(2, '0')}`;
-    }
-    const ids = [];
-    for (let i = 0; i < count; i++) {
-      ids.push(`TC-${(maxNum + 1 + i).toString().padStart(2, '0')}`);
-    }
-    return ids;
-  };
 
   // Stats
   const totalCases = suites.reduce((sum, s) => sum + s.cases.length, 0);
@@ -174,40 +238,44 @@ const Repository = () => {
 
   const clearSelection = () => setSelectedCases(new Set());
 
-  const handleBulkDelete = () => {
-    setSuites((prev) =>
-      prev.map((s) => ({
-        ...s,
-        cases: s.cases.filter((c) => !selectedCases.has(c.id)),
-      }))
-    );
-    if (selectedCase && selectedCases.has(selectedCase.id)) setSelectedCase(null);
-    setSelectedCases(new Set());
-    setBulkDeleteOpen(false);
-    toast.success(`Deleted ${selectedCases.size} case(s)`);
+  const handleBulkDelete = async () => {
+    if (!projectId) return;
+    const toDelete = [...selectedCases];
+    try {
+      await Promise.all(toDelete.map(caseId => {
+        const suite = suites.find(s => s.cases.some(c => c.id === caseId));
+        if (!suite) return Promise.resolve();
+        return testCasesApi.delete(projectId, suite.id, caseId);
+      }));
+      // Invalidate all case queries
+      suites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
+      if (selectedCase && selectedCases.has(selectedCase.id)) setSelectedCase(null);
+      setSelectedCases(new Set());
+      setBulkDeleteOpen(false);
+      toast.success(`Deleted ${toDelete.length} case(s)`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete cases');
+    }
   };
 
-  const handleBulkCopy = () => {
-    const selectedCount = selectedCases.size;
-    const newIds = generateTestCaseId(selectedCount) as string[];
-    let idIndex = 0;
-
-    setSuites((prev) =>
-      prev.map((s) => ({
-        ...s,
-        cases: [
-          ...s.cases,
-          ...s.cases
-            .filter((c) => selectedCases.has(c.id))
-            .map((c) => {
-              const id = newIds[idIndex++];
-              return { ...c, id, title: `${c.title} (Copy)` };
-            }),
-        ],
-      }))
-    );
-    toast.success(`Duplicated ${selectedCases.size} case(s)`);
-    clearSelection();
+  const handleBulkCopy = async () => {
+    if (!projectId) return;
+    try {
+      await Promise.all([...selectedCases].map(caseId => {
+        const suite = suites.find(s => s.cases.some(c => c.id === caseId));
+        const tc = suite?.cases.find(c => c.id === caseId);
+        if (!suite || !tc) return Promise.resolve();
+        return testCasesApi.create(projectId, suite.id, {
+          title: `${tc.title} (Copy)`, priority: tc.priority,
+          description: tc.description, preconditions: tc.preconditions,
+        });
+      }));
+      suites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
+      toast.success(`Duplicated ${selectedCases.size} case(s)`);
+      clearSelection();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to duplicate cases');
+    }
   };
   // Suite modal
   const [suiteModalOpen, setSuiteModalOpen] = useState(false);
@@ -331,18 +399,36 @@ const Repository = () => {
   };
 
   const handleImport = async () => {
-    if (!importFile) return;
+    if (!importFile || !projectId) return;
     setImporting(true);
     try {
       const targetId = importSuiteTarget === 'root' ? '__new__' : importSuiteTarget;
-      const { updatedSuites, result } = await performImport(importFile, targetId, importConflict, suites, projectId || '');
-      setSuites(updatedSuites);
+      const { updatedSuites, result } = await performImport(importFile, targetId, importConflict, suites, projectId);
+      // Persist parsed cases to the backend
+      for (const suite of updatedSuites) {
+        const existing = suites.find(s => s.id === suite.id);
+        const newCases = existing
+          ? suite.cases.filter(c => !existing.cases.some(ec => ec.id === c.id))
+          : suite.cases;
+        if (newCases.length === 0) continue;
+        let suiteId = suite.id;
+        if (!existing) {
+          const created = await suitesApi.create(projectId, { name: suite.name });
+          suiteId = created.id;
+        }
+        for (const tc of newCases) {
+          await testCasesApi.create(projectId, suiteId, {
+            title: tc.title, priority: tc.priority,
+            description: tc.description, preconditions: tc.preconditions,
+          });
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
       const parts: string[] = [];
       if (result.imported > 0) parts.push(`${result.imported} imported`);
       if (result.overwritten > 0) parts.push(`${result.overwritten} overwritten`);
       if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
       toast.success(`Import complete: ${parts.join(', ')}`);
-      // Expand all suites to show new cases
       setExpandedSuites(new Set(updatedSuites.map(s => s.id)));
     } catch (err) {
       toast.error('Import failed: ' + (err instanceof Error ? err.message : 'Invalid file format'));
@@ -375,24 +461,46 @@ const Repository = () => {
   };
 
   const handleSaveSuite = () => {
-    if (!newSuiteName.trim()) return;
-    if (suiteModalMode === 'create' && projectId) {
-      const newSuite: Suite = { id: `S-${Date.now()}`, projectId, name: newSuiteName.trim(), cases: [] };
-      setSuites((prev) => [...prev, newSuite]);
-      setExpandedSuites((prev) => new Set([...prev, newSuite.id]));
+    if (!newSuiteName.trim() || !projectId) return;
+    if (suiteModalMode === 'create') {
+      createSuiteMut.mutate(
+        { projectId, body: { name: newSuiteName.trim() } },
+        {
+          onSuccess: (s) => {
+            setExpandedSuites((prev) => new Set([...prev, s.id]));
+            setSuiteModalOpen(false);
+            toast.success('Suite created');
+          },
+          onError: (e) => toast.error(e.message),
+        }
+      );
     } else {
-      setSuites((prev) => prev.map((s) => (s.id === editingSuiteId ? { ...s, name: newSuiteName.trim() } : s)));
+      updateSuiteMut.mutate(
+        { projectId, id: editingSuiteId, body: { name: newSuiteName.trim() } },
+        {
+          onSuccess: () => { setSuiteModalOpen(false); toast.success('Suite updated'); },
+          onError: (e) => toast.error(e.message),
+        }
+      );
     }
-    setSuiteModalOpen(false);
   };
 
-  const copySuite = (suite: Suite) => {
-    const newId = `S-${Date.now()}`;
-    const newIds = generateTestCaseId(suite.cases.length) as string[];
-    const copiedCases = suite.cases.map((c, idx) => ({ ...c, id: newIds[idx], suiteId: newId }));
-    const copy: Suite = { ...suite, id: newId, name: `${suite.name} (Copy)`, cases: copiedCases };
-    setSuites((prev) => [...prev, copy]);
-    setExpandedSuites((prev) => new Set([...prev, newId]));
+  const copySuite = async (suite: Suite) => {
+    if (!projectId) return;
+    try {
+      const newSuite = await suitesApi.create(projectId, { name: `${suite.name} (Copy)` });
+      for (const tc of suite.cases) {
+        await testCasesApi.create(projectId, newSuite.id, {
+          title: tc.title, priority: tc.priority,
+          description: tc.description, preconditions: tc.preconditions,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
+      setExpandedSuites((prev) => new Set([...prev, newSuite.id]));
+      toast.success(`Suite "${suite.name}" duplicated`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to copy suite');
+    }
   };
 
   const confirmDeleteSuite = (suite: Suite) => {
@@ -417,40 +525,63 @@ const Repository = () => {
     setCaseFormOpen(true);
   };
 
-  const handleSaveCase = (targetSuiteId: string, data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: import('@/data/mockData').TestStep[] }) => {
-    if (caseModalMode === 'create') {
-      const newCase: TestCase = {
-        id: generateTestCaseId(),
-        suiteId: targetSuiteId,
-        title: data.title,
-        priority: data.priority,
-        description: data.description,
-        preconditions: data.preconditions,
-        steps: data.steps,
-        deleted: false,
-      };
-      setSuites((prev) => prev.map((s) => (s.id === targetSuiteId ? { ...s, cases: [...s.cases, newCase] } : s)));
-    } else {
-      setSuites((prev) =>
-        prev.map((s) => ({
-          ...s,
-          cases: s.cases.map((c) =>
-            c.id === editingCaseId
-              ? { ...c, suiteId: targetSuiteId, title: data.title, priority: data.priority, description: data.description, preconditions: data.preconditions, steps: data.steps }
-              : c
-          ),
-        }))
-      );
-      if (selectedCase?.id === editingCaseId) {
-        setSelectedCase({ ...selectedCase, suiteId: targetSuiteId, title: data.title, priority: data.priority, description: data.description, preconditions: data.preconditions, steps: data.steps });
+  const handleSaveCase = async (
+    targetSuiteId: string,
+    data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: LocalStep[] }
+  ) => {
+    if (!projectId) return;
+    try {
+      if (caseModalMode === 'create') {
+        const newCase = await testCasesApi.create(projectId, targetSuiteId, {
+          title: data.title, priority: data.priority,
+          description: data.description, preconditions: data.preconditions,
+        });
+        for (const step of data.steps) {
+          await testStepsApi.create(projectId, targetSuiteId, newCase.id, {
+            stepNumber: step.order, action: step.action, expectedResult: step.expectedResult,
+          });
+        }
+        queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, targetSuiteId) });
+        toast.success('Test case created');
+      } else {
+        await testCasesApi.update(projectId, caseSuiteId, editingCaseId, {
+          title: data.title, priority: data.priority,
+          description: data.description, preconditions: data.preconditions,
+        });
+        // Replace all steps: delete existing then recreate
+        for (const step of stepsForSelectedCase) {
+          if (step.id) await testStepsApi.delete(projectId, caseSuiteId, editingCaseId, step.id);
+        }
+        for (const step of data.steps) {
+          await testStepsApi.create(projectId, caseSuiteId, editingCaseId, {
+            stepNumber: step.order, action: step.action, expectedResult: step.expectedResult,
+          });
+        }
+        queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, caseSuiteId) });
+        queryClient.invalidateQueries({ queryKey: keys.steps.all(projectId, caseSuiteId, editingCaseId) });
+        if (selectedCase?.id === editingCaseId) {
+          setSelectedCase({ ...selectedCase, title: data.title, priority: data.priority, description: data.description, preconditions: data.preconditions, suiteId: targetSuiteId });
+        }
+        toast.success('Test case updated');
       }
+      setCaseFormOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save test case');
     }
-    setCaseFormOpen(false);
   };
 
-  const copyCase = (tc: TestCase) => {
-    const newCase: TestCase = { ...tc, id: generateTestCaseId(), title: `${tc.title} (Copy)` };
-    setSuites((prev) => prev.map((s) => (s.id === tc.suiteId ? { ...s, cases: [...s.cases, newCase] } : s)));
+  const copyCase = async (tc: TestCase) => {
+    if (!projectId) return;
+    try {
+      await testCasesApi.create(projectId, tc.suiteId, {
+        title: `${tc.title} (Copy)`, priority: tc.priority,
+        description: tc.description, preconditions: tc.preconditions,
+      });
+      queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, tc.suiteId) });
+      toast.success('Test case duplicated');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to duplicate test case');
+    }
   };
 
   const confirmDeleteCase = (tc: TestCase) => {
@@ -459,19 +590,44 @@ const Repository = () => {
   };
 
   const handleDelete = () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || !projectId) return;
     if (deleteTarget.type === 'suite') {
-      setSuites((prev) => prev.filter((s) => s.id !== deleteTarget.id));
-      if (selectedCase && suites.find((s) => s.id === deleteTarget.id)?.cases.some((c) => c.id === selectedCase.id)) {
-        setSelectedCase(null);
-      }
+      deleteSuiteMut.mutate(
+        { projectId, id: deleteTarget.id },
+        {
+          onSuccess: () => {
+            if (selectedCase && suites.find(s => s.id === deleteTarget.id)?.cases.some(c => c.id === selectedCase.id)) {
+              setSelectedCase(null);
+            }
+            setDeleteModalOpen(false);
+            setDeleteTarget(null);
+            toast.success('Suite deleted');
+          },
+          onError: (e) => toast.error(e.message),
+        }
+      );
     } else {
-      setSuites((prev) => prev.map((s) => ({ ...s, cases: s.cases.filter((c) => c.id !== deleteTarget.id) })));
-      if (selectedCase?.id === deleteTarget.id) setSelectedCase(null);
+      const suiteForCase = suites.find(s => s.cases.some(c => c.id === deleteTarget.id));
+      if (!suiteForCase) return;
+      deleteCaseMut.mutate(
+        { projectId, suiteId: suiteForCase.id, id: deleteTarget.id },
+        {
+          onSuccess: () => {
+            if (selectedCase?.id === deleteTarget.id) setSelectedCase(null);
+            setDeleteModalOpen(false);
+            setDeleteTarget(null);
+            toast.success('Test case deleted');
+          },
+          onError: (e) => toast.error(e.message),
+        }
+      );
     }
-    setDeleteModalOpen(false);
-    setDeleteTarget(null);
   };
+
+  // When editing a case, merge fetched steps in so CaseFormPage can pre-populate them
+  const editingCaseWithSteps: TestCase | null = editingCase
+    ? { ...editingCase, steps: stepsForSelectedCase }
+    : null;
 
   if (caseFormOpen) {
     return (
@@ -480,12 +636,27 @@ const Repository = () => {
           mode={caseModalMode}
           suites={suites}
           initialSuiteId={caseSuiteId}
-          initialCase={editingCase || undefined}
+          initialCase={editingCaseWithSteps || undefined}
           projectName={project?.name}
           projectId={projectId}
           onSave={handleSaveCase}
           onCancel={() => setCaseFormOpen(false)}
         />
+      </div>
+    );
+  }
+
+  if (isLoadingRepo) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="px-6 pt-5 pb-4 bg-card">
+          <div className="mb-2 h-4 w-40 bg-muted animate-pulse rounded" />
+          <div className="h-6 w-32 bg-muted animate-pulse rounded" />
+        </div>
+        <div className="flex-1 flex items-center justify-center text-muted-foreground gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading repository…</span>
+        </div>
       </div>
     );
   }
@@ -778,7 +949,7 @@ const Repository = () => {
                         { id: 'att-2', name: 'test-data.csv', type: 'document', url: '/placeholder.svg' },
                         { id: 'att-3', name: 'error-log.txt', type: 'document', url: '/placeholder.svg' },
                       ];
-                      const attachments = selectedCase.steps.length > 0 ? mockAttachments : [];
+                      const attachments = stepsForSelectedCase.length > 0 ? mockAttachments : [];
                       const getIcon = (type: string) => {
                         if (type === 'image') return Image;
                         return FileText;
@@ -815,7 +986,7 @@ const Repository = () => {
                     })()}
 
                     {/* Action Block: Test Steps */}
-                    {selectedCase.steps.length > 0 && (
+                    {stepsForSelectedCase.length > 0 && (
                       <div className="flex-1 min-h-0 flex flex-col">
                         <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Test Steps</label>
                         <div className="rounded-md border border-border/60 bg-card overflow-hidden flex-1">
@@ -828,7 +999,7 @@ const Repository = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {selectedCase.steps.map((step) => (
+                              {stepsForSelectedCase.map((step) => (
                                 <tr key={step.order} className="ghost-border border-t">
                                   <td className="px-2.5 py-2 text-muted-foreground font-mono text-xs align-baseline">{step.order}</td>
                                   <td className="px-2.5 py-2 text-foreground text-sm leading-relaxed align-baseline">{step.action}</td>
@@ -928,20 +1099,16 @@ const Repository = () => {
                 placeholder="e.g. Verify login with valid credentials"
                 value={quickCreateTitle}
                 onChange={(e) => setQuickCreateTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && quickCreateTitle.trim()) {
-                    const newCase: TestCase = {
-                      id: generateTestCaseId(),
-                      suiteId: quickCreateSuiteId,
-                      title: quickCreateTitle.trim(),
-                      priority: 'MEDIUM',
-                      description: '',
-                      preconditions: '',
-                      steps: [],
-                      deleted: false,
-                    };
-                    setSuites((prev) => prev.map((s) => (s.id === quickCreateSuiteId ? { ...s, cases: [...s.cases, newCase] } : s)));
-                    setQuickCreateOpen(false);
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && quickCreateTitle.trim() && projectId) {
+                    try {
+                      await testCasesApi.create(projectId, quickCreateSuiteId, {
+                        title: quickCreateTitle.trim(), priority: 'MEDIUM',
+                        description: '', preconditions: '',
+                      });
+                      queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, quickCreateSuiteId) });
+                      setQuickCreateOpen(false);
+                    } catch (e2) { toast.error(e2 instanceof Error ? e2.message : 'Failed'); }
                   }
                 }}
                 autoFocus
@@ -955,19 +1122,16 @@ const Repository = () => {
               size="sm"
               className="bg-primary text-primary-foreground hover:bg-primary/90 border-0"
               disabled={!quickCreateTitle.trim()}
-              onClick={() => {
-                const newCase: TestCase = {
-                  id: generateTestCaseId(),
-                  suiteId: quickCreateSuiteId,
-                  title: quickCreateTitle.trim(),
-                  priority: 'MEDIUM',
-                  description: '',
-                  preconditions: '',
-                  steps: [],
-                  deleted: false,
-                };
-                setSuites((prev) => prev.map((s) => (s.id === quickCreateSuiteId ? { ...s, cases: [...s.cases, newCase] } : s)));
-                setQuickCreateOpen(false);
+              onClick={async () => {
+                if (!projectId) return;
+                try {
+                  await testCasesApi.create(projectId, quickCreateSuiteId, {
+                    title: quickCreateTitle.trim(), priority: 'MEDIUM',
+                    description: '', preconditions: '',
+                  });
+                  queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, quickCreateSuiteId) });
+                  setQuickCreateOpen(false);
+                } catch (e2) { toast.error(e2 instanceof Error ? e2.message : 'Failed'); }
               }}
             >
               Create Case
@@ -1320,24 +1484,23 @@ const Repository = () => {
               className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0"
               disabled={!newRunName.trim()}
               onClick={() => {
-                const newRun: TestRun = {
-                  id: `TR-${String(Math.floor(Math.random() * 1000)).padStart(2, '0')}`,
-                  projectId: projectId || '',
-                  name: newRunName,
-                  environment: newRunEnv,
-                  buildVersion: newRunBuildVersion,
-                  status: 'initial',
-                  passed: 0,
-                  failed: 0,
-                  skipped: 0,
-                  untested: selectedCases.size,
-                  createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-                  description: newRunDesc,
-                };
-                toast.success(`Test run "${newRunName}" created with ${selectedCases.size} cases`);
-                setCreateRunOpen(false);
-                clearSelection();
-                navigate(`/projects/${projectId}/runs`, { state: { newRun } });
+                if (!projectId || !newRunName.trim()) return;
+                createRunMut.mutate(
+                  { projectId, body: {
+                    name: newRunName, environment: newRunEnv,
+                    buildVersion: newRunBuildVersion, description: newRunDesc,
+                    untested: selectedCases.size, passed: 0, failed: 0, skipped: 0,
+                  } },
+                  {
+                    onSuccess: () => {
+                      toast.success(`Test run "${newRunName}" created with ${selectedCases.size} cases`);
+                      setCreateRunOpen(false);
+                      clearSelection();
+                      navigate(`/projects/${projectId}/runs`);
+                    },
+                    onError: (e) => toast.error(e.message),
+                  }
+                );
               }}
             >
               Create Run ({selectedCases.size} cases)
