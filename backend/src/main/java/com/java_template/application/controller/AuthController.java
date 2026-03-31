@@ -62,9 +62,10 @@ public class AuthController {
                 Instant.ofEpochMilli(authResponse.expiresAt),
                 ZoneId.systemDefault());
 
-        // Return only non-sensitive user info in body — not the token
+        // Return token in body for Authorization header usage (e.g., in dev with CORS)
+        // Token is ALSO set in HttpOnly cookie for browsers that support it
         return ResponseEntity.ok(new LoginResponse(
-                null,
+                authResponse.token,
                 authResponse.username,
                 authResponse.role,
                 expiresAt));

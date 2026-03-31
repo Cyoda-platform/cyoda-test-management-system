@@ -1,24 +1,62 @@
 /**
  * Central API client.
- * All requests include credentials: 'include' so the browser sends the
- * httpOnly auth-token cookie automatically on every call.
+ * Base URL:
+ *  - Dev: http://localhost:8080/api (direct connection to backend)
+ *  - Prod: /api (served by backend, same domain)
  *
- * Base URL is read from VITE_API_URL (default: /api for Vite proxy).
+ * NOTE: In dev mode with CORS, we use Authorization header instead of httpOnly cookie
+ * because HttpOnly cookies don't work across different origins/ports.
  */
-const BASE_URL = import.meta.env.VITE_API_URL ?? '/api';
+const BASE_URL = import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api');
+
+// Store token in localStorage for development (when using Authorization header)
+let storedToken: string | null = null;
+
+export function setAuthToken(token: string | null) {
+  storedToken = token;
+  if (token) {
+    localStorage.setItem('auth_token', token);
+  } else {
+    localStorage.removeItem('auth_token');
+  }
+}
+
+export function getAuthToken(): string | null {
+  if (!storedToken) {
+    storedToken = localStorage.getItem('auth_token');
+  }
+  return storedToken;
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const url = `${BASE_URL}${path}`;
+  const method = options.method || 'GET';
+  console.log(`[API] ${method} ${url}`);
+
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  // In development mode, use Authorization header instead of cookies (CORS limitation)
+  const token = getAuthToken();
+  if (token && import.meta.env.DEV) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, {
     ...options,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
 
+  console.log(`[API] ${method} ${url} → ${res.status}`);
+
   if (res.status === 401) {
-    // Session expired or no cookie — bounce to login
+    // Session expired or no token — bounce to login
+    console.warn('[API] Unauthorized - redirecting to login');
+    setAuthToken(null);
     window.location.href = '/';
     throw new Error('Unauthorized');
   }
@@ -49,9 +87,20 @@ export interface AuthUser {
   role: string;
 }
 
+interface LoginResponse extends AuthUser {
+  token: string;
+  expiresAt: string;
+}
+
 export const authApi = {
-  login:  (username: string, password: string) =>
-    api.post<AuthUser>('/auth/login', { username, password }),
+  login: async (username: string, password: string): Promise<AuthUser> => {
+    const response = await api.post<LoginResponse>('/auth/login', { username, password });
+    // Save token for Authorization header usage in dev mode
+    if (response.token) {
+      setAuthToken(response.token);
+    }
+    return response;
+  },
   logout: () =>
     api.post<void>('/auth/logout', {}),
   me:     () =>
