@@ -1,7 +1,6 @@
 package com.java_template.application.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.java_template.common.workflow.CyodaEntity;
 import com.java_template.common.workflow.OperationSpecification;
 import lombok.AllArgsConstructor;
@@ -10,7 +9,6 @@ import lombok.NoArgsConstructor;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
@@ -31,13 +29,12 @@ public class TestCaseDTO implements CyodaEntity {
     private UUID id;
     private UUID projectId;
 
-    @NotNull(message = "Suite ID is required")
+    // suiteId is always set from the URL path parameter — never sent in the request body
     private UUID suiteId;
 
-    @JsonProperty("title")
     @NotBlank(message = "Test case title is required")
     @Size(max = 255, message = "Title must not exceed 255 characters")
-    private String name;
+    private String title;
 
     @Size(max = 2000, message = "Description must not exceed 2000 characters")
     private String description;
@@ -58,4 +55,3 @@ public class TestCaseDTO implements CyodaEntity {
         return new OperationSpecification.Entity(MODEL_SPEC, ENTITY_NAME);
     }
 }
-

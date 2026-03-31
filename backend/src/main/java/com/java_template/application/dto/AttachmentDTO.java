@@ -25,6 +25,7 @@ public class AttachmentDTO implements CyodaEntity {
 
     private UUID id;
     private UUID projectId;
+    private UUID caseId;
     private String fileName;
     private String fileType;
     private long fileSize;

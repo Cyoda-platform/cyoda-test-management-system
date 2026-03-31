@@ -70,9 +70,9 @@ public class AttachmentService {
     }
 
     /**
-     * Uploads a file to Cyoda EdgeMessage and saves attachment metadata to the repository.
+     * Uploads a file to Cyoda EdgeMessage and saves attachment metadata (with optional caseId).
      */
-    public AttachmentDTO uploadAttachment(UUID projectId, MultipartFile file) throws IOException {
+    public AttachmentDTO uploadAttachment(UUID projectId, UUID caseId, MultipartFile file) throws IOException {
         String encodedContent = Base64.getEncoder().encodeToString(file.getBytes());
 
         ObjectNode content = objectMapper.createObjectNode();
@@ -83,6 +83,7 @@ public class AttachmentService {
 
         ObjectNode metadata = objectMapper.createObjectNode();
         metadata.put("projectId", projectId.toString());
+        if (caseId != null) metadata.put("caseId", caseId.toString());
         metadata.put("contentType", file.getContentType());
 
         UUID messageId = edgeMessageService.createMessage(EDGE_MESSAGE_SUBJECT, content, metadata);
@@ -90,6 +91,7 @@ public class AttachmentService {
 
         AttachmentDTO attachment = new AttachmentDTO();
         attachment.setProjectId(projectId);
+        attachment.setCaseId(caseId);
         attachment.setFileName(file.getOriginalFilename());
         attachment.setFileType(file.getContentType());
         attachment.setFileSize(file.getSize());
@@ -131,6 +133,16 @@ public class AttachmentService {
                         throw new IllegalStateException("Failed to retrieve file content: " + e.getMessage(), e);
                     }
                 });
+    }
+
+    /**
+     * Retrieves all attachments for a specific test case.
+     */
+    public List<AttachmentDTO> getAttachmentsByCaseId(UUID caseId) {
+        SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
+                .pageNumber(0).pageSize(1000).build();
+        return entityService.search(MODEL_SPEC, conditionByField("caseId", caseId.toString()),
+                AttachmentDTO.class, params).data().stream().map(this::withId).toList();
     }
 
     /**

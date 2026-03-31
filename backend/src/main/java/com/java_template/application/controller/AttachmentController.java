@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.java_template.common.dto.PageResult;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,13 +35,22 @@ public class AttachmentController {
     @Operation(summary = "Upload attachment file to Cyoda EdgeMessage")
     public ResponseEntity<AttachmentDTO> uploadAttachment(
             @PathVariable UUID projectId,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "caseId", required = false) UUID caseId) {
         try {
-            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, file);
+            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, file);
             return ResponseEntity.status(HttpStatus.CREATED).body(uploaded);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    @GetMapping("/by-case/{caseId}")
+    @Operation(summary = "Get all attachments for a specific test case")
+    public ResponseEntity<List<AttachmentDTO>> getAttachmentsByCase(
+            @PathVariable UUID projectId,
+            @PathVariable UUID caseId) {
+        return ResponseEntity.ok(attachmentService.getAttachmentsByCaseId(caseId));
     }
 
     @PostMapping(consumes = "application/json")

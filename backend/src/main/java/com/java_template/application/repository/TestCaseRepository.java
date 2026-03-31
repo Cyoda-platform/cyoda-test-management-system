@@ -50,8 +50,8 @@ public class TestCaseRepository {
     public TestCaseDTO update(UUID id, TestCaseDTO testCase) {
         return testCases.computeIfPresent(id, (k, existing) -> {
             // Merge: update only non-null fields
-            if (testCase.getName() != null) {
-                existing.setName(testCase.getName());
+            if (testCase.getTitle() != null) {
+                existing.setTitle(testCase.getTitle());
             }
             if (testCase.getDescription() != null) {
                 existing.setDescription(testCase.getDescription());

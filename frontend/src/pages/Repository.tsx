@@ -16,13 +16,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
   useProject, useCreateSuite, useUpdateSuite, useDeleteSuite, useDeleteTestCase,
   useCreateTestRun,
   keys,
 } from '@/hooks/useApi';
-import { suitesApi, testCasesApi, testStepsApi } from '@/lib/api';
+import { suitesApi, testCasesApi, testStepsApi, attachmentsApi } from '@/lib/api';
 import type { LocalCase as TestCase, LocalStep, LocalSuite as Suite } from '@/lib/localTypes';
 // TestRun type only needed for legacy Create Run handler shape — removed, using API directly
 
@@ -141,7 +141,8 @@ const Repository = () => {
       ? [{
           queryKey: keys.steps.all(projectId!, selectedCaseSuiteId, selectedCase.id),
           queryFn:  () => testStepsApi.list(projectId!, selectedCaseSuiteId, selectedCase.id),
-          select:   (r: { data: { id: string; stepNumber: number; action: string; expectedResult: string; status: string }[] }) => r.data,
+          // backend returns a plain array (not { data: [...] })
+          select:   (r: { id: string; stepNumber: number; action: string; expectedResult: string; status: string }[]) => r,
         }]
       : [],
   });
@@ -155,6 +156,13 @@ const Repository = () => {
     })),
     [stepsQuery[0]?.data]
   );
+
+  // 4. Fetch attachments for the selected case (lazy)
+  const { data: caseAttachments = [] } = useQuery({
+    queryKey: ['attachments', projectId, selectedCase?.id],
+    queryFn:  () => attachmentsApi.listByCase(projectId!, selectedCase!.id),
+    enabled:  !!projectId && !!selectedCase?.id,
+  });
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const createSuiteMut = useCreateSuite();
@@ -573,7 +581,7 @@ const Repository = () => {
 
   const handleSaveCase = async (
     targetSuiteId: string,
-    data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: LocalStep[] }
+    data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: LocalStep[]; files: File[] }
   ) => {
     if (!projectId) return;
     try {
@@ -587,7 +595,11 @@ const Repository = () => {
             stepNumber: step.order, action: step.action, expectedResult: step.expectedResult,
           });
         }
+        for (const file of data.files) {
+          await attachmentsApi.upload(projectId, file, newCase.id);
+        }
         queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, targetSuiteId) });
+        queryClient.invalidateQueries({ queryKey: ['attachments', projectId, newCase.id] });
         toast.success('Test case created');
       } else {
         await testCasesApi.update(projectId, caseSuiteId, editingCaseId, {
@@ -603,8 +615,12 @@ const Repository = () => {
             stepNumber: step.order, action: step.action, expectedResult: step.expectedResult,
           });
         }
+        for (const file of data.files) {
+          await attachmentsApi.upload(projectId, file, editingCaseId);
+        }
         queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, caseSuiteId) });
         queryClient.invalidateQueries({ queryKey: keys.steps.all(projectId, caseSuiteId, editingCaseId) });
+        queryClient.invalidateQueries({ queryKey: ['attachments', projectId, editingCaseId] });
         if (selectedCase?.id === editingCaseId) {
           setSelectedCase({ ...selectedCase, title: data.title, priority: data.priority, description: data.description, preconditions: data.preconditions, suiteId: targetSuiteId });
         }
@@ -992,47 +1008,24 @@ const Repository = () => {
                     )}
 
                     {/* Resources Block: Attachments */}
-                    {(() => {
-                      const mockAttachments = [
-                        { id: 'att-1', name: 'screenshot-login.png', type: 'image', url: '/placeholder.svg' },
-                        { id: 'att-2', name: 'test-data.csv', type: 'document', url: '/placeholder.svg' },
-                        { id: 'att-3', name: 'error-log.txt', type: 'document', url: '/placeholder.svg' },
-                      ];
-                      const attachments = stepsForSelectedCase.length > 0 ? mockAttachments : [];
-                      const getIcon = (type: string) => {
-                        if (type === 'image') return Image;
-                        return FileText;
-                      };
-                      if (attachments.length === 0) return null;
-                      return (
-                        <div className="mb-4">
-                          <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Attachments</label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {attachments.map((att) => {
-                              const Icon = getIcon(att.type);
-                              return (
-                                <a
-                                  key={att.id}
-                                  href={att.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-0.5 cursor-pointer hover:bg-muted/50 transition-colors group"
-                                  onClick={(e) => {
-                                    if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                                      e.preventDefault();
-                                      setPreviewAttachment({ name: att.name, url: att.url, type: att.type });
-                                    }
-                                  }}
-                                >
-                                  <Icon className="h-3 w-3 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                                  <span className="text-[11px] text-foreground truncate max-w-[120px] group-hover:underline">{att.name}</span>
-                                </a>
-                              );
-                            })}
-                          </div>
+                    {caseAttachments.length > 0 && (
+                      <div className="mb-4">
+                        <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Attachments</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {caseAttachments.map((att) => (
+                            <a
+                              key={att.id}
+                              href={`/api/projects/${projectId}/attachments/${att.id}/content`}
+                              download={att.fileName}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-0.5 cursor-pointer hover:bg-muted/50 transition-colors group"
+                            >
+                              <FileText className="h-3 w-3 text-muted-foreground shrink-0" strokeWidth={1.5} />
+                              <span className="text-[11px] text-foreground truncate max-w-[120px] group-hover:underline">{att.fileName}</span>
+                            </a>
+                          ))}
                         </div>
-                      );
-                    })()}
+                      </div>
+                    )}
 
                     {/* Action Block: Test Steps */}
                     {stepsForSelectedCase.length > 0 && (
