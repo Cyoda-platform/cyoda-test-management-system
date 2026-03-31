@@ -1,4 +1,4 @@
-import type { Suite, TestCase, TestStep } from '@/data/mockData';
+import type { LocalSuite as Suite, LocalCase as TestCase, LocalStep as TestStep } from '@/lib/localTypes';
 
 // ── Helpers ──
 

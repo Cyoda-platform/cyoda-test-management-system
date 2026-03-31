@@ -5,7 +5,7 @@ import { Plus, Trash2, GripVertical, Upload, FileText, X, Paperclip } from 'luci
 import { Button } from '@/components/ui/button';
 import { prioritySelectorStyles } from '@/components/PriorityBadge';
 import AutoExpandTextarea from '@/components/AutoExpandTextarea';
-import type { TestCase, TestStep, Suite } from '@/data/mockData';
+import type { LocalCase as TestCase, LocalStep as TestStep, LocalSuite as Suite } from '@/lib/localTypes';
 
 interface Attachment {
   id: string;
