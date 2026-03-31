@@ -100,7 +100,7 @@ public class TestRunStepController {
             @PathVariable UUID id,
             @RequestParam("file") MultipartFile file) {
         try {
-            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, file);
+            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, file);
             return ResponseEntity.status(HttpStatus.CREATED).body(uploaded);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
