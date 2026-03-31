@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { User, LogOut, Shield } from 'lucide-react';
 import GlobalSearch from './GlobalSearch';
 import LogoutModal from './LogoutModal';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,7 @@ import {
 
 const AppHeader = () => {
   const [showLogout, setShowLogout] = useState(false);
+  const { user } = useAuth();
 
   return (
     <header className="h-14 bg-sidebar-deep text-header-foreground flex items-center px-6 shrink-0 z-50 border-b border-white/5" style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)' }}>
@@ -28,10 +29,13 @@ const AppHeader = () => {
               <User className="h-4 w-4 text-accent-foreground" strokeWidth={1.5} />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuLabel className="pb-0 font-semibold text-sm">
+              {user?.username ?? '—'}
+            </DropdownMenuLabel>
+            <DropdownMenuLabel className="flex items-center gap-2 pt-0.5 text-xs font-normal text-muted-foreground">
               <Shield className="h-3.5 w-3.5" strokeWidth={1.5} />
-              Role: Admin
+              {user?.role ?? 'Unknown role'}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
