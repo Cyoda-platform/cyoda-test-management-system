@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+frontend/node_modules/
+package-lock.json
+frontend/package-lock.json
+
+# Build output
+backend/build/
+frontend/dist/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Environment
+.env
+.env.local
+backend/.env
+backend/.env.cucumber
