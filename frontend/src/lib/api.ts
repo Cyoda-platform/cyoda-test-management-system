@@ -146,8 +146,8 @@ export const suitesApi = {
     api.get<{ data: Suite[] }>(`/projects/${projectId}/suites`),
   get:    (projectId: string, id: string) =>
     api.get<Suite>(`/projects/${projectId}/suites/${id}`),
-  create: (projectId: string, body: Pick<Suite, 'name' | 'description'>) =>
-    api.post<Suite>(`/projects/${projectId}/suites`, body),
+  create: (projectId: string, body: Omit<Suite, 'id'>) =>
+    api.post<Suite>(`/projects/${projectId}/suites`, { ...body, projectId }),
   update: (projectId: string, id: string, body: Partial<Suite>) =>
     api.put<Suite>(`/projects/${projectId}/suites/${id}`, body),
   delete: (projectId: string, id: string) =>
