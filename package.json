@@ -4,25 +4,17 @@
   "private": true,
   "description": "Cyoda TMS — monorepo containing the React frontend and Spring Boot backend",
   "scripts": {
-    "dev":              "concurrently --names \"frontend,backend\" --prefix-colors \"cyan,yellow\" \"npm run dev:frontend\" \"npm run dev:backend\"",
-    "build":            "npm run build:frontend && npm run build:backend",
-    "test":             "concurrently --names \"frontend,backend\" --prefix-colors \"cyan,yellow\" \"npm run test:frontend\" \"npm run test:backend\"",
-
+    "dev":              "bash start-dev.sh",
     "dev:frontend":     "npm --prefix frontend run dev",
-    "dev:backend":      "dotenv -e .env -- sh -c 'cd backend && ./gradlew bootRun'",
-
+    "dev:backend":      "cd backend && bash RUN_WITH_CYODA.sh",
+    "build":            "npm run build:frontend && npm run build:backend",
     "build:frontend":   "npm --prefix frontend run build",
-    "build:backend":    "dotenv -e .env -- sh -c 'cd backend && ./gradlew build'",
-
+    "build:backend":    "cd backend && ./gradlew clean build -x test",
+    "test":             "npm run test:frontend && npm run test:backend",
     "test:frontend":    "npm --prefix frontend run test",
-    "test:backend":     "dotenv -e .env -- sh -c 'cd backend && ./gradlew test'",
-
+    "test:backend":     "cd backend && ./gradlew test",
     "install:frontend": "npm --prefix frontend install",
     "lint:frontend":    "npm --prefix frontend run lint"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2",
-    "dotenv-cli": "^7.4.4"
   },
   "engines": {
     "node": ">=18",
