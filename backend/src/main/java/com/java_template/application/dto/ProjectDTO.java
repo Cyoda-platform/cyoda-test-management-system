@@ -11,7 +11,6 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -37,8 +36,8 @@ public class ProjectDTO implements CyodaEntity {
 
     private String status;
     private boolean deleted;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private String createdAt;
+    private String updatedAt;
 
     @Override
     @JsonIgnore

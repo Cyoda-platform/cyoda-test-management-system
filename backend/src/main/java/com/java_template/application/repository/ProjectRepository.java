@@ -2,7 +2,6 @@ package com.java_template.application.repository;
 
 import com.java_template.application.dto.ProjectDTO;
 import org.springframework.stereotype.Repository;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -17,8 +16,9 @@ public class ProjectRepository {
     public ProjectDTO create(ProjectDTO project) {
         UUID id = UUID.randomUUID();
         project.setId(id);
-        project.setCreatedAt(LocalDateTime.now());
-        project.setUpdatedAt(LocalDateTime.now());
+        String now = java.time.LocalDateTime.now().toString() + "Z";
+        project.setCreatedAt(now);
+        project.setUpdatedAt(now);
         projects.put(id, project);
         return project;
     }
@@ -49,7 +49,7 @@ public class ProjectRepository {
             if (project.getStatus() != null) {
                 existing.setStatus(project.getStatus());
             }
-            existing.setUpdatedAt(LocalDateTime.now());
+            existing.setUpdatedAt(java.time.LocalDateTime.now().toString() + "Z");
             return existing;
         });
     }
