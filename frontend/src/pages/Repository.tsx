@@ -181,10 +181,22 @@ const Repository = () => {
 
   // Panel sizes from localStorage - only save left and right when selectedCase exists
   const [panelSizes, setPanelSizes] = useState<{ left: number; middle: number; right: number }>(() => {
-    // Clear all old version keys to force reset to new defaults
-    localStorage.removeItem('repository-panel-sizes-v4');
-    localStorage.removeItem('repository-panel-sizes-v5');
+    // Try to load from v5 (new format)
+    const savedV5 = localStorage.getItem('repository-panel-sizes-v5');
+    if (savedV5) {
+      try {
+        const parsed = JSON.parse(savedV5);
+        const left = parsed.left || 15;
+        const right = parsed.right || 35;
+        const middle = 100 - left - right;
+        return { left, middle, right };
+      } catch {
+        // Invalid JSON, use defaults
+      }
+    }
 
+    // First load - use new defaults and clean up old keys
+    localStorage.removeItem('repository-panel-sizes-v4');
     return { left: 15, middle: 50, right: 35 };
   });
 
@@ -546,11 +558,15 @@ const Repository = () => {
   const copySuite = async (suite: Suite) => {
     if (!projectId) return;
     try {
-      const newSuite = await suitesApi.create(projectId, { name: `${suite.name} (Copy)` });
+      const newSuite = await suitesApi.create(projectId, {
+        name: `${suite.name} (Copy)`,
+      });
       for (const tc of suite.cases) {
         await testCasesApi.create(projectId, newSuite.id, {
-          title: tc.title, priority: tc.priority,
-          description: tc.description, preconditions: tc.preconditions,
+          title: tc.title,
+          priority: tc.priority,
+          description: tc.description || '',
+          preconditions: tc.preconditions || '',
         });
       }
       queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
