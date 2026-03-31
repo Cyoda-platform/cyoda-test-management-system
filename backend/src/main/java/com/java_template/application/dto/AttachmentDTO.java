@@ -32,6 +32,8 @@ public class AttachmentDTO implements CyodaEntity {
     private LocalDateTime uploadedAt;
     /** ID of the corresponding EdgeMessage in Cyoda that holds the file content */
     private UUID messageId;
+    /** Base64-encoded file content — used as fallback when EdgeMessage is unavailable */
+    private String content;
 
     @Override
     @JsonIgnore

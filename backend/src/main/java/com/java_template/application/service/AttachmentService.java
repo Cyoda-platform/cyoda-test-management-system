@@ -70,24 +70,11 @@ public class AttachmentService {
     }
 
     /**
-     * Uploads a file to Cyoda EdgeMessage and saves attachment metadata (with optional caseId).
+     * Uploads a file. Tries EdgeMessage first; falls back to storing base64 content
+     * directly in the entity if EdgeMessage is unavailable.
      */
     public AttachmentDTO uploadAttachment(UUID projectId, UUID caseId, MultipartFile file) throws IOException {
         String encodedContent = Base64.getEncoder().encodeToString(file.getBytes());
-
-        ObjectNode content = objectMapper.createObjectNode();
-        content.put("fileName", file.getOriginalFilename());
-        content.put("fileType", file.getContentType());
-        content.put("fileSize", file.getSize());
-        content.put("data", encodedContent);
-
-        ObjectNode metadata = objectMapper.createObjectNode();
-        metadata.put("projectId", projectId.toString());
-        if (caseId != null) metadata.put("caseId", caseId.toString());
-        metadata.put("contentType", file.getContentType());
-
-        UUID messageId = edgeMessageService.createMessage(EDGE_MESSAGE_SUBJECT, content, metadata);
-        logger.info("Uploaded file '{}' to EdgeMessage: {}", file.getOriginalFilename(), messageId);
 
         AttachmentDTO attachment = new AttachmentDTO();
         attachment.setProjectId(projectId);
@@ -95,7 +82,28 @@ public class AttachmentService {
         attachment.setFileName(file.getOriginalFilename());
         attachment.setFileType(file.getContentType());
         attachment.setFileSize(file.getSize());
-        attachment.setMessageId(messageId);
+        attachment.setUploadedAt(java.time.LocalDateTime.now());
+
+        // Try EdgeMessage; fall back to inline base64 storage on failure
+        try {
+            ObjectNode content = objectMapper.createObjectNode();
+            content.put("fileName", file.getOriginalFilename());
+            content.put("fileType", file.getContentType());
+            content.put("fileSize", file.getSize());
+            content.put("data", encodedContent);
+
+            ObjectNode metadata = objectMapper.createObjectNode();
+            metadata.put("projectId", projectId.toString());
+            if (caseId != null) metadata.put("caseId", caseId.toString());
+            metadata.put("contentType", file.getContentType());
+
+            UUID messageId = edgeMessageService.createMessage(EDGE_MESSAGE_SUBJECT, content, metadata);
+            attachment.setMessageId(messageId);
+            logger.info("Uploaded file '{}' to EdgeMessage: {}", file.getOriginalFilename(), messageId);
+        } catch (Exception e) {
+            logger.warn("EdgeMessage unavailable ({}); storing file content inline in entity.", e.getMessage());
+            attachment.setContent(encodedContent);
+        }
 
         return withId(entityService.create(attachment));
     }
@@ -119,17 +127,27 @@ public class AttachmentService {
     }
 
     /**
-     * Retrieves the raw file content (base64-decoded) from Cyoda EdgeMessage.
+     * Retrieves the raw file content (base64-decoded).
+     * Tries EdgeMessage first; falls back to inline base64 stored directly in the entity.
      */
     public Optional<byte[]> getAttachmentContent(UUID id) throws Exception {
         return getAttachmentById(id)
-                .filter(a -> a.getMessageId() != null)
                 .map(a -> {
+                    // Fallback: content stored inline as base64
+                    if (a.getMessageId() == null) {
+                        if (a.getContent() == null) return null;
+                        return Base64.getDecoder().decode(a.getContent());
+                    }
                     try {
                         var content = edgeMessageService.getMessageContent(a.getMessageId());
                         if (content == null || !content.has("data")) return null;
                         return Base64.getDecoder().decode(content.get("data").asText());
                     } catch (Exception e) {
+                        // EdgeMessage failed; try inline content as last resort
+                        if (a.getContent() != null) {
+                            logger.warn("EdgeMessage retrieval failed; serving inline content for attachment {}", id);
+                            return Base64.getDecoder().decode(a.getContent());
+                        }
                         throw new IllegalStateException("Failed to retrieve file content: " + e.getMessage(), e);
                     }
                 });

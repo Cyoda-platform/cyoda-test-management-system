@@ -270,6 +270,7 @@ export const defectsApi = {
 export interface Attachment {
   id: string;
   projectId: string;
+  caseId?: string;
   fileName: string;
   fileType: string;
   fileSize: number;
@@ -296,6 +297,12 @@ export const attachmentsApi = {
       headers,
       body: form,
       // no Content-Type header — browser sets multipart boundary automatically
-    }).then(r => r.json() as Promise<Attachment>);
+    }).then(async r => {
+      if (!r.ok) {
+        const body = await r.text().catch(() => '');
+        throw new Error(`Upload failed (${r.status}): ${body}`);
+      }
+      return r.json() as Promise<Attachment>;
+    });
   },
 };
