@@ -27,6 +27,7 @@ public class TestCaseController {
     @PostMapping
     @Operation(summary = "Create a new test case")
     public ResponseEntity<TestCaseDTO> createTestCase(@PathVariable UUID projectId, @PathVariable UUID suiteId, @Valid @RequestBody TestCaseDTO testCase) {
+        testCase.setProjectId(projectId);
         testCase.setSuiteId(suiteId);
         TestCaseDTO created = testCaseService.createTestCase(testCase);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -57,6 +58,7 @@ public class TestCaseController {
         if (!testCaseService.testCaseExists(id)) {
             return ResponseEntity.notFound().build();
         }
+        testCase.setProjectId(projectId);
         testCase.setSuiteId(suiteId);
         TestCaseDTO updated = testCaseService.updateTestCase(id, testCase);
         return ResponseEntity.ok(updated);

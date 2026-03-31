@@ -18,13 +18,50 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import {
-  useProject, useCreateSuite, useUpdateSuite, useDeleteSuite,
+  useProject, useCreateSuite, useUpdateSuite, useDeleteSuite, useDeleteTestCase,
   useCreateTestRun,
   keys,
 } from '@/hooks/useApi';
 import { suitesApi, testCasesApi, testStepsApi } from '@/lib/api';
 import type { LocalCase as TestCase, LocalStep, LocalSuite as Suite } from '@/lib/localTypes';
 // TestRun type only needed for legacy Create Run handler shape — removed, using API directly
+
+const UUID_LIKE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const buildSuitePrefix = (suiteName: string) => {
+  const words = suiteName.match(/[A-Za-z0-9]+/g) ?? [];
+  if (words.length === 0) return 'TC';
+
+  const acronymWord = words.find((word) => /^[A-Z0-9]{2,4}$/.test(word));
+  if (acronymWord) return acronymWord.slice(0, 4);
+
+  if (words.length > 1) {
+    return words.slice(0, 3).map((word) => word[0]).join('').toUpperCase();
+  }
+
+  return words[0].slice(0, 3).toUpperCase();
+};
+
+const formatCaseDisplayId = ({
+  rawId,
+  suiteName,
+  caseIndex,
+  displayId,
+  shortId,
+}: {
+  rawId: string;
+  suiteName: string;
+  caseIndex: number;
+  displayId?: string;
+  shortId?: string;
+}) => {
+  const explicitId = displayId?.trim() || shortId?.trim();
+  if (explicitId) return explicitId;
+  if (rawId && !UUID_LIKE_REGEX.test(rawId) && rawId.length <= 18) return rawId;
+  return `${buildSuitePrefix(suiteName)}-${caseIndex + 1}`;
+};
+
+const getCaseDisplayId = (testCase: Pick<TestCase, 'id' | 'displayId'>) => testCase.displayId || testCase.id;
 
 const Repository = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -47,7 +84,7 @@ const Repository = () => {
       queryKey: keys.cases.all(projectId!, suite.id),
       queryFn:  () => testCasesApi.list(projectId!, suite.id),
       enabled:  !!projectId && apiSuitesData.length > 0,
-      select:   (r: { data: { id: string; suiteId: string; title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; deleted: boolean }[] }) => r.data,
+      select:   (r: { data: { id: string; displayId?: string; shortId?: string; suiteId: string; title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; deleted: boolean }[] }) => r.data,
     })),
   });
 
@@ -57,8 +94,15 @@ const Repository = () => {
       id:        s.id,
       projectId: s.projectId,
       name:      s.name,
-      cases:     (caseQueries[i]?.data ?? []).map(c => ({
+      cases:     (caseQueries[i]?.data ?? []).map((c, caseIndex) => ({
         id:            c.id,
+        displayId:     formatCaseDisplayId({
+          rawId: c.id,
+          suiteName: s.name,
+          caseIndex,
+          displayId: c.displayId,
+          shortId: c.shortId,
+        }),
         suiteId:       c.suiteId,
         title:         c.title,
         priority:      c.priority,
@@ -116,6 +160,7 @@ const Repository = () => {
   const createSuiteMut = useCreateSuite();
   const updateSuiteMut = useUpdateSuite();
   const deleteSuiteMut = useDeleteSuite();
+  const deleteCaseMut = useDeleteTestCase();
   const createRunMut   = useCreateTestRun();
 
   // Panel sizes from localStorage - only save left and right when selectedCase exists
@@ -170,6 +215,7 @@ const Repository = () => {
         const filteredCases = suite.cases.filter(
           (c) =>
             c.title.toLowerCase().includes(q) ||
+            (c.displayId ?? '').toLowerCase().includes(q) ||
             c.id.toLowerCase().includes(q) ||
             c.description.toLowerCase().includes(q)
         );
@@ -813,9 +859,9 @@ const Repository = () => {
 
           {/* Case List */}
           <ResizablePanel defaultSize={selectedCase ? panelSizes.middle : 82} minSize={30}>
-            <div className="h-full overflow-auto bg-card">
+            <div className="h-full min-w-0 overflow-auto bg-card">
               {filteredSuites.map((suite) => (
-                <div key={suite.id} id={`suite-section-${suite.id}`}>
+                <div key={suite.id} id={`suite-section-${suite.id}`} className="border-b border-border/40 last:border-b-0">
                   <div className="group flex items-center justify-between px-5 py-2.5 surface-low">
                     <div className="flex items-center gap-2">
                       <div className={`flex items-center justify-center transition-opacity ${selectedCases.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
@@ -849,9 +895,9 @@ const Repository = () => {
                         <div
                           key={tc.id}
                           onClick={() => setSelectedCase(tc)}
-                          className={`group flex items-center gap-3 px-5 py-2.5 mx-2 rounded cursor-pointer transition-colors ${selectedCases.has(tc.id) ? 'bg-indigo-50' : selectedCase?.id === tc.id ? 'surface-high' : 'hover:surface-low'}`}
+                          className={`group grid grid-cols-[16px_minmax(60px,88px)_minmax(0,1fr)_auto_auto] items-center gap-3 px-5 py-2.5 mx-2 rounded cursor-pointer transition-colors ${selectedCases.has(tc.id) ? 'bg-indigo-50' : selectedCase?.id === tc.id ? 'surface-high' : 'hover:surface-low'}`}
                         >
-                          <div className={`shrink-0 flex items-center justify-center transition-opacity ${selectedCases.has(tc.id) || selectedCases.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                          <div className={`flex items-center justify-center transition-opacity ${selectedCases.has(tc.id) || selectedCases.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                             <Checkbox
                               checked={selectedCases.has(tc.id)}
                               onCheckedChange={() => toggleCaseSelection(tc.id)}
@@ -859,14 +905,17 @@ const Repository = () => {
                               onClick={(e) => e.stopPropagation()}
                             />
                           </div>
-                          <span className="text-[10px] font-mono text-muted-foreground w-12 shrink-0 tracking-wider">
-                            <HighlightText text={tc.id} query={localSearch} />
+                          <span
+                            className="min-w-[60px] max-w-[88px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-mono tracking-wider text-muted-foreground"
+                            title={tc.id}
+                          >
+                            <HighlightText text={getCaseDisplayId(tc)} query={localSearch} />
                           </span>
-                          <span className="flex-1 text-sm font-medium text-foreground truncate">
+                          <span className="min-w-0 text-sm font-medium text-foreground truncate">
                             <HighlightText text={tc.title} query={localSearch} />
                           </span>
-                          <PriorityBadge priority={tc.priority} />
-                          <div className="flex items-center gap-0.5">
+                          <PriorityBadge priority={tc.priority} className="ml-auto shrink-0 justify-self-end" />
+                          <div className="flex items-center gap-0.5 justify-self-end shrink-0">
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => { e.stopPropagation(); openEditCase(tc); }}>
                               <Pencil className="h-3 w-3" strokeWidth={1.5} />
                             </Button>
@@ -902,7 +951,7 @@ const Repository = () => {
                     <div className="flex items-start justify-between gap-2 mb-4">
                       <div className="min-w-0 flex-1">
                         <h2 className="text-sm font-semibold text-foreground truncate mb-1.5 flex items-baseline gap-2">
-                          <span className="font-mono text-[10px] text-muted-foreground font-normal shrink-0">{selectedCase.id}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground font-normal shrink-0" title={selectedCase.id}>{getCaseDisplayId(selectedCase)}</span>
                           <span className="truncate">{selectedCase.title}</span>
                         </h2>
                         <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
@@ -1216,8 +1265,8 @@ const Repository = () => {
                               checked={exportSelectedCases.has(c.id)}
                               onCheckedChange={() => toggleExportCase(c.id, s.id)}
                             />
-                            <Label htmlFor={`exp-case-${c.id}`} className="text-xs text-foreground cursor-pointer truncate">
-                              <span className="text-[10px] font-mono text-muted-foreground mr-1.5">{c.id}</span>
+                            <Label htmlFor={`exp-case-${c.id}`} className="min-w-0 text-xs text-foreground cursor-pointer truncate">
+                              <span className="text-[10px] font-mono text-muted-foreground mr-1.5">{getCaseDisplayId(c)}</span>
                               {c.title}
                             </Label>
                           </div>
@@ -1468,7 +1517,7 @@ const Repository = () => {
                     </div>
                     {suite.cases.filter(c => selectedCases.has(c.id)).map((tc) => (
                       <div key={tc.id} className="flex items-center gap-2 px-3 py-1.5 pl-6">
-                        <span className="text-[10px] font-mono text-muted-foreground w-10 shrink-0">{tc.id}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground w-12 shrink-0 truncate" title={tc.id}>{getCaseDisplayId(tc)}</span>
                         <span className="text-xs text-foreground truncate">{tc.title}</span>
                       </div>
                     ))}
