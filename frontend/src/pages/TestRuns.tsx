@@ -22,14 +22,17 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const ProgressBar = ({ passed, failed, untested }: { passed: number; failed: number; untested: number }) => {
-  const total = passed + failed + untested;
+const ProgressBar = ({ passed = 0, failed = 0, untested = 0 }: { passed?: number; failed?: number; untested?: number }) => {
+  const p = passed ?? 0;
+  const f = failed ?? 0;
+  const u = untested ?? 0;
+  const total = p + f + u;
   if (total === 0) return <div className="h-1.5 rounded-full bg-secondary w-full" />;
   return (
-    <div className="flex h-1.5 rounded-full overflow-hidden w-full bg-secondary" title={`Passed: ${passed} | Failed: ${failed} | Untested: ${untested}`}>
-      {passed > 0 && <div className="bg-success" style={{ width: `${(passed / total) * 100}%` }} />}
-      {failed > 0 && <div className="bg-destructive" style={{ width: `${(failed / total) * 100}%` }} />}
-      {untested > 0 && <div className="bg-muted-foreground/20" style={{ width: `${(untested / total) * 100}%` }} />}
+    <div className="flex h-1.5 rounded-full overflow-hidden w-full bg-secondary" title={`Passed: ${p} | Failed: ${f} | Untested: ${u}`}>
+      {p > 0 && <div className="bg-success" style={{ width: `${(p / total) * 100}%` }} />}
+      {f > 0 && <div className="bg-destructive" style={{ width: `${(f / total) * 100}%` }} />}
+      {u > 0 && <div className="bg-muted-foreground/20" style={{ width: `${(u / total) * 100}%` }} />}
     </div>
   );
 };
@@ -59,12 +62,17 @@ const TestRuns = () => {
 
   const filtered = runs
     .filter((r) => {
+      if (!r) return false;
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
       if (envFilter !== 'all' && r.environment !== envFilter) return false;
-      if (search && !r.name.toLowerCase().includes(search.toLowerCase()) && !r.id.toLowerCase().includes(search.toLowerCase())) return false;
+      if (search && !r.name?.toLowerCase().includes(search.toLowerCase()) && !r.id?.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     })
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => {
+      const dateA = a?.createdAt || '';
+      const dateB = b?.createdAt || '';
+      return dateB.localeCompare(dateA);
+    });
 
   const openCreate = () => {
     navigate(`/projects/${projectId}/runs/create`);
@@ -123,7 +131,7 @@ const TestRuns = () => {
             <div className="mb-2">
               <Breadcrumbs segments={[
                 { label: 'Projects', href: '/projects' },
-                { label: project?.name || 'Project', href: `/projects/${projectId}/repository` },
+                { label: project?.name ?? 'Loading...', href: `/projects/${projectId}/repository` },
                 { label: 'Test Runs' },
               ]} />
             </div>
@@ -209,23 +217,25 @@ const TestRuns = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((run) => (
+            {filtered.map((run) => {
+              if (!run) return null;
+              return (
               <tr key={run.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50">
-                <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">{run.id}</td>
+                <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">{run.id ?? '-'}</td>
                 <td className="px-5 py-3.5 font-medium text-foreground">
                   <button
                     className="hover:text-primary transition-colors text-left cursor-pointer"
                     onClick={() => navigate(`/projects/${projectId}/runs/${run.id}`)}
                   >
-                    {run.name}
+                    {run.name ?? 'Unnamed Run'}
                   </button>
                 </td>
-                <td className="px-5 py-3.5 text-muted-foreground">{run.environment}</td>
-                <td className="px-5 py-3.5"><StatusBadge status={run.status} /></td>
+                <td className="px-5 py-3.5 text-muted-foreground">{run.environment ?? '-'}</td>
+                <td className="px-5 py-3.5"><StatusBadge status={run.status ?? 'initial'} /></td>
                 <td className="px-5 py-3.5">
-                  <ProgressBar passed={run.passed} failed={run.failed} untested={run.untested} />
+                  <ProgressBar passed={run.passed ?? 0} failed={run.failed ?? 0} untested={run.untested ?? 0} />
                 </td>
-                <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap text-[10px] font-mono tracking-wider">{run.createdAt}</td>
+                <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap text-[10px] font-mono tracking-wider">{run.createdAt ?? '-'}</td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
@@ -243,7 +253,8 @@ const TestRuns = () => {
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
           </div>
@@ -262,6 +273,7 @@ const TestRuns = () => {
             </DialogDescription>
           </DialogHeader>
 
+          {editTarget && (
           <div className="px-6 pb-4 space-y-4">
             <div>
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">Name</Label>
@@ -308,6 +320,7 @@ const TestRuns = () => {
               />
             </div>
           </div>
+          )}
 
           <DialogFooter className="px-6 py-4 border-t border-border">
             <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
