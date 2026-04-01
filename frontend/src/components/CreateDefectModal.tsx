@@ -9,12 +9,6 @@ import { toast } from 'sonner';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
-interface EvidenceFile {
-  name: string;
-  size: number;
-  type: string;
-}
-
 interface DefectData {
   title: string;
   description: string;
@@ -22,7 +16,7 @@ interface DefectData {
   status: 'Open' | 'In Progress' | 'Fixed' | 'Closed';
   source: string;
   link: string;
-  files: EvidenceFile[];
+  files: File[];
   caseId: string;
   stepIdx?: number;
 }
@@ -56,7 +50,7 @@ const CreateDefectModal = ({ open, onOpenChange, caseId, caseTitle, stepIdx, sou
   const [status, setStatus] = useState<'Open' | 'In Progress' | 'Fixed' | 'Closed'>('Open');
   const [source, setSource] = useState(sourceInitial || '');
   const [link, setLink] = useState('');
-  const [files, setFiles] = useState<EvidenceFile[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -71,12 +65,7 @@ const CreateDefectModal = ({ open, onOpenChange, caseId, caseTitle, stepIdx, sou
 
   const handleFileUpload = (fileList: FileList | null) => {
     if (!fileList) return;
-    const newFiles: EvidenceFile[] = Array.from(fileList).map((f) => ({
-      name: f.name,
-      size: f.size,
-      type: f.type,
-    }));
-    setFiles((prev) => [...prev, ...newFiles]);
+    setFiles((prev) => [...prev, ...Array.from(fileList)]);
   };
 
   const removeFile = (idx: number) => {
@@ -237,6 +226,7 @@ const CreateDefectModal = ({ open, onOpenChange, caseId, caseTitle, stepIdx, sou
               })}
             </div>
           )}
+
         </div>
 
         <div className="flex justify-end gap-2 mt-4">
