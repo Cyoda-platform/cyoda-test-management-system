@@ -1,0 +1,120 @@
+{
+  "version": "1",
+  "name": "Defect",
+  "description": "Workflow for defect lifecycle management within a project",
+  "initialState": "initial",
+  "active": true,
+  "states": {
+    "initial": {
+      "transitions": [
+        {
+          "name": "create_defect",
+          "description": "Creates a new defect record linked to a project",
+          "manual": true,
+          "next": "open",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "open": {
+      "transitions": [
+        {
+          "name": "update_defect",
+          "description": "Updates defect details such as title, description, severity, or status",
+          "manual": true,
+          "next": "open",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        },
+        {
+          "name": "close_defect",
+          "description": "Marks the defect as closed/resolved",
+          "manual": true,
+          "next": "closed",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        },
+        {
+          "name": "delete_defect",
+          "description": "Removes the defect record",
+          "manual": true,
+          "next": "deleted",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "closed": {
+      "transitions": [
+        {
+          "name": "reopen_defect",
+          "description": "Reopens a previously closed defect",
+          "manual": true,
+          "next": "open",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        },
+        {
+          "name": "delete_defect",
+          "description": "Removes the defect record",
+          "manual": true,
+          "next": "deleted",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "deleted": {
+      "transitions": []
+    }
+  }
+}
