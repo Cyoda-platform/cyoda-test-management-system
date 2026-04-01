@@ -46,8 +46,8 @@ public class TestRunRepository {
     public TestRunDTO update(UUID id, TestRunDTO testRun) {
         return testRuns.computeIfPresent(id, (k, existing) -> {
             // Merge: update only non-null fields
-            if (testRun.getTitle() != null) {
-                existing.setTitle(testRun.getTitle());
+            if (testRun.getName() != null) {
+                existing.setName(testRun.getName());
             }
             if (testRun.getEnvironment() != null) {
                 existing.setEnvironment(testRun.getEnvironment());

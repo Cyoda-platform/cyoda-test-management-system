@@ -1,16 +1,17 @@
 {
-  "id": "tr-001",
-  "projectId": "ecommerce-v2",
-  "title": "Regression Test Run - Build 2.5.1",
+  "id": "00000000-0000-0000-0000-000000000001",
+  "projectId": "00000000-0000-0000-0000-000000000002",
+  "name": "Sample Regression Run",
   "environment": "staging",
-  "status": "Completed",
-  "startedAt": "2024-02-20T08:00:00Z",
-  "finishedAt": "2024-02-20T09:30:00Z",
-  "metrics": {
-    "total": 45,
-    "passed": 42,
-    "failed": 2,
-    "skipped": 1
-  }
+  "buildVersion": "v1.0.0",
+  "description": "Sample test run for entity model registration",
+  "status": "initial",
+  "passed": 0,
+  "failed": 0,
+  "skipped": 0,
+  "untested": 0,
+  "startedAt": null,
+  "completedAt": null,
+  "createdAt": null,
+  "updatedAt": null
 }
-

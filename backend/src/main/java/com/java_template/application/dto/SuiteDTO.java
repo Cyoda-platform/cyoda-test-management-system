@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
@@ -29,7 +28,7 @@ public class SuiteDTO implements CyodaEntity {
 
     private UUID id;
 
-    @NotNull(message = "Project ID is required")
+    // projectId is always set from the URL path parameter — never sent in the request body
     private UUID projectId;
 
     @NotBlank(message = "Suite name is required")

@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
@@ -28,10 +27,8 @@ public class TestRunStepDTO implements CyodaEntity {
 
     private UUID id;
 
-    @NotNull(message = "Test run case ID is required")
+    // testRunCaseId and testStepId are always set from path parameters — never sent in the request body
     private UUID testRunCaseId;
-
-    @NotNull(message = "Test step ID is required")
     private UUID testStepId;
 
     private String status;
