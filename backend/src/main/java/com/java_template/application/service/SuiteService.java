@@ -1,15 +1,10 @@
 package com.java_template.application.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.SuiteDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
-import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -26,11 +21,9 @@ public class SuiteService {
             new ModelSpec().withName(SuiteDTO.ENTITY_NAME).withVersion(SuiteDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
-    private final ObjectMapper objectMapper;
 
-    public SuiteService(EntityService entityService, ObjectMapper objectMapper) {
+    public SuiteService(EntityService entityService) {
         this.entityService = entityService;
-        this.objectMapper = objectMapper;
     }
 
     private SuiteDTO withId(EntityWithMetadata<SuiteDTO> result) {
@@ -43,16 +36,6 @@ public class SuiteService {
         return PageResult.of(result.searchId(),
                 result.data().stream().map(this::withId).toList(),
                 result.pageNumber(), result.pageSize(), result.totalElements());
-    }
-
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
     }
 
     /**
@@ -78,10 +61,15 @@ public class SuiteService {
      * Retrieves all suites for a specific project
      */
     public PageResult<SuiteDTO> getSuitesByProjectId(UUID projectId, int page, int size) {
-        SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
-                .pageNumber(page).pageSize(size).build();
-        return toPage(entityService.search(MODEL_SPEC, conditionByField("projectId", projectId.toString()),
-                SuiteDTO.class, params));
+        List<SuiteDTO> all = entityService.findAll(MODEL_SPEC, SuiteDTO.class)
+                .data().stream()
+                .map(this::withId)
+                .filter(s -> projectId.equals(s.getProjectId()))
+                .toList();
+        int from = page * size;
+        int to = Math.min(from + size, all.size());
+        List<SuiteDTO> pageData = from < all.size() ? all.subList(from, to) : List.of();
+        return PageResult.of(null, pageData, page, size, (long) all.size());
     }
 
     /**
