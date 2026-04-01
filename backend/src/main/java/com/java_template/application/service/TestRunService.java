@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestRunDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
-import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.cyoda.cloud.api.event.common.condition.GroupCondition;
@@ -72,10 +71,18 @@ public class TestRunService {
     }
 
     public PageResult<TestRunDTO> getTestRunsByProjectId(UUID projectId, int page, int size) {
-        SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
-                .pageNumber(page).pageSize(size).build();
-        return toPage(entityService.search(MODEL_SPEC, conditionByField("projectId", projectId.toString()),
-                TestRunDTO.class, params));
+        // Filter in-memory: the Cyoda entity model for TestRun was registered before
+        // projectId was added, so $.projectId is not a valid search path in the schema.
+        // findAll + client-side filter is safe given the expected number of runs per project.
+        List<TestRunDTO> all = entityService.findAll(MODEL_SPEC, TestRunDTO.class)
+                .data().stream()
+                .map(this::withId)
+                .filter(r -> projectId.equals(r.getProjectId()))
+                .toList();
+        int from = page * size;
+        int to = Math.min(from + size, all.size());
+        List<TestRunDTO> pageData = from < all.size() ? all.subList(from, to) : List.of();
+        return PageResult.of(null, pageData, page, size, (long) all.size());
     }
 
     public List<TestRunDTO> getTestRunsByStatus(String status) {

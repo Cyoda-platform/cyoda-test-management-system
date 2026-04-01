@@ -14,11 +14,6 @@ export interface MockReport {
   date: string;
 }
 
-const initialReports: MockReport[] = [
-  { id: 'REP-01', name: 'Weekly Regression - Week 12', type: 'Regression', createdBy: 'admin', date: '2026-03-20' },
-  { id: 'REP-02', name: 'Sprint 11 Summary', type: 'Sprint', createdBy: 'qa_lead', date: '2026-03-14' },
-  { id: 'REP-03', name: 'Security Audit Report', type: 'Custom', createdBy: 'admin', date: '2026-03-05' },
-];
 
 const typeBadge: Record<string, string> = {
   Summary: 'text-success',
@@ -38,15 +33,12 @@ const Reports = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // If saved data is empty array, return initial reports instead
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error('Failed to parse reports from localStorage:', e);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {
+        // ignore parse errors
       }
     }
-    return initialReports;
+    return [];
   });
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MockReport | null>(null);
@@ -57,10 +49,7 @@ const Reports = () => {
     if (deleteTarget) {
       setReports((prev) => {
         const filtered = prev.filter((r) => r.id !== deleteTarget.id);
-        // Save to localStorage - merge with initial reports if needed
-        const reportsKey = `reports-${projectId}`;
-        const toSave = filtered.length > 0 ? filtered : initialReports;
-        localStorage.setItem(reportsKey, JSON.stringify(toSave));
+        localStorage.setItem(`reports-${projectId}`, JSON.stringify(filtered));
         return filtered;
       });
       setDeleteOpen(false);

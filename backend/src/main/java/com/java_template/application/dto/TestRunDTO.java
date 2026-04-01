@@ -1,7 +1,6 @@
 package com.java_template.application.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.java_template.common.workflow.CyodaEntity;
 import com.java_template.common.workflow.OperationSpecification;
 import lombok.AllArgsConstructor;
@@ -10,7 +9,6 @@ import lombok.NoArgsConstructor;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
@@ -30,13 +28,12 @@ public class TestRunDTO implements CyodaEntity {
 
     private UUID id;
 
-    @NotNull(message = "Project ID is required")
+    // projectId is always set from the URL path parameter — never sent in the request body
     private UUID projectId;
 
-    @JsonProperty("name")
     @NotBlank(message = "Test run name is required")
     @Size(max = 255, message = "Name must not exceed 255 characters")
-    private String title;
+    private String name;
 
     @Size(max = 100, message = "Environment must not exceed 100 characters")
     private String environment;

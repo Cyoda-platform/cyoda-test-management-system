@@ -14,31 +14,19 @@
           "next": "active",
           "criterion": {
             "type": "group",
-            "operator": "AND",
+            "operator": "OR",
             "conditions": [
               {
-                "type": "group",
-                "operator": "OR",
-                "conditions": [
-                  {
-                    "type": "simple",
-                    "jsonPath": "$.user.role",
-                    "operation": "EQUALS",
-                    "value": "Tester"
-                  },
-                  {
-                    "type": "simple",
-                    "jsonPath": "$.user.role",
-                    "operation": "EQUALS",
-                    "value": "Admin"
-                  }
-                ]
+                "type": "simple",
+                "jsonPath": "$.user.role",
+                "operation": "EQUALS",
+                "value": "Tester"
               },
               {
                 "type": "simple",
-                "jsonPath": "$.project.projectId",
+                "jsonPath": "$.user.role",
                 "operation": "EQUALS",
-                "value": ""
+                "value": "Admin"
               }
             ]
           },

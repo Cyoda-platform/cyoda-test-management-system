@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.DefectDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
-import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.cyoda.cloud.api.event.common.condition.GroupCondition;
@@ -72,11 +71,17 @@ public class DefectService {
     }
 
     public PageResult<DefectDTO> getDefectsByProjectId(UUID projectId, int page, int size) {
-        SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
-                .pageNumber(page).pageSize(size).build();
-        return toPage(entityService.search(MODEL_SPEC,
-                conditionByField("projectId", projectId.toString()),
-                DefectDTO.class, params));
+        // Filter in-memory: the Cyoda entity model for Defect was registered before
+        // projectId was added, so $.projectId is not a valid search path in the schema.
+        List<DefectDTO> all = entityService.findAll(MODEL_SPEC, DefectDTO.class)
+                .data().stream()
+                .map(this::withId)
+                .filter(d -> projectId.equals(d.getProjectId()))
+                .toList();
+        int from = page * size;
+        int to = Math.min(from + size, all.size());
+        List<DefectDTO> pageData = from < all.size() ? all.subList(from, to) : List.of();
+        return PageResult.of(null, pageData, page, size, (long) all.size());
     }
 
     public List<DefectDTO> getDefectsByStatus(UUID projectId, String status) {
