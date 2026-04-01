@@ -7,8 +7,10 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockDefects, mockProjects, type Defect } from '@/data/mockData';
 import { toast } from 'sonner';
+import { useProject, useDefects, useCreateDefect, useUpdateDefect, useDeleteDefect } from '@/hooks/useApi';
+import type { Defect } from '@/lib/api';
+import { Loader2 } from 'lucide-react';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -40,11 +42,15 @@ const statusBadge: Record<string, string> = {
 };
 
 const Defects = () => {
-  const { projectId } = useParams();
-  const project = mockProjects.find((p) => p.id === projectId);
-  const [defects, setDefects] = useState<Defect[]>(
-    mockDefects.filter((d) => d.projectId === projectId)
-  );
+  const { projectId } = useParams<{ projectId: string }>();
+
+  // Live data
+  const { data: project } = useProject(projectId!);
+  const { data: defects = [], isLoading, isError, error } = useDefects(projectId!);
+  const createDefect  = useCreateDefect();
+  const updateDefect  = useUpdateDefect();
+  const deleteDefect  = useDeleteDefect();
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -67,28 +73,25 @@ const Defects = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  // Handle severity change
+  // Inline severity / status quick-update
   const handleSeverityChange = (defectId: string, newSeverity: string) => {
-    setDefects((prev) =>
-      prev.map((d) =>
-        d.id === defectId
-          ? { ...d, severity: newSeverity as 'Critical' | 'Major' | 'Minor' }
-          : d
-      )
+    updateDefect.mutate(
+      { projectId: projectId!, id: defectId, body: { severity: newSeverity as Defect['severity'] } },
+      {
+        onSuccess: () => toast.success(`Severity updated to ${newSeverity}`),
+        onError:   (e) => toast.error(e.message),
+      }
     );
-    toast.success(`Severity updated to ${newSeverity}`);
   };
 
-  // Handle status change
   const handleStatusChange = (defectId: string, newStatus: string) => {
-    setDefects((prev) =>
-      prev.map((d) =>
-        d.id === defectId
-          ? { ...d, status: newStatus as 'Open' | 'In Progress' | 'Fixed' | 'Closed' }
-          : d
-      )
+    updateDefect.mutate(
+      { projectId: projectId!, id: defectId, body: { status: newStatus as Defect['status'] } },
+      {
+        onSuccess: () => toast.success(`Status updated to ${newStatus}`),
+        onError:   (e) => toast.error(e.message),
+      }
     );
-    toast.success(`Status updated to ${newStatus}`);
   };
 
   // View modal
@@ -128,33 +131,27 @@ const Defects = () => {
       toast.error('Title is required');
       return;
     }
-
-    // Generate next sequential ID
-    let maxNum = 0;
-    defects.forEach((d) => {
-      const match = d.id.match(/DEF-(\d+)/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
+    createDefect.mutate(
+      {
+        projectId: projectId!,
+        body: {
+          title:       formTitle,
+          description: formDesc,
+          severity:    formSeverity,
+          link:        formLink,
+          status:      formStatus,
+          source:      formSource,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success('Defect created');
+          resetForm();
+          setCreateOpen(false);
+        },
+        onError: (e) => toast.error(e.message),
       }
-    });
-    const newId = `DEF-${(maxNum + 1).toString().padStart(3, '0')}`;
-
-    const newDefect: Defect = {
-      id: newId,
-      projectId: projectId || '',
-      title: formTitle,
-      description: formDesc,
-      severity: formSeverity,
-      link: formLink,
-      status: formStatus,
-      source: formSource,
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setDefects((prev) => [newDefect, ...prev]);
-    toast.success('Defect created');
-    resetForm();
-    setCreateOpen(false);
+    );
   };
 
   const openEdit = (d: Defect) => {
@@ -164,18 +161,43 @@ const Defects = () => {
 
   const handleEdit = () => {
     if (!editTarget) return;
-    setDefects((prev) => prev.map((d) => (d.id === editTarget.id ? editTarget : d)));
-    toast.success('Defect updated');
-    setEditOpen(false);
-    setEditTarget(null);
+    updateDefect.mutate(
+      {
+        projectId: projectId!,
+        id: editTarget.id,
+        body: {
+          title:       editTarget.title,
+          description: editTarget.description,
+          severity:    editTarget.severity,
+          status:      editTarget.status,
+          source:      editTarget.source,
+          link:        editTarget.link,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success('Defect updated');
+          setEditOpen(false);
+          setEditTarget(null);
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
   };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    setDefects((prev) => prev.filter((d) => d.id !== deleteTarget));
-    toast.success('Defect deleted');
-    setDeleteOpen(false);
-    setDeleteTarget(null);
+    deleteDefect.mutate(
+      { projectId: projectId!, id: deleteTarget },
+      {
+        onSuccess: () => {
+          toast.success('Defect deleted');
+          setDeleteOpen(false);
+          setDeleteTarget(null);
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
   };
 
   return (
@@ -233,7 +255,24 @@ const Defects = () => {
             </Select>
           </div>
 
+          {/* Loading */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading defects…</span>
+            </div>
+          )}
+
+          {/* Error */}
+          {isError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 text-destructive px-5 py-4 text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+              {(error as Error)?.message ?? 'Failed to load defects.'}
+            </div>
+          )}
+
           {/* Table */}
+          {!isLoading && !isError && (
           <div className="bg-card rounded-lg shadow-soft overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -326,6 +365,7 @@ const Defects = () => {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </div>
 
@@ -519,21 +559,7 @@ const Defects = () => {
               )}
               <div>
                 <label className={labelCls}>Attachments</label>
-                {viewTarget.files && viewTarget.files.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 mt-1.5">
-                    {viewTarget.files.map((file, i) => {
-                      const IconComp = getFileIcon(file.type);
-                      return (
-                        <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-input rounded-md hover:border-primary/40 transition-colors">
-                          <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                          <span className="text-sm text-foreground">{file.name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground mt-1.5">No attachments</p>
-                )}
+                <p className="text-sm text-muted-foreground mt-1.5">Attachments are managed on the Attachments page.</p>
               </div>
             </div>
           )}

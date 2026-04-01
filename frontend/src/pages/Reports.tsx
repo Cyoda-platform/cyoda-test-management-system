@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Eye, Download, Trash2, AlertTriangle, FileText, Table2 } from 'lucide-react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { mockProjects } from '@/data/mockData';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { useProject } from '@/hooks/useApi';
 
 export interface MockReport {
   id: string;
@@ -28,9 +28,9 @@ const typeBadge: Record<string, string> = {
 };
 
 const Reports = () => {
-  const { projectId } = useParams();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const project = mockProjects.find((p) => p.id === projectId);
+  const { data: project } = useProject(projectId!);
 
   const [reports, setReports] = useState<MockReport[]>(() => {
     const reportsKey = `reports-${projectId}`;

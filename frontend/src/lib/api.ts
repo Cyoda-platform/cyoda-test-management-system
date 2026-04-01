@@ -32,7 +32,6 @@ export function getAuthToken(): string | null {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const method = options.method || 'GET';
-  console.log(`[API] ${method} ${url}`);
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -51,11 +50,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers,
   });
 
-  console.log(`[API] ${method} ${url} → ${res.status}`);
-
   if (res.status === 401) {
     // Session expired or no token
-    console.warn('[API] 401 Unauthorized received');
     setAuthToken(null);
     // Don't redirect here - let the caller handle it (AuthContext or ProtectedRoute)
     throw new Error('Unauthorized');

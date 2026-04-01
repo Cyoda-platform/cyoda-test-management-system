@@ -1,22 +1,45 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
-import { mockProjects, mockSuites, mockTestRuns, type TestRun, type Suite } from '@/data/mockData';
+import { useQueries } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useProject, useSuites, useCreateTestRun, keys } from '@/hooks/useApi';
+import { testCasesApi } from '@/lib/api';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
 const CreateTestRun = () => {
-  const { projectId } = useParams();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const project = mockProjects.find((p) => p.id === projectId);
-  const suites = mockSuites.filter((s) => s.projectId === projectId);
+
+  // Live data
+  const { data: project } = useProject(projectId!);
+  const { data: suites = [], isLoading: suitesLoading } = useSuites(projectId!);
+  const createTestRun = useCreateTestRun();
+
+  // Fetch cases for every suite in parallel
+  const casesQueries = useQueries({
+    queries: suites.map((suite) => ({
+      queryKey: keys.cases.all(projectId!, suite.id),
+      queryFn:  () => testCasesApi.list(projectId!, suite.id),
+      enabled:  !!projectId && suites.length > 0,
+      select:   (res: { data: Array<{ id: string; title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; suiteId: string; projectId: string; description: string; preconditions: string; deleted: boolean }> }) => res.data,
+    })),
+  });
+
+  // Combine into suitesWithCases
+  const suitesWithCases = suites.map((suite, i) => ({
+    ...suite,
+    cases: casesQueries[i]?.data ?? [],
+  }));
+
+  const casesLoading = casesQueries.some((q) => q.isLoading);
 
   const [runName, setRunName] = useState('');
   const [environment, setEnvironment] = useState('Staging');
@@ -66,23 +89,29 @@ const CreateTestRun = () => {
       return;
     }
 
-    const newRun: TestRun = {
-      id: `TR-${String(Math.floor(Math.random() * 1000)).padStart(2, '0')}`,
-      projectId: projectId || '',
-      name: runName,
-      environment,
-      buildVersion,
-      status: 'initial',
-      passed: 0,
-      failed: 0,
-      skipped: 0,
-      untested: selectedCases.size,
-      createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      description,
-    };
-
-    toast.success(`Test run "${runName}" created with ${selectedCases.size} cases`);
-    navigate(`/projects/${projectId}/runs`);
+    createTestRun.mutate(
+      {
+        projectId: projectId!,
+        body: {
+          name: runName,
+          environment,
+          buildVersion,
+          description,
+          status: 'initial',
+          passed: 0,
+          failed: 0,
+          skipped: 0,
+          untested: selectedCases.size,
+        },
+      },
+      {
+        onSuccess: (newRun) => {
+          toast.success(`Test run "${runName}" created with ${selectedCases.size} cases`);
+          navigate(`/projects/${projectId}/runs/${newRun.id}`);
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
   };
 
   return (
@@ -170,7 +199,13 @@ const CreateTestRun = () => {
                 Select Test Cases <span className="text-muted-foreground/60">({selectedCases.size} selected)</span>
               </label>
               <div className="border border-border rounded-lg bg-card divide-y divide-border/40 max-h-[400px] overflow-y-auto">
-                {suites.map((suite) => {
+                {(suitesLoading || casesLoading) && (
+                  <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">Loading test cases…</span>
+                  </div>
+                )}
+                {!suitesLoading && suitesWithCases.map((suite) => {
                   const filteredCases = suite.cases.filter((c) => priorityFilter.has(c.priority));
                   const isExpanded = expandedSuites.has(suite.id);
                   const selectedInSuite = filteredCases.filter((c) => selectedCases.has(c.id)).length;
@@ -230,10 +265,12 @@ const CreateTestRun = () => {
         <Button
           size="sm"
           className="bg-primary text-primary-foreground hover:bg-primary/90 border-0 px-6"
-          disabled={!runName.trim() || selectedCases.size === 0}
+          disabled={!runName.trim() || selectedCases.size === 0 || createTestRun.isPending}
           onClick={handleCreate}
         >
-          Create Run ({selectedCases.size} cases)
+          {createTestRun.isPending
+            ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Creating…</>
+            : `Create Run (${selectedCases.size} cases)`}
         </Button>
       </div>
     </div>
