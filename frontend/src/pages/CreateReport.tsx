@@ -8,8 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PieChart, BarChart3, Bug, Server } from 'lucide-react';
-import { mockProjects, mockTestRuns } from '@/data/mockData';
 import { toast } from 'sonner';
+import { useProject, useTestRuns } from '@/hooks/useApi';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -21,10 +21,10 @@ const sectionOptions = [
 ] as const;
 
 const CreateReport = () => {
-  const { projectId } = useParams();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const project = mockProjects.find((p) => p.id === projectId);
-  const runs = mockTestRuns.filter((r) => r.projectId === projectId);
+  const { data: project } = useProject(projectId!);
+  const { data: runs = [] } = useTestRuns(projectId!);
 
   const [reportName, setReportName] = useState('');
   const [reportType, setReportType] = useState<string>('Summary');

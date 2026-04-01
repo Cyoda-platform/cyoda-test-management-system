@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Download, FileText, Table2, ExternalLink, Trash2, AlertTriangle, Eye, Pencil } from 'lucide-react';
-import { mockProjects, mockTestRuns, mockDefects, type ReportSections, type Defect } from '@/data/mockData';
+import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect } from '@/hooks/useApi';
+import type { Defect } from '@/lib/api';
+import { useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useState } from 'react';
@@ -13,14 +15,26 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
 } from 'recharts';
 
+interface ReportSections {
+  executiveSummary: boolean;
+  suiteAnalytics: boolean;
+  defectTable: boolean;
+  environmentInfo: boolean;
+}
+
 interface ReportMeta {
+  id: string;
   name: string;
   type: string;
   createdBy: string;
   date: string;
-  summary: string;
+  summary?: string;
   sections: ReportSections;
-  linkedRuns: string[];
+  linkedRuns?: string[];    // hardcoded fallback format
+  selectedRuns?: string[];  // saved by CreateReport
+  description?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 const reportData: Record<string, ReportMeta> = {
@@ -84,14 +98,34 @@ const DEFECT_STATUSES = ['Open', 'In Progress', 'Fixed', 'Closed'] as const;
 const DEFECT_SEVERITIES = ['Critical', 'Major', 'Minor'] as const;
 
 const ReportDetail = () => {
-  const { projectId, reportId } = useParams();
+  const { projectId, reportId } = useParams<{ projectId: string; reportId: string }>();
   const navigate = useNavigate();
-  const project = mockProjects.find((p) => p.id === projectId);
-  const report = reportData[reportId || ''];
+
+  // Live data
+  const { data: project } = useProject(projectId!);
+  const { data: allRuns  = [] } = useTestRuns(projectId!);
+  const { data: defects  = [] } = useDefects(projectId!);
+
+  const updateDefect = useUpdateDefect();
+  const deleteDefect = useDeleteDefect();
+
+  // Load report config: try localStorage first, fall back to hardcoded reportData
+  const report = useMemo<ReportMeta | null>(() => {
+    const key = `reports-${projectId}`;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved) as ReportMeta[];
+        const found = parsed.find((r) => r.id === reportId);
+        if (found) return found;
+      }
+    } catch {}
+    // fallback to hardcoded data for the pre-seeded sample reports
+    const fallback = (reportData as Record<string, Omit<ReportMeta, 'id'>>)[reportId ?? ''];
+    return fallback ? ({ ...fallback, id: reportId! }) : null;
+  }, [projectId, reportId]);
+
   const [downloadOpen, setDownloadOpen] = useState(false);
-  const [defects, setDefects] = useState<Defect[]>(
-    mockDefects.filter(d => d.projectId === projectId).map(d => ({ ...d }))
-  );
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [viewTarget, setViewTarget] = useState<Defect | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
@@ -106,28 +140,34 @@ const ReportDetail = () => {
     );
   }
 
-  const linkedRuns = mockTestRuns.filter((r) => report.linkedRuns.includes(r.id));
-  const totalPassed = linkedRuns.reduce((s, r) => s + r.passed, 0);
-  const totalFailed = linkedRuns.reduce((s, r) => s + r.failed, 0);
-  const totalSkipped = linkedRuns.reduce((s, r) => s + r.skipped, 0);
+  // Linked runs — support both field names written by CreateReport vs hardcoded reportData
+  const linkedRunIds: string[] = report.selectedRuns ?? report.linkedRuns ?? [];
+  const linkedRuns = linkedRunIds.length > 0
+    ? allRuns.filter((r) => linkedRunIds.includes(r.id))
+    : allRuns;
+
+  const totalPassed   = linkedRuns.reduce((s, r) => s + r.passed,   0);
+  const totalFailed   = linkedRuns.reduce((s, r) => s + r.failed,   0);
+  const totalSkipped  = linkedRuns.reduce((s, r) => s + r.skipped,  0);
   const totalUntested = linkedRuns.reduce((s, r) => s + r.untested, 0);
   const totalExecuted = totalPassed + totalFailed + totalSkipped;
-  const totalCases = totalPassed + totalFailed + totalSkipped + totalUntested;
-  const passRate = totalExecuted > 0 ? ((totalPassed / totalExecuted) * 100).toFixed(1) : '0.0';
+  const totalCases    = totalPassed + totalFailed + totalSkipped + totalUntested;
+  const passRate      = totalExecuted > 0 ? ((totalPassed / totalExecuted) * 100).toFixed(1) : '0.0';
   const executionProgress = totalCases > 0 ? (((totalCases - totalUntested) / totalCases) * 100) : 0;
-  const remainingScope = totalCases > 0 ? ((totalUntested / totalCases) * 100) : 0;
-  const totalDefects = defects.length;
+  const remainingScope    = totalCases > 0 ? ((totalUntested / totalCases) * 100) : 0;
+  const totalDefects      = defects.length;
 
   const pieData = [
-    { name: 'Passed', value: totalPassed, color: COLORS.passed },
-    { name: 'Failed', value: totalFailed, color: COLORS.failed },
-    { name: 'Skipped', value: totalSkipped, color: COLORS.skipped },
+    { name: 'Passed',   value: totalPassed,   color: COLORS.passed   },
+    { name: 'Failed',   value: totalFailed,   color: COLORS.failed   },
+    { name: 'Skipped',  value: totalSkipped,  color: COLORS.skipped  },
     { name: 'Untested', value: totalUntested, color: COLORS.untested },
   ].filter((d) => d.value > 0);
 
+  // Suite breakdown — placeholder; real data would require suite-level run stats from the API
   const suiteData = [
-    { suite: 'Authorization', passed: 18, failed: 1, skipped: 1, untested: 2 },
-    { suite: 'Dashboard', passed: 14, failed: 1, skipped: 0, untested: 3 },
+    { suite: 'Authorization',  passed: 18, failed: 1, skipped: 1, untested: 2 },
+    { suite: 'Dashboard',      passed: 14, failed: 1, skipped: 0, untested: 3 },
     { suite: 'API Integration', passed: 20, failed: 1, skipped: 1, untested: 5 },
   ];
 
@@ -143,17 +183,19 @@ const ReportDetail = () => {
   };
 
   const handleStatusChange = (defectId: string, newStatus: string) => {
-    setDefects((prev) => prev.map((d) => d.id === defectId ? { ...d, status: newStatus as Defect['status'] } : d));
+    updateDefect.mutate({ projectId: projectId!, id: defectId, body: { status: newStatus as Defect['status'] } });
   };
 
   const handleSeverityChange = (defectId: string, newSeverity: string) => {
-    setDefects((prev) => prev.map((d) => d.id === defectId ? { ...d, severity: newSeverity as Defect['severity'] } : d));
+    updateDefect.mutate({ projectId: projectId!, id: defectId, body: { severity: newSeverity as Defect['severity'] } });
   };
 
   const handleDeleteDefect = () => {
     if (deleteTarget) {
-      setDefects((prev) => prev.filter((d) => d.id !== deleteTarget));
-      setDeleteTarget(null);
+      deleteDefect.mutate(
+        { projectId: projectId!, id: deleteTarget },
+        { onSuccess: () => setDeleteTarget(null), onError: () => setDeleteTarget(null) }
+      );
     }
   };
 
@@ -164,8 +206,21 @@ const ReportDetail = () => {
 
   const handleEdit = () => {
     if (editTarget) {
-      setDefects((prev) => prev.map((d) => d.id === editTarget.id ? editTarget : d));
-      setEditOpen(false);
+      updateDefect.mutate(
+        {
+          projectId: projectId!,
+          id: editTarget.id,
+          body: {
+            title:       editTarget.title,
+            description: editTarget.description,
+            severity:    editTarget.severity,
+            status:      editTarget.status,
+            source:      editTarget.source,
+            link:        editTarget.link,
+          },
+        },
+        { onSuccess: () => setEditOpen(false) }
+      );
     }
   };
 

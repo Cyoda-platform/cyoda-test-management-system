@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Breadcrumbs from '@/components/Breadcrumbs';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, ExternalLink, Trash2, Lock, Search, AlertTriangle, Pencil } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Plus, ExternalLink, Trash2, Lock, Search, AlertTriangle, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { mockTestRuns, mockProjects, type TestRun } from '@/data/mockData';
+import { toast } from 'sonner';
+import { useProject, useTestRuns, useUpdateTestRun, useDeleteTestRun } from '@/hooks/useApi';
+import type { TestRun } from '@/lib/api';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const cls = status === 'initial' ? 'badge-status-initial' : status === 'active' ? 'badge-status-active' : 'badge-status-completed';
@@ -33,26 +35,19 @@ const ProgressBar = ({ passed, failed, untested }: { passed: number; failed: num
 };
 
 const TestRuns = () => {
-  const { projectId } = useParams();
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
-  const project = mockProjects.find((p) => p.id === projectId);
-  const [runs, setRuns] = useState<TestRun[]>(mockTestRuns.filter((r) => r.projectId === projectId));
+
+  // Live data from API
+  const { data: project } = useProject(projectId!);
+  const { data: runs = [], isLoading, isError, error } = useTestRuns(projectId!);
+
+  const updateTestRun = useUpdateTestRun();
+  const deleteTestRun = useDeleteTestRun();
+
   const [statusFilter, setStatusFilter] = useState('all');
   const [envFilter, setEnvFilter] = useState('all');
   const [search, setSearch] = useState('');
-
-  // Handle new test run from Repository
-  useEffect(() => {
-    const state = location.state as any;
-    if (state?.newRun) {
-      setRuns((prev) => [state.newRun, ...prev]);
-      // Clear the state so it doesn't re-add on navigation
-      navigate(location.pathname, { replace: true });
-    }
-  }, [location, navigate]);
-
-
 
   // Edit modal
   const [editOpen, setEditOpen] = useState(false);
@@ -77,27 +72,46 @@ const TestRuns = () => {
 
   const handleEdit = () => {
     if (!editTarget) return;
-    setRuns(runs.map((r) => (r.id === editTarget.id ? {
-      ...r,
-      name: editTarget.name,
-      environment: editTarget.environment,
-      buildVersion: editTarget.buildVersion,
-      description: editTarget.description,
-    } : r)));
-    setEditOpen(false);
-    setEditTarget(null);
+    updateTestRun.mutate(
+      {
+        projectId: projectId!,
+        id: editTarget.id,
+        body: {
+          name: editTarget.name,
+          environment: editTarget.environment,
+          buildVersion: editTarget.buildVersion,
+          description: editTarget.description,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success('Test run updated');
+          setEditOpen(false);
+          setEditTarget(null);
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
   };
 
   const openEdit = (run: TestRun) => {
-    setEditTarget(run);
+    setEditTarget({ ...run });
     setEditOpen(true);
   };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    setRuns(runs.filter((r) => r.id !== deleteTarget.id));
-    setDeleteOpen(false);
-    setDeleteTarget(null);
+    deleteTestRun.mutate(
+      { projectId: projectId!, id: deleteTarget.id },
+      {
+        onSuccess: () => {
+          toast.success('Test run deleted');
+          setDeleteOpen(false);
+          setDeleteTarget(null);
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
   };
 
   return (
@@ -153,7 +167,34 @@ const TestRuns = () => {
             </Select>
           </div>
 
+          {/* Loading state */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading test runs…</span>
+            </div>
+          )}
+
+          {/* Error state */}
+          {isError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 text-destructive px-5 py-4 text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+              {(error as Error)?.message ?? 'Failed to load test runs.'}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!isLoading && !isError && filtered.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+              <p className="text-sm">No test runs yet.</p>
+              <Button size="sm" className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0 gap-1.5" onClick={openCreate}>
+                <Plus className="h-3.5 w-3.5" strokeWidth={1.5} /> Create Test Run
+              </Button>
+            </div>
+          )}
+
           {/* Table */}
+          {!isLoading && !isError && filtered.length > 0 && (
           <div className="bg-card rounded-lg shadow-soft overflow-hidden">
             <table className="w-full text-sm">
           <thead>
@@ -206,6 +247,7 @@ const TestRuns = () => {
           </tbody>
         </table>
           </div>
+          )}
         </div>
       </div>
 

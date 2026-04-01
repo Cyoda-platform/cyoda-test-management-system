@@ -1,8 +1,8 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
-import { mockProjects, mockSuites, mockTestRuns } from '@/data/mockData';
-import { Search, Paperclip, Lock, CheckCircle2, XCircle, MinusCircle, AlertCircle, Upload, FileText, Image, File, Bug, Trash2, ExternalLink, Eye, Pencil } from 'lucide-react';
+import { useQueries } from '@tanstack/react-query';
+import { Search, Paperclip, Lock, CheckCircle2, XCircle, MinusCircle, AlertCircle, Upload, FileText, Image, File, Bug, Trash2, ExternalLink, Eye, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -10,6 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import CreateDefectModal from '@/components/CreateDefectModal';
+import {
+  useTestRun,
+  useSuites,
+  useTestSteps,
+  useUpdateTestStep,
+  useCompleteTestRun,
+  useUnlockTestRun,
+  keys,
+} from '@/hooks/useApi';
+import { testCasesApi } from '@/lib/api';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -80,10 +90,33 @@ function getFileIcon(type: string) {
 }
 
 const RunExecution = () => {
-  const { projectId, runId } = useParams();
-  const run = mockTestRuns.find((r) => r.id === runId);
-  const suitesForProject = mockSuites.filter((s) => s.projectId === projectId);
-  const allCases = suitesForProject.flatMap((s) => s.cases);
+  const { projectId, runId } = useParams<{ projectId: string; runId: string }>();
+
+  // Live API data
+  const { data: run, isLoading: runLoading } = useTestRun(projectId!, runId!);
+  const { data: suites = [], isLoading: suitesLoading } = useSuites(projectId!);
+
+  // Fetch cases for every suite in parallel
+  const casesQueries = useQueries({
+    queries: suites.map((suite) => ({
+      queryKey: keys.cases.all(projectId!, suite.id),
+      queryFn:  () => testCasesApi.list(projectId!, suite.id),
+      enabled:  !!projectId && suites.length > 0,
+      select:   (res: { data: Array<{ id: string; displayId?: string; shortId?: string; projectId: string; suiteId: string; title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; deleted: boolean }> }) => res.data,
+    })),
+  });
+
+  const suitesWithCases = suites.map((suite, i) => ({
+    ...suite,
+    cases: casesQueries[i]?.data ?? [],
+  }));
+
+  const allCases = suitesWithCases.flatMap((s) => s.cases);
+
+  // Mutations
+  const updateStep     = useUpdateTestStep();
+  const completeRun    = useCompleteTestRun();
+  const unlockRun      = useUnlockTestRun();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus[]>>({});
   const [stepEvidence, setStepEvidence] = useState<Record<string, EvidenceFile[]>>({});
@@ -99,16 +132,50 @@ const RunExecution = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isReadOnly = run?.status === 'completed';
 
-  const getStepStatuses = (caseId: string, stepsCount: number): StepStatus[] => {
-    return stepStatuses[caseId] || Array(stepsCount).fill('untested');
+  // Active case and its live steps
+  const activeCase = allCases[selectedIdx];
+  const { data: steps = [] } = useTestSteps(
+    projectId!,
+    activeCase?.suiteId ?? '',
+    activeCase?.id ?? '',
+  );
+
+  // Initialise local step-status state from API data when a new case is loaded
+  useEffect(() => {
+    if (steps.length > 0 && activeCase) {
+      setStepStatuses((prev) => {
+        if (prev[activeCase.id]) return prev; // already initialised — keep user changes
+        const initial: StepStatus[] = steps.map((s) => {
+          const v = s.status as StepStatus;
+          return ['passed', 'failed', 'skipped'].includes(v) ? v : 'untested';
+        });
+        return { ...prev, [activeCase.id]: initial };
+      });
+    }
+  }, [steps, activeCase?.id]);
+
+  const getStepStatuses = (caseId: string): StepStatus[] => {
+    return stepStatuses[caseId] || [];
   };
 
   const setStepStatus = (caseId: string, stepIdx: number, status: StepStatus) => {
     if (isReadOnly) return;
-    const current = getStepStatuses(caseId, allCases.find((c) => c.id === caseId)?.steps.length || 0);
+    const current = stepStatuses[caseId] || Array(steps.length).fill('untested');
     const updated = [...current];
     updated[stepIdx] = status;
     setStepStatuses({ ...stepStatuses, [caseId]: updated });
+
+    // Persist to API
+    const stepId = steps[stepIdx]?.id;
+    if (stepId && activeCase) {
+      updateStep.mutate({
+        projectId: projectId!,
+        suiteId:   activeCase.suiteId,
+        caseId,
+        id:        stepId,
+        body:      { status },
+      });
+    }
 
     // Auto-trigger defect modal on 'failed'
     if (status === 'failed') {
@@ -117,8 +184,9 @@ const RunExecution = () => {
     }
   };
 
-  const getCaseStatus = (caseId: string, stepsCount: number): string => {
-    const statuses = getStepStatuses(caseId, stepsCount);
+  const getCaseStatus = (caseId: string): string => {
+    const statuses = stepStatuses[caseId];
+    if (!statuses || statuses.length === 0) return 'untested';
     if (statuses.some((s) => s === 'failed')) return 'failed';
     if (statuses.every((s) => s === 'passed')) return 'passed';
     if (statuses.some((s) => s === 'skipped') && !statuses.some((s) => s === 'untested')) return 'skipped';
@@ -193,7 +261,7 @@ const RunExecution = () => {
   const progressStats = useMemo(() => {
     let passed = 0, failed = 0, skipped = 0, untested = 0;
     allCases.forEach((tc) => {
-      const cStatus = getCaseStatus(tc.id, tc.steps.length);
+      const cStatus = getCaseStatus(tc.id);
       if (cStatus === 'passed') passed++;
       else if (cStatus === 'failed') failed++;
       else if (cStatus === 'skipped') skipped++;
@@ -204,9 +272,29 @@ const RunExecution = () => {
     return { passed, failed, skipped, untested, total, completed };
   }, [stepStatuses, allCases]);
 
-  const activeCase = allCases[selectedIdx];
+  // Loading / empty guard
+  if (runLoading || suitesLoading) {
+    return (
+      <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Loading run…</span>
+      </div>
+    );
+  }
 
-  if (!run || !activeCase) return <div className="p-8 text-muted-foreground">Run not found</div>;
+  if (!run) return <div className="p-8 text-muted-foreground">Run not found</div>;
+
+  // While cases are still loading show a minimal placeholder body
+  if (!activeCase && casesQueries.some((q) => q.isLoading)) {
+    return (
+      <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span className="text-sm">Loading test cases…</span>
+      </div>
+    );
+}
+
+  if (!activeCase) return <div className="p-8 text-muted-foreground">No test cases found for this run.</div>;
 
   const { passed, failed, skipped, untested, total, completed } = progressStats;
 
@@ -217,9 +305,9 @@ const RunExecution = () => {
         <div className="mb-2">
           <Breadcrumbs segments={[
             { label: 'Projects', href: '/projects' },
-            { label: mockProjects.find(p => p.id === projectId)?.name || 'Project', href: `/projects/${projectId}/repository` },
+            { label: run.projectId ? 'Project' : 'Project', href: `/projects/${projectId}/repository` },
             { label: 'Test Runs', href: `/projects/${projectId}/runs` },
-            { label: run?.name || 'Run' },
+            { label: run.name || 'Run' },
           ]} />
         </div>
 
@@ -258,9 +346,41 @@ const RunExecution = () => {
             </div>
           </div>
 
-          {isReadOnly && (
-            <Button variant="ghost" size="sm" className="gap-1.5 ml-auto">
-              <Lock className="h-3.5 w-3.5" strokeWidth={1.5} /> Unlock Run
+          {isReadOnly ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 ml-auto"
+              disabled={unlockRun.isPending}
+              onClick={() =>
+                unlockRun.mutate(
+                  { projectId: projectId!, id: runId! },
+                  {
+                    onSuccess: () => toast.success('Run unlocked'),
+                    onError:   (e) => toast.error(e.message),
+                  }
+                )
+              }
+            >
+              <Lock className="h-3.5 w-3.5" strokeWidth={1.5} />
+              {unlockRun.isPending ? 'Unlocking…' : 'Unlock Run'}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="gap-1.5 ml-auto bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0"
+              disabled={completeRun.isPending}
+              onClick={() =>
+                completeRun.mutate(
+                  { projectId: projectId!, id: runId! },
+                  {
+                    onSuccess: () => toast.success('Run completed'),
+                    onError:   (e) => toast.error(e.message),
+                  }
+                )
+              }
+            >
+              {completeRun.isPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Completing…</> : 'Complete Run'}
             </Button>
           )}
         </div>
@@ -276,14 +396,14 @@ const RunExecution = () => {
             </div>
           </div>
           <div className="px-1.5 pb-2">
-            {suitesForProject.map((suite) => (
+            {suitesWithCases.map((suite) => (
               <div key={suite.id} className="mb-1">
                 <div className="px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted/40 rounded-md mb-0.5">
                   {suite.name}
                 </div>
                 {suite.cases.map((tc) => {
                   const globalIdx = allCases.findIndex((c) => c.id === tc.id);
-                  const cStatus = getCaseStatus(tc.id, tc.steps.length);
+                  const cStatus = getCaseStatus(tc.id);
                   return (
                     <button
                       key={tc.id}
@@ -391,7 +511,7 @@ const RunExecution = () => {
             );
           })()}
 
-          {activeCase.steps.length > 0 ? (
+          {steps.length > 0 ? (
             <div className="bg-card rounded-lg shadow-soft overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -404,12 +524,12 @@ const RunExecution = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeCase.steps.map((step, sIdx) => {
-                    const currentStatus = getStepStatuses(activeCase.id, activeCase.steps.length)[sIdx];
+                  {steps.map((step, sIdx) => {
+                    const currentStatus = (stepStatuses[activeCase.id] || [])[sIdx] ?? 'untested';
                     const evidenceFiles = getEvidenceFiles(activeCase.id, sIdx);
                     return (
                       <tr key={sIdx} className="ghost-border border-t">
-                        <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{step.order}</td>
+                        <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{step.stepNumber}</td>
                         <td className="px-4 py-3 text-foreground">{step.action}</td>
                         <td className="px-4 py-3 text-foreground">{step.expectedResult}</td>
                         <td className="px-4 py-3">
