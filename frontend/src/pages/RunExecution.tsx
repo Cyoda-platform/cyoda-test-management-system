@@ -19,7 +19,7 @@ import {
   useUnlockTestRun,
   keys,
 } from '@/hooks/useApi';
-import { testCasesApi } from '@/lib/api';
+import { testCasesApi, defectsApi, attachmentsApi } from '@/lib/api';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -27,6 +27,7 @@ interface EvidenceFile {
   name: string;
   size: number;
   type: string;
+  file: File;
 }
 
 interface CreatedDefect {
@@ -39,7 +40,7 @@ interface CreatedDefect {
   severity: 'Critical' | 'Major' | 'Minor';
   status: 'Open' | 'In Progress' | 'Fixed' | 'Closed';
   link: string;
-  files: EvidenceFile[];
+  files: File[];
   createdAt: string;
 }
 
@@ -223,39 +224,70 @@ const RunExecution = () => {
     setDefectModalOpen(true);
   };
 
-  const handleFileUpload = (files: FileList | null) => {
+  const handleFileUpload = async (files: FileList | null) => {
     if (!files || !evidenceTarget) return;
     const key = getEvidenceKey(evidenceTarget.caseId, evidenceTarget.stepIdx);
-    const newFiles: EvidenceFile[] = Array.from(files).map((f) => ({
+    const fileArray = Array.from(files);
+    const newFiles: EvidenceFile[] = fileArray.map((f) => ({
       name: f.name,
       size: f.size,
       type: f.type,
+      file: f,
     }));
     setStepEvidence((prev) => ({
       ...prev,
       [key]: [...(prev[key] || []), ...newFiles],
     }));
-    toast.success(`${newFiles.length} file(s) uploaded`);
+    try {
+      await Promise.all(
+        fileArray.map((f) => attachmentsApi.upload(projectId!, f, evidenceTarget.caseId))
+      );
+      toast.success(`${fileArray.length} file(s) uploaded`);
+    } catch {
+      toast.error('Upload failed — files saved locally but not persisted');
+    }
   };
 
-  const handleCreateDefect = (defect: any) => {
+  const handleCreateDefect = async (defect: any) => {
     if (!defectContext) return;
-    const newDefect: CreatedDefect = {
-      id: `DEF-${1000 + createdDefects.length}`,
-      caseId: defect.caseId,
-      caseTitle: activeCase.title,
-      stepIdx: defect.stepIdx,
-      title: defect.title,
-      description: defect.description,
-      severity: defect.severity,
-      status: defect.status,
-      link: defect.link,
-      files: defect.files,
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setCreatedDefects([...createdDefects, newDefect]);
-    setDefectModalOpen(false);
-    toast.success('Defect created');
+    try {
+      const created = await defectsApi.create(projectId!, {
+        title: defect.title,
+        description: defect.description,
+        severity: defect.severity,
+        status: defect.status,
+        source: defect.source,
+        link: defect.link,
+      });
+
+      // Upload any attached files, linked to the test case
+      if (defect.files && (defect.files as File[]).length > 0) {
+        await Promise.all(
+          (defect.files as File[]).map((f) =>
+            attachmentsApi.upload(projectId!, f, defect.caseId)
+          )
+        );
+      }
+
+      const newDefect: CreatedDefect = {
+        id: (created as any).id ?? `DEF-${Date.now()}`,
+        caseId: defect.caseId,
+        caseTitle: activeCase.title,
+        stepIdx: defect.stepIdx,
+        title: defect.title,
+        description: defect.description,
+        severity: defect.severity,
+        status: defect.status,
+        link: defect.link,
+        files: defect.files,
+        createdAt: new Date().toISOString().split('T')[0],
+      };
+      setCreatedDefects([...createdDefects, newDefect]);
+      setDefectModalOpen(false);
+      toast.success('Defect created');
+    } catch {
+      toast.error('Failed to create defect — please try again');
+    }
   };
 
   const progressStats = useMemo(() => {

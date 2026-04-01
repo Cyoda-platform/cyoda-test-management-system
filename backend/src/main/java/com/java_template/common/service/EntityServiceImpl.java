@@ -361,19 +361,30 @@ public class EntityServiceImpl implements EntityService {
         UUID entityId = response.getTransactionInfo().getEntityIds().getFirst();
         UUID transactionId = response.getTransactionInfo().getTransactionId();
 
-        // Get entity changes metadata to find the exact timeOfChange for this transaction
-        List<EntityChangeMeta> changes = getEntityChangesMetadata(entityId);
-
-        // Find the change metadata for this specific transaction
-        EntityChangeMeta changeMeta = changes.stream()
-                .filter(meta -> transactionId.equals(meta.getTransactionId()))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Transaction metadata not found for transaction: " + transactionId));
-
-        // Reload entity at the exact point in time when it was saved
         @SuppressWarnings("unchecked")
         Class<T> entityClass = (Class<T>) entity.getClass();
-        return getById(entityId, modelSpec, entityClass, changeMeta.getTimeOfChange());
+
+        // Try to reload entity at the exact point in time when it was saved.
+        // Some entity types (e.g. those with initialState != "initial") may not yet be
+        // available via point-in-time queries immediately after creation, so fall back
+        // to fetching the current state without a point-in-time constraint.
+        try {
+            List<EntityChangeMeta> changes = getEntityChangesMetadata(entityId);
+            EntityChangeMeta changeMeta = changes.stream()
+                    .filter(meta -> transactionId.equals(meta.getTransactionId()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (changeMeta != null) {
+                return getById(entityId, modelSpec, entityClass, changeMeta.getTimeOfChange());
+            }
+            logger.warn("Transaction metadata not found for transaction: {} on entity: {}, falling back to current state", transactionId, entityId);
+        } catch (Exception e) {
+            logger.warn("Could not fetch entity {} with point-in-time after creation ({}), falling back to current state", entityId, e.getMessage());
+        }
+
+        // Fallback: fetch current state without point-in-time
+        return getById(entityId, modelSpec, entityClass);
     }
 
     @Override
