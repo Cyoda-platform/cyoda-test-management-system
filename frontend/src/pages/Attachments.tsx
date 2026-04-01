@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
-import { Search, Grid, List, FileText, Image, File, Download, Trash2, Upload, AlertTriangle, Paperclip } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Grid, List, FileText, Image, File, Download, Trash2, AlertTriangle, Paperclip } from 'lucide-react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,8 +52,6 @@ const Attachments = () => {
   const [search, setSearch] = useState('');
   const [previewFile, setPreviewFile] = useState<Attachment | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Attachment | null>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── queries ──────────────────────────────────────────────────────────────────
 
@@ -74,15 +72,6 @@ const Attachments = () => {
 
   // ── mutations ─────────────────────────────────────────────────────────────────
 
-  const uploadMut = useMutation({
-    mutationFn: (file: File) => attachmentsApi.upload(projectId!, file),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['attachments', projectId] });
-      toast.success('File uploaded');
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : 'Upload failed'),
-  });
-
   const deleteMut = useMutation({
     mutationFn: (id: string) => attachmentsApi.delete(projectId!, id),
     onSuccess: () => {
@@ -92,19 +81,6 @@ const Attachments = () => {
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Delete failed'),
   });
-
-  // ── upload handlers ───────────────────────────────────────────────────────────
-
-  const uploadFiles = useCallback((files: FileList | null) => {
-    if (!files) return;
-    Array.from(files).forEach(f => uploadMut.mutate(f));
-  }, [uploadMut]);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    uploadFiles(e.dataTransfer.files);
-  };
 
   const downloadUrl = (att: Attachment) =>
     `${BASE_URL}/projects/${projectId}/attachments/${att.id}/content`;
@@ -126,28 +102,6 @@ const Attachments = () => {
               ]} />
             </div>
             <h1 className="text-xl font-bold text-foreground tracking-[-0.02em]">Attachments</h1>
-          </div>
-
-          {/* Upload drop zone */}
-          <div
-            className={`mb-5 rounded-lg border-2 border-dashed transition-colors flex flex-col items-center justify-center gap-2 py-8 cursor-pointer
-              ${dragOver ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-primary/40 hover:bg-muted/20'}`}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload className="h-7 w-7 text-muted-foreground" strokeWidth={1.5} />
-            <p className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Click to upload</span> or drag & drop files here
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => uploadFiles(e.target.files)}
-            />
           </div>
 
           {/* Filter Bar */}
@@ -180,7 +134,7 @@ const Attachments = () => {
           {!isLoading && filtered.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
               <Paperclip className="h-10 w-10 opacity-30" strokeWidth={1} />
-              <p className="text-sm">{search ? 'No files match your search.' : 'No attachments yet. Upload a file above.'}</p>
+              <p className="text-sm">{search ? 'No files match your search.' : 'No attachments found.'}</p>
             </div>
           )}
 
