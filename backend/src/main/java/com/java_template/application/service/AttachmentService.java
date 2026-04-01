@@ -9,9 +9,6 @@ import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EdgeMessageService;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -57,16 +54,6 @@ public class AttachmentService {
         return PageResult.of(result.searchId(),
                 result.data().stream().map(this::withId).toList(),
                 result.pageNumber(), result.pageSize(), result.totalElements());
-    }
-
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
     }
 
     /**
@@ -159,8 +146,11 @@ public class AttachmentService {
     public List<AttachmentDTO> getAttachmentsByCaseId(UUID caseId) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(0).pageSize(1000).build();
-        return entityService.search(MODEL_SPEC, conditionByField("caseId", caseId.toString()),
-                AttachmentDTO.class, params).data().stream().map(this::withId).toList();
+        return entityService.findAll(MODEL_SPEC, AttachmentDTO.class, params)
+                .data().stream()
+                .filter(a -> a.entity().getCaseId() != null && a.entity().getCaseId().equals(caseId))
+                .map(this::withId)
+                .toList();
     }
 
     /**
@@ -169,8 +159,16 @@ public class AttachmentService {
     public PageResult<AttachmentDTO> getAttachmentsByProjectId(UUID projectId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(page).pageSize(size).build();
-        return toPage(entityService.search(MODEL_SPEC, conditionByField("projectId", projectId.toString()),
-                AttachmentDTO.class, params));
+        PageResult<EntityWithMetadata<AttachmentDTO>> allAttachments =
+                entityService.findAll(MODEL_SPEC, AttachmentDTO.class, params);
+
+        List<EntityWithMetadata<AttachmentDTO>> filteredAttachments = allAttachments.data().stream()
+                .filter(a -> a.entity().getProjectId() != null && a.entity().getProjectId().equals(projectId))
+                .toList();
+
+        return PageResult.of(allAttachments.searchId(),
+                filteredAttachments.stream().map(this::withId).toList(),
+                page, size, filteredAttachments.size());
     }
 
     /**
