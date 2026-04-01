@@ -1,15 +1,11 @@
 package com.java_template.application.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -26,11 +22,9 @@ public class TestCaseService {
             new ModelSpec().withName(TestCaseDTO.ENTITY_NAME).withVersion(TestCaseDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
-    private final ObjectMapper objectMapper;
 
-    public TestCaseService(EntityService entityService, ObjectMapper objectMapper) {
+    public TestCaseService(EntityService entityService) {
         this.entityService = entityService;
-        this.objectMapper = objectMapper;
     }
 
     private TestCaseDTO withId(EntityWithMetadata<TestCaseDTO> result) {
@@ -43,16 +37,6 @@ public class TestCaseService {
         return PageResult.of(result.searchId(),
                 result.data().stream().map(this::withId).toList(),
                 result.pageNumber(), result.pageSize(), result.totalElements());
-    }
-
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
     }
 
     /**

@@ -1,15 +1,10 @@
 package com.java_template.application.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestRunStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
-import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -26,11 +21,9 @@ public class TestRunStepService {
             new ModelSpec().withName(TestRunStepDTO.ENTITY_NAME).withVersion(TestRunStepDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
-    private final ObjectMapper objectMapper;
 
-    public TestRunStepService(EntityService entityService, ObjectMapper objectMapper) {
+    public TestRunStepService(EntityService entityService) {
         this.entityService = entityService;
-        this.objectMapper = objectMapper;
     }
 
     private TestRunStepDTO withId(EntityWithMetadata<TestRunStepDTO> result) {
@@ -43,16 +36,6 @@ public class TestRunStepService {
         return PageResult.of(result.searchId(),
                 result.data().stream().map(this::withId).toList(),
                 result.pageNumber(), result.pageSize(), result.totalElements());
-    }
-
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
     }
 
     public TestRunStepDTO createTestRunStep(TestRunStepDTO testRunStep) {
@@ -69,10 +52,15 @@ public class TestRunStepService {
     }
 
     public PageResult<TestRunStepDTO> getTestRunStepsByTestRunCaseId(UUID testRunCaseId, int page, int size) {
-        SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
-                .pageNumber(page).pageSize(size).build();
-        return toPage(entityService.search(MODEL_SPEC, conditionByField("testRunCaseId", testRunCaseId.toString()),
-                TestRunStepDTO.class, params));
+        List<TestRunStepDTO> all = entityService.findAll(MODEL_SPEC, TestRunStepDTO.class)
+                .data().stream()
+                .map(this::withId)
+                .filter(s -> testRunCaseId.equals(s.getTestRunCaseId()))
+                .toList();
+        int from = page * size;
+        int to = Math.min(from + size, all.size());
+        List<TestRunStepDTO> pageData = from < all.size() ? all.subList(from, to) : List.of();
+        return PageResult.of(null, pageData, page, size, (long) all.size());
     }
 
     public Optional<TestRunStepDTO> updateTestRunStepStatus(UUID id, String status) {
