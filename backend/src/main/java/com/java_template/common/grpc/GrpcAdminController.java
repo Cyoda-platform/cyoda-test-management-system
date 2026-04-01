@@ -46,11 +46,16 @@ public class GrpcAdminController {
     }
 
     @PostMapping("/import-workflows")
-    public ResponseEntity<String> importWorkflows() {
+    public ResponseEntity<String> importWorkflows(
+            @RequestParam(name = "recreateModels", defaultValue = "false") boolean recreateModels
+    ) {
         try {
-            CyodaInitConfig config = new CyodaInitConfig();
+            CyodaInitConfig config = CyodaInitConfig.withRecreateModels(recreateModels);
             cyodaInit.initCyoda(config);
-            return ResponseEntity.ok("Workflows and entities import initiated successfully");
+            String msg = recreateModels
+                    ? "Workflows imported and all entity models deleted + recreated successfully"
+                    : "Workflows and entities import initiated successfully";
+            return ResponseEntity.ok(msg);
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Failed to import workflows: " + e.getMessage());
         }

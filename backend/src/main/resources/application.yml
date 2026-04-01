@@ -65,12 +65,13 @@ app:
     grpc-communication-data-format: JSON
 
     # gRPC Channel Configuration
-    grpc-max-inbound-message-size: 16777216
+    # Increased for large file operations (PNG, PDF uploads)
+    grpc-max-inbound-message-size: 67108864        # 64MB (was 16MB)
     grpc-max-inbound-metadata-size: 16384
-    grpc-flow-control-window: 67108864
-    grpc-keep-alive-time-seconds: 30
-    grpc-keep-alive-timeout-seconds: 10
-    grpc-idle-timeout-seconds: 300
+    grpc-flow-control-window: 134217728             # 128MB (was 64MB)
+    grpc-keep-alive-time-seconds: 15                # More frequent keep-alives (was 30s)
+    grpc-keep-alive-timeout-seconds: 15             # More generous timeout (was 10s)
+    grpc-idle-timeout-seconds: 600                  # 10 minutes for long operations (was 5 min)
 
     # Thread Pool Configuration
     processor-thread-pool: 20

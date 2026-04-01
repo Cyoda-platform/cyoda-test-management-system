@@ -87,10 +87,13 @@ public class CyodaInit {
                 if (workflowFile != null) {
                     logger.info("✅ Found workflow file for {}: {}", modelSpec.getName(), workflowFile);
 
-                    CompletableFuture<Void> future = CompletableFuture.runAsync(() ->
-                                    importWorkflowForEntity(workflowFile, modelSpec.getName(), modelSpec.getVersion(), token, config),
-                            executor
-                    );
+                    CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                        try {
+                            importWorkflowForEntity(workflowFile, modelSpec.getName(), modelSpec.getVersion(), token, config);
+                        } catch (Exception e) {
+                            logger.error("❌ Error importing workflow for entity {}: {}", modelSpec.getName(), e.getMessage(), e);
+                        }
+                    }, executor);
                     futures.add(future);
                 } else {
                     logger.warn("⚠️ No workflow file found for entity: {} (version: {})", modelSpec.getName(), modelSpec.getVersion());
@@ -297,15 +300,30 @@ public class CyodaInit {
                 String body = response.path("json").toString();
                 String errorMsg = String.format("Failed to check entity model for %s (version %s). Status code: %d, body: %s",
                         entityName, version, statusCode, body);
-                logger.error("❌ {}", errorMsg);
-                throw new RuntimeException(errorMsg);
+                logger.warn("⚠️  {}", errorMsg);
+                logger.info("📝 Attempting to create entity model for: {} (version: {})", entityName, version);
+                try {
+                    createEntityModel(token, entityName, version);
+                } catch (Exception createEx) {
+                    logger.error("❌ Failed to create entity model for {} (version {}): {}", entityName, version, createEx.getMessage(), createEx);
+                }
             }
         } catch (Exception ex) {
             if (ex.getMessage() != null && ex.getMessage().contains("404")) {
                 logger.info("📝 Entity model not found (404), creating for: {} (version: {})", entityName, version);
-                createEntityModel(token, entityName, version);
+                try {
+                    createEntityModel(token, entityName, version);
+                } catch (Exception createEx) {
+                    logger.error("❌ Failed to create entity model for {} (version {}): {}", entityName, version, createEx.getMessage(), createEx);
+                }
             } else {
-                throw new RuntimeException("Failed to check entity model for " + entityName, ex);
+                logger.warn("⚠️  Could not check entity model for {} (version {}): {}", entityName, version, ex.getMessage(), ex);
+                logger.info("📝 Attempting to create entity model for: {} (version: {})", entityName, version);
+                try {
+                    createEntityModel(token, entityName, version);
+                } catch (Exception createEx) {
+                    logger.error("❌ Failed to create entity model for {} (version {}): {}", entityName, version, createEx.getMessage(), createEx);
+                }
             }
         }
     }
@@ -337,40 +355,54 @@ public class CyodaInit {
     }
 
     /**
-     * Load example JSON files from classpath for the given entity
+     * Load example JSON files from the entity resource directory.
+     * Entity sample files live at: src/main/resources/entity/{entityNameLower}/version_{version}/{entityNameLower}.json
+     * This is the canonical location used by all entity definitions in this project.
      */
     private List<String> loadExampleJsonFiles(String entityName) {
         List<String> jsonContents = new ArrayList<>();
-        String examplesPath = String.format("/entity-schemas/examples/%s", entityName);
+        String entityNameLower = entityName.toLowerCase();
 
-        try {
-            // Get the resource as a URL to check if directory exists
-            var resource = getClass().getResource(examplesPath);
-            if (resource == null) {
-                logger.debug("No examples directory found at classpath: {}", examplesPath);
-                return jsonContents;
-            }
+        // Primary path: /entity/{entityNameLower}/version_1/{entityNameLower}.json
+        // Fallback legacy path: /entity-schemas/examples/{entityName}
+        String[] candidatePaths = {
+                String.format("/entity/%s/version_1", entityNameLower),
+                String.format("/entity-schemas/examples/%s", entityName),
+                String.format("/entity-schemas/examples/%s", entityNameLower)
+        };
 
-            // Read directory contents from classpath
-            var uri = resource.toURI();
-            Path examplesDir;
+        for (String candidatePath : candidatePaths) {
+            try {
+                var resource = getClass().getResource(candidatePath);
+                if (resource == null) {
+                    logger.debug("Entity examples directory not found at classpath: {}", candidatePath);
+                    continue;
+                }
 
-            if (uri.getScheme().equals("jar")) {
-                // Running from JAR - need to use FileSystem
-                try (var fs = java.nio.file.FileSystems.newFileSystem(uri, java.util.Collections.emptyMap())) {
-                    examplesDir = fs.getPath(examplesPath);
+                var uri = resource.toURI();
+                Path examplesDir;
+
+                if (uri.getScheme().equals("jar")) {
+                    try (var fs = java.nio.file.FileSystems.newFileSystem(uri, java.util.Collections.emptyMap())) {
+                        examplesDir = fs.getPath(candidatePath);
+                        jsonContents = readJsonFilesFromDirectory(examplesDir);
+                    }
+                } else {
+                    examplesDir = Paths.get(uri);
                     jsonContents = readJsonFilesFromDirectory(examplesDir);
                 }
-            } else {
-                // Running from IDE/filesystem
-                examplesDir = Paths.get(uri);
-                jsonContents = readJsonFilesFromDirectory(examplesDir);
-            }
 
-        } catch (Exception e) {
-            logger.debug("Could not load example files for entity {}: {}", entityName, e.getMessage());
+                if (!jsonContents.isEmpty()) {
+                    logger.info("Loaded {} example file(s) for entity '{}' from: {}", jsonContents.size(), entityName, candidatePath);
+                    return jsonContents;
+                }
+
+            } catch (Exception e) {
+                logger.debug("Could not load example files for entity {} from {}: {}", entityName, candidatePath, e.getMessage());
+            }
         }
 
+        logger.debug("No example JSON files found for entity: {}", entityName);
         return jsonContents;
     }
 
