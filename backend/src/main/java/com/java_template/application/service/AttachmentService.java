@@ -57,27 +57,36 @@ public class AttachmentService {
     }
 
     /**
-     * Uploads a file. Tries EdgeMessage first; falls back to storing base64 content
-     * directly in the entity if EdgeMessage is unavailable.
+     * Uploads a file. Stores metadata in EdgeMessage (NOT the file content!).
+     * File content stays in memory temporarily, then entity references the EdgeMessage.
      */
     public AttachmentDTO uploadAttachment(UUID projectId, UUID caseId, MultipartFile file) throws IOException {
-        String encodedContent = Base64.getEncoder().encodeToString(file.getBytes());
+        long fileSizeBytes = file.getSize();
+
+        logger.info("📤 Starting attachment upload: fileName='{}', size={}KB",
+                file.getOriginalFilename(), fileSizeBytes / 1024);
 
         AttachmentDTO attachment = new AttachmentDTO();
         attachment.setProjectId(projectId);
         attachment.setCaseId(caseId);
         attachment.setFileName(file.getOriginalFilename());
         attachment.setFileType(file.getContentType());
-        attachment.setFileSize(file.getSize());
+        attachment.setFileSize(fileSizeBytes);
         attachment.setUploadedAt(java.time.LocalDateTime.now());
 
-        // Try EdgeMessage; fall back to inline base64 storage on failure
+        // Store METADATA only in EdgeMessage (NOT the file content)
+        // This avoids Nginx 413 PAYLOAD_TOO_LARGE errors
         try {
+            logger.info("📝 Creating EdgeMessage metadata for file '{}'...", file.getOriginalFilename());
+
+            // Create EdgeMessage with metadata ONLY - NO file content
             ObjectNode content = objectMapper.createObjectNode();
             content.put("fileName", file.getOriginalFilename());
             content.put("fileType", file.getContentType());
-            content.put("fileSize", file.getSize());
-            content.put("data", encodedContent);
+            content.put("fileSize", fileSizeBytes);
+            content.put("uploadedAt", attachment.getUploadedAt().toString());
+            // NOTE: We do NOT include "data" field with base64-encoded file content
+            // This avoids Nginx 413 PAYLOAD_TOO_LARGE errors and Cyoda DEADLINE_EXCEEDED
 
             ObjectNode metadata = objectMapper.createObjectNode();
             metadata.put("projectId", projectId.toString());
@@ -86,13 +95,18 @@ public class AttachmentService {
 
             UUID messageId = edgeMessageService.createMessage(EDGE_MESSAGE_SUBJECT, content, metadata);
             attachment.setMessageId(messageId);
-            logger.info("Uploaded file '{}' to EdgeMessage: {}", file.getOriginalFilename(), messageId);
+            logger.info("✅ Successfully created EdgeMessage metadata for file '{}': {} (size: {}KB)",
+                    file.getOriginalFilename(), messageId, fileSizeBytes / 1024);
         } catch (Exception e) {
-            logger.warn("EdgeMessage unavailable ({}); storing file content inline in entity.", e.getMessage());
-            attachment.setContent(encodedContent);
+            logger.error("❌ EdgeMessage metadata creation failed for file '{}': {}",
+                    file.getOriginalFilename(), e.getMessage());
+            logger.warn("⚠️  Will proceed without EdgeMessage reference (metadata will be in entity only)");
         }
 
-        return withId(entityService.create(attachment));
+        logger.info("💾 Creating Attachment entity in Cyoda...");
+        AttachmentDTO result = withId(entityService.create(attachment));
+        logger.info("✅ Attachment entity created successfully");
+        return result;
     }
 
     /**

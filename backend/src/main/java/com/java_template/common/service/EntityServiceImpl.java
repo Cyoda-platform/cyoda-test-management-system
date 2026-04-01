@@ -383,8 +383,10 @@ public class EntityServiceImpl implements EntityService {
             logger.warn("Could not fetch entity {} with point-in-time after creation ({}), falling back to current state", entityId, e.getMessage());
         }
 
-        // Fallback: fetch current state without point-in-time
-        return getById(entityId, modelSpec, entityClass);
+        // Fallback: build result directly from transaction response to avoid NOT_FOUND
+        // race condition where Cyoda hasn't indexed the entity yet (common for large payloads like PNG files)
+        logger.info("Falling back to fromTransactionResponse for entity: {} to avoid NOT_FOUND race condition", entityId);
+        return EntityWithMetadata.fromTransactionResponse(response, entity, objectMapper);
     }
 
     @Override
