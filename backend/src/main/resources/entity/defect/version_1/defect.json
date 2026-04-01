@@ -1,0 +1,12 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440010",
+  "projectId": "550e8400-e29b-41d4-a716-446655440001",
+  "title": "Login button unresponsive on mobile",
+  "description": "The login button does not respond to tap events on iOS Safari 16+. Affects all users on iPhone.",
+  "severity": "Critical",
+  "link": "https://jira.example.com/browse/TMS-42",
+  "status": "Open",
+  "source": "test-run-550e8400",
+  "createdAt": "2024-02-15T10:00:00",
+  "updatedAt": "2024-02-15T10:00:00"
+}
