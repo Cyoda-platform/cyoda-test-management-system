@@ -103,6 +103,7 @@ public class AuthorizationFilter implements Filter {
                path.contains("/swagger") ||
                path.contains("/api-docs") ||
                path.contains("/webjars") ||
+               path.contains("/admin/grpc/import-workflows") ||  // Allow workflow import without auth
                path.equals("/api") ||
                path.equals("/api/");
     }

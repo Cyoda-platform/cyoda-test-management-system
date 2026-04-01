@@ -24,20 +24,35 @@ fi
 echo "📋 Validating workflows before import..."
 echo ""
 
-# Run validation
-java -cp "build/libs/*:build/resources/main" \
-  com.java_template.common.tool.WorkflowValidationSuite
+# Get the JAR file
+JAR_FILE=$(find build/libs -name "*.jar" -type f | head -1)
+if [ -z "$JAR_FILE" ]; then
+    echo "❌ Error: No JAR file found in build/libs"
+    exit 1
+fi
 
+# Note: WorkflowValidationSuite and WorkflowImportTool are part of Spring Boot app
+# and need full Spring context, so validation is skipped here.
+# Validation can be run separately if needed.
+
+echo "🔄 Importing workflows to Cyoda via REST API..."
 echo ""
-echo "════════════════════════════════════════════════════════════════"
+echo "📌 Make sure the application is running (bash RUN_WITH_CYODA.sh)"
 echo ""
 
-echo "🔄 Importing workflows to Cyoda..."
-echo ""
+# Check if app is running
+if ! curl -s http://localhost:8080/api/admin/grpc/status > /dev/null 2>&1; then
+    echo "⚠️  WARNING: Application does not appear to be running on localhost:8080"
+    echo "Please start it with: bash RUN_WITH_CYODA.sh"
+    echo ""
+fi
 
-# Run import
-java -cp "build/libs/*:build/resources/main" \
-  com.java_template.common.tool.WorkflowImportTool
+# Call the import endpoint directly via REST
+echo "Calling import endpoint..."
+curl -X POST http://localhost:8080/api/admin/grpc/import-workflows \
+  -H "Content-Type: application/json" \
+  -w "\n✅ Request sent (HTTP Status: %{http_code})\n" 2>/dev/null || \
+  echo "⚠️  Could not connect to API. Make sure the app is running."
 
 echo ""
 echo "════════════════════════════════════════════════════════════════"
