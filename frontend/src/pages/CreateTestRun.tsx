@@ -11,6 +11,7 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject, useSuites, useCreateTestRun, keys } from '@/hooks/useApi';
 import { testCasesApi } from '@/lib/api';
+import { listDisplayId } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -231,7 +232,7 @@ const CreateTestRun = () => {
 
                       {isExpanded && (
                         <div className="divide-y divide-border/40">
-                          {filteredCases.map((tc) => (
+                          {filteredCases.map((tc, index) => (
                             <div
                               key={tc.id}
                               onClick={() => toggleCaseSelect(tc.id)}
@@ -242,7 +243,9 @@ const CreateTestRun = () => {
                                 onCheckedChange={() => toggleCaseSelect(tc.id)}
                                 onClick={(e) => e.stopPropagation()}
                               />
-                              <span className="text-[10px] font-mono text-muted-foreground w-12 shrink-0">{tc.id}</span>
+                              <span className="text-[10px] font-mono text-muted-foreground w-12 shrink-0" title={tc.id}>
+                                {listDisplayId('TC', index)}
+                              </span>
                               <span className="text-sm text-foreground flex-1 truncate">{tc.title}</span>
                             </div>
                           ))}
