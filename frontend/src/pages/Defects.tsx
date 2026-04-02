@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Plus, Eye, Pencil, Trash2, ExternalLink, Search, Lock, Upload, FileText, Image, File, X, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useProject, useDefects, useCreateDefect, useUpdateDefect, useDeleteDefect } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
+import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -97,6 +98,14 @@ const Defects = () => {
   // View modal
   const [viewOpen, setViewOpen] = useState(false);
   const [viewTarget, setViewTarget] = useState<Defect | null>(null);
+
+  // Build a stable display-ID map (DEF-01, DEF-02…) ordered by creation time
+  const defectDisplayIdMap = useMemo(() => {
+    const sorted = [...defects].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const map: Record<string, string> = {};
+    sorted.forEach((d, i) => { map[d.id] = listDisplayId('DEF', i); });
+    return map;
+  }, [defects]);
 
   const openCount = defects.filter((d) => d.status === 'Open').length;
 
@@ -298,7 +307,7 @@ const Defects = () => {
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"
                       onClick={() => { setViewTarget(d); setViewOpen(true); }}
                     >
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider">{d.id}</td>
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>{defectDisplayIdMap[d.id] ?? '-'}</td>
                       <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <Select value={d.severity} onValueChange={(val) => handleSeverityChange(d.id, val)}>
@@ -325,8 +334,10 @@ const Defects = () => {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">{d.source}</td>
-                      <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{d.createdAt}</td>
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={d.source || undefined}>
+                        {d.source ? (isUuid(d.source) ? d.source.slice(0, 8) : d.source) : '—'}
+                      </td>
+                      <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(d.createdAt)}</td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <button
@@ -463,7 +474,7 @@ const Defects = () => {
         <DialogContent className="sm:max-w-3xl bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground">Edit Defect</DialogTitle>
-            <DialogDescription className="text-muted-foreground">{editTarget?.id}</DialogDescription>
+            <DialogDescription className="text-muted-foreground font-mono" title={editTarget?.id}>{editTarget ? (defectDisplayIdMap[editTarget.id] ?? '-') : '-'}</DialogDescription>
           </DialogHeader>
           {editTarget && (
             <div className="space-y-4">
@@ -522,7 +533,7 @@ const Defects = () => {
         <DialogContent className="sm:max-w-3xl bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
-              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm">{viewTarget?.id}</span>
+              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm" title={viewTarget?.id}>{viewTarget ? (defectDisplayIdMap[viewTarget.id] ?? '-') : '-'}</span>
               {viewTarget?.title}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">Defect details</DialogDescription>
@@ -539,13 +550,13 @@ const Defects = () => {
                 <div>
                   <label className={labelCls}>Source</label>
                   <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground font-mono flex items-center">
-                    {viewTarget.source || '—'}
+                    {viewTarget.source ? (isUuid(viewTarget.source) ? viewTarget.source.slice(0, 8) : viewTarget.source) : '—'}
                   </div>
                 </div>
                 <div>
                   <label className={labelCls}>Created</label>
                   <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground flex items-center">
-                    {viewTarget.createdAt}
+                    {formatDate(viewTarget.createdAt)}
                   </div>
                 </div>
               </div>

@@ -13,18 +13,12 @@ import {
   useDeleteProject,
 } from '@/hooks/useApi';
 import type { Project } from '@/lib/api';
+import { formatDate } from '@/lib/utils';
 
 const PAGE_SIZE = 10;
 
 /** Derive two-letter initials from a project name */
 const initials = (name: string) => name.substring(0, 2).toUpperCase();
-
-const formatDate = (d: string) =>
-  new Date(d)
-    .toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-    .replace(',', '')
-    .toUpperCase()
-    .replace(/ /g, '-');
 
 const Projects = () => {
   const navigate = useNavigate();
@@ -261,6 +255,7 @@ const Projects = () => {
           initialName={editProject.name}
           initialDescription={editProject.description}
           projectId={editProject.id}
+          projectIndex={[...projects].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).findIndex((p) => p.id === editProject.id)}
         />
       )}
       <DeleteProjectModal

@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Download, FileText, Table2, ExternalLink, Trash2, AlertTriangle, Eye, Pencil } from 'lucide-react';
 import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
+import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
 import { useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -108,6 +109,14 @@ const ReportDetail = () => {
 
   const updateDefect = useUpdateDefect();
   const deleteDefect = useDeleteDefect();
+
+  // Build a stable display-ID map (DEF-01, DEF-02…) ordered by creation time
+  const defectDisplayIdMap = useMemo(() => {
+    const sorted = [...defects].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const map: Record<string, string> = {};
+    sorted.forEach((d, i) => { map[d.id] = listDisplayId('DEF', i); });
+    return map;
+  }, [defects]);
 
   // Load report config: try localStorage first, fall back to hardcoded reportData
   const report = useMemo<ReportMeta | null>(() => {
@@ -463,7 +472,7 @@ const ReportDetail = () => {
                         className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"
                         onClick={() => { setViewTarget(d); setViewOpen(true); }}
                       >
-                        <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider">{d.id}</td>
+                        <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>{defectDisplayIdMap[d.id] ?? '-'}</td>
                         <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
                         <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <Select value={d.severity} onValueChange={(val) => handleSeverityChange(d.id, val)}>
@@ -490,8 +499,10 @@ const ReportDetail = () => {
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">{d.source}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{d.createdAt}</td>
+                        <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={d.source || undefined}>
+                          {d.source ? (isUuid(d.source) ? d.source.slice(0, 8) : d.source) : '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(d.createdAt)}</td>
                         <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             <button
@@ -539,7 +550,7 @@ const ReportDetail = () => {
         <DialogContent className="sm:max-w-3xl bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
-              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm">{viewTarget?.id}</span>
+              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm" title={viewTarget?.id}>{viewTarget ? (defectDisplayIdMap[viewTarget.id] ?? '-') : '-'}</span>
               {viewTarget?.title}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">Defect details</DialogDescription>
@@ -562,7 +573,7 @@ const ReportDetail = () => {
                 <div>
                   <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Created</label>
                   <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground flex items-center">
-                    {viewTarget.createdAt}
+                    {formatDate(viewTarget.createdAt)}
                   </div>
                 </div>
               </div>
@@ -588,7 +599,7 @@ const ReportDetail = () => {
         <DialogContent className="sm:max-w-3xl bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground">Edit Defect</DialogTitle>
-            <DialogDescription className="text-muted-foreground">{editTarget?.id}</DialogDescription>
+            <DialogDescription className="text-muted-foreground font-mono" title={editTarget?.id}>{editTarget ? (defectDisplayIdMap[editTarget.id] ?? '-') : '-'}</DialogDescription>
           </DialogHeader>
           {editTarget && (
             <div className="space-y-4">
