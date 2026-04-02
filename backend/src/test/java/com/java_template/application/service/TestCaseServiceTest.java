@@ -53,7 +53,7 @@ public class TestCaseServiceTest {
         suiteId = UUID.randomUUID();
         testCase = new TestCaseDTO();
         testCase.setSuiteId(suiteId);
-        testCase.setName("Test Case 1");
+        testCase.setTitle("Test Case 1");
         testCase.setDescription("A test case");
     }
 
@@ -65,7 +65,7 @@ public class TestCaseServiceTest {
         TestCaseDTO created = testCaseService.createTestCase(testCase);
 
         assertNotNull(created.getId());
-        assertEquals("Test Case 1", created.getName());
+        assertEquals("Test Case 1", created.getTitle());
         assertEquals("ACTIVE", created.getStatus());
         assertFalse(created.isDeleted());
     }
@@ -117,16 +117,16 @@ public class TestCaseServiceTest {
 
         TestCaseDTO matching = new TestCaseDTO();
         matching.setSuiteId(suiteId);
-        matching.setName("Matching case");
+        matching.setTitle("Matching case");
 
         TestCaseDTO deleted = new TestCaseDTO();
         deleted.setSuiteId(suiteId);
-        deleted.setName("Deleted case");
+        deleted.setTitle("Deleted case");
         deleted.setDeleted(true);
 
         TestCaseDTO other = new TestCaseDTO();
         other.setSuiteId(otherSuiteId);
-        other.setName("Other case");
+        other.setTitle("Other case");
 
         when(entityService.findAll(any(), eq(TestCaseDTO.class), any()))
                 .thenReturn(PageResult.of(

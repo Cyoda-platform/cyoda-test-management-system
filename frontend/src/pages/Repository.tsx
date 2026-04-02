@@ -415,8 +415,32 @@ const Repository = () => {
             .filter(s => s.cases.some(c => exportSelectedCases.has(c.id)))
             .map(s => ({ ...s, cases: s.cases.filter(c => exportSelectedCases.has(c.id)) }))
         : suites;
+
+      const suitesForExport = exportIncludeSteps
+        ? await Promise.all(targetSuites.map(async (suite) => ({
+            ...suite,
+            cases: await Promise.all(suite.cases.map(async (tc) => {
+              const steps = await queryClient.fetchQuery({
+                queryKey: keys.steps.all(projectId!, suite.id, tc.id),
+                queryFn: async () => {
+                  const data = await testStepsApi.list(projectId!, suite.id, tc.id);
+                  return data.map(step => ({
+                    id: step.id,
+                    order: step.stepNumber,
+                    action: step.action,
+                    expectedResult: step.expectedResult,
+                    status: step.status,
+                  }));
+                },
+              });
+
+              return { ...tc, steps };
+            })),
+          })))
+        : targetSuites;
+
       await performExport({
-        suites: targetSuites,
+        suites: suitesForExport,
         projectName: project?.name || 'Project',
         format: exportFormat,
         includeSteps: exportIncludeSteps,
@@ -449,6 +473,7 @@ const Repository = () => {
     try {
       const targetId = importSuiteTarget === 'root' ? '__new__' : importSuiteTarget;
       const { updatedSuites, result } = await performImport(importFile, targetId, importConflict, suites, projectId);
+      const affectedSuiteIds = new Set<string>();
       // Persist parsed cases to the backend
       for (const suite of updatedSuites) {
         const existing = suites.find(s => s.id === suite.id);
@@ -461,20 +486,35 @@ const Repository = () => {
           const created = await suitesApi.create(projectId, { name: suite.name });
           suiteId = created.id;
         }
+        affectedSuiteIds.add(suiteId);
         for (const tc of newCases) {
-          await testCasesApi.create(projectId, suiteId, {
+          const created = await testCasesApi.create(projectId, suiteId, {
             title: tc.title, priority: tc.priority,
             description: tc.description, preconditions: tc.preconditions,
           });
+          // Create steps for the case
+          for (const step of tc.steps || []) {
+            await testStepsApi.create(projectId, suiteId, created.id, {
+              stepNumber: step.order || 1,
+              action: step.action,
+              expectedResult: step.expectedResult,
+            });
+          }
         }
       }
-      queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
+      // Refetch suites and affected case lists so imported cases become visible immediately
+      await queryClient.refetchQueries({ queryKey: keys.suites.all(projectId) });
+      await Promise.all(
+        [...affectedSuiteIds].map((suiteId) =>
+          queryClient.refetchQueries({ queryKey: keys.cases.all(projectId, suiteId) })
+        )
+      );
       const parts: string[] = [];
       if (result.imported > 0) parts.push(`${result.imported} imported`);
       if (result.overwritten > 0) parts.push(`${result.overwritten} overwritten`);
       if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
       toast.success(`Import complete: ${parts.join(', ')}`);
-      setExpandedSuites(new Set(updatedSuites.map(s => s.id)));
+      setExpandedSuites((prev) => new Set([...prev, ...affectedSuiteIds]));
     } catch (err) {
       toast.error('Import failed: ' + (err instanceof Error ? err.message : 'Invalid file format'));
     } finally {
