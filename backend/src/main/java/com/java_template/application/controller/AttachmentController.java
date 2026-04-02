@@ -109,6 +109,31 @@ public class AttachmentController {
         }
     }
 
+    @GetMapping("/{id}/view")
+    @Operation(summary = "View attachment file content inline in browser (no download)")
+    public ResponseEntity<byte[]> viewAttachment(
+            @PathVariable UUID projectId,
+            @PathVariable UUID id) {
+        try {
+            Optional<AttachmentDTO> meta = attachmentService.getAttachmentById(id)
+                    .filter(a -> a.getProjectId().equals(projectId));
+            if (meta.isEmpty()) return ResponseEntity.notFound().build();
+
+            Optional<byte[]> content = attachmentService.getAttachmentContent(id);
+            if (content.isEmpty()) return ResponseEntity.notFound().build();
+
+            AttachmentDTO attachment = meta.get();
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "inline; filename=\"" + attachment.getFileName() + "\"")
+                    .contentType(MediaType.parseMediaType(
+                            attachment.getFileType() != null ? attachment.getFileType() : MediaType.APPLICATION_OCTET_STREAM_VALUE))
+                    .body(content.get());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete attachment and its EdgeMessage")
     public ResponseEntity<Void> deleteAttachment(
