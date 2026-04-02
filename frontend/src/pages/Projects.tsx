@@ -27,7 +27,7 @@ const Projects = () => {
   const [editProject, setEditProject] = useState<Project | null>(null);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
 
-  const { data: projects = [], isLoading, isError, error, refetch } = useProjects(page);
+  const { data: projects = [], isLoading, isError, error, refetch } = useProjects(page, PAGE_SIZE);
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
@@ -145,7 +145,7 @@ const Projects = () => {
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
                       Created
                     </th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">
                       Actions
                     </th>
                   </tr>
@@ -175,7 +175,7 @@ const Projects = () => {
                       <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap font-mono text-xs">
                         {formatDate(project.createdAt)}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 w-px whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           <Button
                             variant="ghost"

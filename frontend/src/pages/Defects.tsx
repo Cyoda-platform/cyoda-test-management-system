@@ -74,10 +74,25 @@ const Defects = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
+  // Build a full PUT body from an existing defect, overriding specific fields.
+  // The backend uses full-replacement PUT semantics — partial bodies cause HTTP 400.
+  const buildUpdateBody = (d: Defect, overrides: Partial<Defect>): Partial<Defect> => ({
+    title:       d.title,
+    description: d.description,
+    severity:    d.severity,
+    status:      d.status,
+    source:      d.source ?? '',
+    link:        d.link ?? '',
+    ...(d.createdAt ? { createdAt: d.createdAt } : {}),
+    ...overrides,
+  });
+
   // Inline severity / status quick-update
   const handleSeverityChange = (defectId: string, newSeverity: string) => {
+    const d = defects.find((x) => x.id === defectId);
+    if (!d) return;
     updateDefect.mutate(
-      { projectId: projectId!, id: defectId, body: { severity: newSeverity as Defect['severity'] } },
+      { projectId: projectId!, id: defectId, body: buildUpdateBody(d, { severity: newSeverity as Defect['severity'] }) },
       {
         onSuccess: () => toast.success(`Severity updated to ${newSeverity}`),
         onError:   (e) => toast.error(e.message),
@@ -86,8 +101,10 @@ const Defects = () => {
   };
 
   const handleStatusChange = (defectId: string, newStatus: string) => {
+    const d = defects.find((x) => x.id === defectId);
+    if (!d) return;
     updateDefect.mutate(
-      { projectId: projectId!, id: defectId, body: { status: newStatus as Defect['status'] } },
+      { projectId: projectId!, id: defectId, body: buildUpdateBody(d, { status: newStatus as Defect['status'] }) },
       {
         onSuccess: () => toast.success(`Status updated to ${newStatus}`),
         onError:   (e) => toast.error(e.message),
@@ -174,14 +191,7 @@ const Defects = () => {
       {
         projectId: projectId!,
         id: editTarget.id,
-        body: {
-          title:       editTarget.title,
-          description: editTarget.description,
-          severity:    editTarget.severity,
-          status:      editTarget.status,
-          source:      editTarget.source,
-          link:        editTarget.link,
-        },
+        body: buildUpdateBody(editTarget, {}),
       },
       {
         onSuccess: () => {
@@ -292,7 +302,7 @@ const Defects = () => {
                   <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Status</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Source</th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
-                  <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Actions</th>
+                  <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -338,7 +348,7 @@ const Defects = () => {
                         {d.source ? (isUuid(d.source) ? d.source.slice(0, 8) : d.source) : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(d.createdAt)}</td>
-                      <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => { setViewTarget(d); setViewOpen(true); }}

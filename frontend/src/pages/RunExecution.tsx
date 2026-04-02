@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { useQueries } from '@tanstack/react-query';
@@ -15,11 +16,13 @@ import {
   useSuites,
   useTestSteps,
   useUpdateTestStep,
+  useUpdateTestRun,
   useCompleteTestRun,
   useUnlockTestRun,
+  useAttachmentsByCase,
   keys,
 } from '@/hooks/useApi';
-import { testCasesApi, defectsApi, attachmentsApi } from '@/lib/api';
+import { testCasesApi, defectsApi, attachmentsApi, testRunsApi, type Attachment } from '@/lib/api';
 import { isUuid, listDisplayId } from '@/lib/utils';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
@@ -140,6 +143,7 @@ const RunExecution = () => {
 
   // Mutations
   const updateStep     = useUpdateTestStep();
+  const updateRun      = useUpdateTestRun();
   const completeRun    = useCompleteTestRun();
   const unlockRun      = useUnlockTestRun();
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -156,6 +160,15 @@ const RunExecution = () => {
   const [editDefect, setEditDefect] = useState<CreatedDefect | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isReadOnly = run?.status === 'completed';
+  const qc = useQueryClient();
+
+  // Refs to always have the latest values available in cleanup effects
+  const runRef          = useRef(run);
+  const stepStatusesRef = useRef(stepStatuses);
+  const allCasesRef     = useRef(allCases);
+  useEffect(() => { runRef.current = run; }, [run]);
+  useEffect(() => { stepStatusesRef.current = stepStatuses; }, [stepStatuses]);
+  useEffect(() => { allCasesRef.current = allCases; }, [allCases]);
 
   // Active case and its live steps
   const activeCase = allCases[selectedIdx];
@@ -171,19 +184,94 @@ const RunExecution = () => {
     [steps]
   );
 
-  // Initialise local step-status state from API data when a new case is loaded
+  // Load persisted attachments for the active case from the server
+  const { data: serverAttachments = [] } = useAttachmentsByCase(
+    projectId!,
+    activeCase?.id ?? '',
+  );
+
+  // ── Pure helpers (no state dependency) ───────────────────────────────────────
+
+  /** Compute a single case's status from its array of step statuses. */
+  const computeCaseStatus = (statuses: StepStatus[]): string => {
+    if (!statuses || statuses.length === 0) return 'untested';
+    if (statuses.some((s) => s === 'failed')) return 'failed';
+    if (statuses.every((s) => s === 'passed')) return 'passed';
+    if (statuses.some((s) => s === 'skipped') && !statuses.some((s) => s === 'untested')) return 'skipped';
+    return 'untested';
+  };
+
+  /**
+   * Compute run-level aggregate counts from a step-status map.
+   * Uses the provided cases list so it works inside cleanup refs too.
+   */
+  const computeAggregates = (
+    statusMap: Record<string, StepStatus[]>,
+    cases: typeof allCases,
+  ) => {
+    let passed = 0, failed = 0, skipped = 0, untested = 0;
+    cases.forEach((tc) => {
+      const s = computeCaseStatus(statusMap[tc.id] || []);
+      if (s === 'passed')       passed++;
+      else if (s === 'failed')  failed++;
+      else if (s === 'skipped') skipped++;
+      else                      untested++;
+    });
+    return { passed, failed, skipped, untested };
+  };
+
+  // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
-    if (sortedSteps.length > 0 && activeCase) {
+    return () => {
+      const r       = runRef.current;
+      const cases   = allCasesRef.current;
+      const statMap = stepStatusesRef.current;
+
+      // Always invalidate so the list re-fetches when the user navigates back
+      qc.invalidateQueries({ queryKey: keys.runs.all(projectId!) });
+
+      if (!r || !runId || !projectId || r.status === 'completed') return;
+
+      const agg = computeAggregates(statMap, cases);
+      const hasProgress = agg.passed + agg.failed + agg.skipped > 0;
+
+      // Fire-and-forget: direct API call is safer than a mutation hook in cleanup
+      testRunsApi.update(projectId, runId, {
+        name:         r.name,
+        environment:  r.environment,
+        buildVersion: r.buildVersion ?? '',
+        description:  r.description ?? '',
+        // Promote to 'active' as soon as any case is worked on
+        status: hasProgress && r.status === 'initial' ? 'active' : r.status,
+        ...(r.createdAt ? { createdAt: r.createdAt } : {}),
+        ...agg,
+      }).then(() => {
+        qc.invalidateQueries({ queryKey: keys.runs.detail(projectId, runId) });
+      }).catch(() => { /* best effort */ });
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Initialise step-status state when a new case is loaded ───────────────────
+  useEffect(() => {
+    if (sortedSteps.length > 0 && activeCase && run) {
       setStepStatuses((prev) => {
         if (prev[activeCase.id]) return prev; // already initialised — keep user changes
+
+        // For fresh runs (no progress saved yet) always start as untested,
+        // preventing step-status bleed-over from previous runs that share
+        // the same test cases (steps are stored globally per-case, not per-run).
+        const isFreshRun = (run.passed ?? 0) + (run.failed ?? 0) + (run.skipped ?? 0) === 0;
+
         const initial: StepStatus[] = sortedSteps.map((s) => {
+          if (isFreshRun) return 'untested';
           const v = s.status as StepStatus;
           return ['passed', 'failed', 'skipped'].includes(v) ? v : 'untested';
         });
         return { ...prev, [activeCase.id]: initial };
       });
     }
-  }, [sortedSteps, activeCase?.id]);
+  }, [sortedSteps, activeCase?.id, run?.passed, run?.failed, run?.skipped]);
 
   const getStepStatuses = (caseId: string): StepStatus[] => {
     return stepStatuses[caseId] || [];
@@ -196,14 +284,22 @@ const RunExecution = () => {
     updated[stepNumber - 1] = status; // stepNumber is 1-based, array is 0-based
     setStepStatuses({ ...stepStatuses, [caseId]: updated });
 
-    // Persist to API
+    // Persist to API — send full step payload so a PUT doesn't wipe action/expectedResult
     if (stepId && activeCase) {
+      const stepData = sortedSteps.find(s => s.id === stepId);
       updateStep.mutate({
         projectId: projectId!,
         suiteId:   activeCase.suiteId,
         caseId,
         id:        stepId,
-        body:      { status },
+        body: {
+          ...(stepData ? {
+            action:         stepData.action,
+            expectedResult: stepData.expectedResult,
+            stepNumber:     stepData.stepNumber,
+          } : {}),
+          status,
+        },
       });
     }
 
@@ -271,6 +367,8 @@ const RunExecution = () => {
       await Promise.all(
         fileArray.map((f) => attachmentsApi.upload(projectId!, f, evidenceTarget.caseId))
       );
+      // Refresh server-side attachment list so they survive a page reload
+      qc.invalidateQueries({ queryKey: ['attachments', projectId!, 'case', evidenceTarget.caseId] });
       toast.success(`${fileArray.length} file(s) uploaded`);
     } catch {
       toast.error('Upload failed — files saved locally but not persisted');
@@ -533,46 +631,42 @@ const RunExecution = () => {
             )}
           </div>
 
-          {/* Attachments Section */}
-          {(() => {
-            const caseAttachments = getCaseAttachments(activeCase.id);
-            if (caseAttachments.length === 0) return null;
-            return (
-              <div className="bg-muted/40 rounded-lg p-4 mb-6">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Attachments</h3>
-                <div className="space-y-2">
-                  {caseAttachments.map((item, idx) => {
-                    const IconComp = getFileIcon(item.file.type);
-                    return (
-                      <div key={idx} className="flex items-center gap-2.5 px-3 py-2 bg-card rounded-md border border-border/40">
-                        <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-foreground truncate">{item.file.name}</p>
-                          <span className="text-[10px] text-muted-foreground">Step {item.stepIdx + 1}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(item.file.size)}</span>
-                        {!isReadOnly && (
-                          <button
-                            onClick={() => {
-                              const key = getEvidenceKey(activeCase.id, item.stepIdx);
-                              setStepEvidence(prev => ({
-                                ...prev,
-                                [key]: (prev[key] || []).filter(f => f.name !== item.file.name)
-                              }));
-                              toast.success('File removed');
-                            }}
-                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-                          </button>
-                        )}
+          {/* Attachments Section — loaded from server so they survive page refresh */}
+          {serverAttachments.length > 0 && (
+            <div className="bg-muted/40 rounded-lg p-4 mb-6">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Attachments</h3>
+              <div className="space-y-2">
+                {serverAttachments.map((item: Attachment) => {
+                  const IconComp = getFileIcon(item.fileType ?? '');
+                  return (
+                    <div key={item.id} className="flex items-center gap-2.5 px-3 py-2 bg-card rounded-md border border-border/40">
+                      <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground truncate">{item.fileName}</p>
                       </div>
-                    );
-                  })}
-                </div>
+                      <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(item.fileSize)}</span>
+                      {!isReadOnly && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await attachmentsApi.delete(projectId!, item.id);
+                              qc.invalidateQueries({ queryKey: ['attachments', projectId!, 'case', activeCase.id] });
+                              toast.success('File removed');
+                            } catch {
+                              toast.error('Failed to remove file');
+                            }
+                          }}
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })()}
+            </div>
+          )}
 
           {steps.length > 0 ? (
             <div className="bg-card rounded-lg shadow-soft overflow-hidden">
@@ -583,7 +677,7 @@ const RunExecution = () => {
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">Step</th>
                     <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">Expected result</th>
                     <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs uppercase tracking-wider w-56">Status</th>
-                    <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs uppercase tracking-wider w-24">Actions</th>
+                    <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -611,7 +705,7 @@ const RunExecution = () => {
                             ))}
                           </div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 w-px whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1">
                             {/* Paperclip - Evidence */}
                             <div className="relative">
@@ -664,7 +758,7 @@ const RunExecution = () => {
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Status</th>
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Source</th>
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Actions</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -711,7 +805,7 @@ const RunExecution = () => {
                         {d.stepIdx !== undefined ? `Step ${d.stepIdx + 1}` : getCaseSourceLabel(d.caseId)}
                       </td>
                       <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{d.createdAt}</td>
-                      <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => { setViewDefect(d); setViewDefectOpen(true); }}

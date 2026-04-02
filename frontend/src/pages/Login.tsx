@@ -51,7 +51,7 @@ const Login = () => {
               </Label>
               <Input
                 type="text"
-                placeholder="admin"
+                placeholder="Enter your username"
                 value={username}
                 onChange={(e) => { setUsername(e.target.value); setError(''); }}
                 className="bg-secondary border-0 h-11 focus-visible:ring-1 focus-visible:ring-accent/40"

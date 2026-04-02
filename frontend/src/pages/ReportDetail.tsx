@@ -457,7 +457,7 @@ const ReportDetail = () => {
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Status</th>
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Source</th>
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Actions</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -503,7 +503,7 @@ const ReportDetail = () => {
                           {d.source ? (isUuid(d.source) ? d.source.slice(0, 8) : d.source) : '—'}
                         </td>
                         <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(d.createdAt)}</td>
-                        <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => { setViewTarget(d); setViewOpen(true); }}
