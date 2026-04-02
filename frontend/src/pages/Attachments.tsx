@@ -79,8 +79,11 @@ const Attachments = () => {
   const downloadUrl = (att: Attachment) =>
     `${BASE_URL}/projects/${projectId}/attachments/${att.id}/content`;
 
-  const viewUrl = (att: Attachment) =>
-    `${BASE_URL}/projects/${projectId}/attachments/${att.id}/view`;
+  const viewUrl = (att: Attachment) => {
+    const url = `${BASE_URL}/projects/${projectId}/attachments/${att.id}/view`;
+    console.log('📸 View URL generated:', { url, projectId, attId: att.id, fileType: att.fileType });
+    return url;
+  };
 
   // ── render ────────────────────────────────────────────────────────────────────
 
@@ -241,7 +244,13 @@ const Attachments = () => {
           </DialogHeader>
           <div className="flex items-center justify-center min-h-[300px] bg-muted/20 rounded-lg overflow-hidden">
             {previewFile && isPreviewable(previewFile.fileType) ? (
-              <img src={viewUrl(previewFile)} alt={previewFile.fileName} className="max-w-full max-h-[60vh] object-contain" />
+              <img
+                src={viewUrl(previewFile)}
+                alt={previewFile.fileName}
+                className="max-w-full max-h-[60vh] object-contain"
+                onLoad={() => console.log('✅ Image loaded successfully:', viewUrl(previewFile))}
+                onError={(e) => console.error('❌ Image load error:', { src: (e.target as HTMLImageElement).src, error: e })}
+              />
             ) : (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <FileText className="h-16 w-16" strokeWidth={1} />
