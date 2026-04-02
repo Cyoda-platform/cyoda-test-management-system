@@ -4,13 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Download, FileText, Table2, ExternalLink, Trash2, AlertTriangle, Eye, Pencil } from 'lucide-react';
-import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect } from '@/hooks/useApi';
+import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useSuites, keys } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
+import { testCasesApi, testStepsApi } from '@/lib/api';
 import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useState } from 'react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
@@ -98,6 +99,16 @@ const defectSeverityStyles: Record<string, string> = {
 const DEFECT_STATUSES = ['Open', 'In Progress', 'Fixed', 'Closed'] as const;
 const DEFECT_SEVERITIES = ['Critical', 'Major', 'Minor'] as const;
 
+/** Derive a single case's overall status from its step statuses. */
+function computeCaseStatus(steps: Array<{ status?: string }>): 'passed' | 'failed' | 'skipped' | 'untested' {
+  if (!steps || steps.length === 0) return 'untested';
+  if (steps.some((s) => s.status === 'failed'))  return 'failed';
+  if (steps.every((s) => s.status === 'passed'))  return 'passed';
+  if (steps.some((s) => s.status === 'skipped') &&
+      !steps.some((s) => !s.status || s.status === 'untested')) return 'skipped';
+  return 'untested';
+}
+
 const ReportDetail = () => {
   const { projectId, reportId } = useParams<{ projectId: string; reportId: string }>();
   const navigate = useNavigate();
@@ -106,6 +117,34 @@ const ReportDetail = () => {
   const { data: project } = useProject(projectId!);
   const { data: allRuns  = [] } = useTestRuns(projectId!);
   const { data: defects  = [] } = useDefects(projectId!);
+
+  // ── Suite Analysis — real data pipeline ─────────────────────────────────────
+  // 1. All suites for this project
+  const { data: suites = [] } = useSuites(projectId!);
+
+  // 2. All cases for each suite (parallel)
+  const casesQueries = useQueries({
+    queries: suites.map((suite) => ({
+      queryKey: keys.cases.all(projectId!, suite.id),
+      queryFn:  () => testCasesApi.list(projectId!, suite.id),
+      enabled:  !!projectId && suites.length > 0,
+      select:   (res: { data: Array<{ id: string; suiteId: string }> }) => res.data,
+    })),
+  });
+
+  // 3. Flat list of (suiteId, caseId) pairs in suite order
+  const casePairs = suites.flatMap((suite, i) =>
+    (casesQueries[i]?.data ?? []).map((c) => ({ suiteId: suite.id, caseId: c.id }))
+  );
+
+  // 4. All steps for each case (parallel)
+  const stepsQueries = useQueries({
+    queries: casePairs.map(({ suiteId, caseId }) => ({
+      queryKey: keys.steps.all(projectId!, suiteId, caseId),
+      queryFn:  () => testStepsApi.list(projectId!, suiteId, caseId),
+      enabled:  !!projectId && casePairs.length > 0,
+    })),
+  });
 
   const updateDefect = useUpdateDefect();
   const deleteDefect = useDeleteDefect();
@@ -173,12 +212,28 @@ const ReportDetail = () => {
     { name: 'Untested', value: totalUntested, color: COLORS.untested },
   ].filter((d) => d.value > 0);
 
-  // Suite breakdown — placeholder; real data would require suite-level run stats from the API
-  const suiteData = [
-    { suite: 'Authorization',  passed: 18, failed: 1, skipped: 1, untested: 2 },
-    { suite: 'Dashboard',      passed: 14, failed: 1, skipped: 0, untested: 3 },
-    { suite: 'API Integration', passed: 20, failed: 1, skipped: 1, untested: 5 },
-  ];
+  // Suite breakdown — computed from real step statuses (reflects most-recent execution state)
+  const suiteData = useMemo(() => {
+    if (!suites.length) return [];
+    let pairIdx = 0;
+    return suites
+      .map((suite, i) => {
+        const cases = casesQueries[i]?.data ?? [];
+        let passed = 0, failed = 0, skipped = 0, untested = 0;
+        cases.forEach(() => {
+          const steps = (stepsQueries[pairIdx]?.data as Array<{ status?: string }> | undefined) ?? [];
+          pairIdx++;
+          const st = computeCaseStatus(steps);
+          if (st === 'passed')       passed++;
+          else if (st === 'failed')  failed++;
+          else if (st === 'skipped') skipped++;
+          else                       untested++;
+        });
+        return { suite: suite.name, passed, failed, skipped, untested };
+      })
+      .filter((s) => s.passed + s.failed + s.skipped + s.untested > 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suites, casesQueries, stepsQueries]);
 
   const handleDownload = (format: string) => {
     const blob = new Blob([`${report.name} — exported as ${format}`], { type: 'text/plain' });
@@ -191,12 +246,28 @@ const ReportDetail = () => {
     setDownloadOpen(false);
   };
 
+  // Build a full PUT body — backend uses full-replacement PUT, partial bodies cause HTTP 400
+  const buildDefectUpdateBody = (d: Defect, overrides: Partial<Defect>): Partial<Defect> => ({
+    title:       d.title,
+    description: d.description,
+    severity:    d.severity,
+    status:      d.status,
+    source:      d.source ?? '',
+    link:        d.link ?? '',
+    ...(d.createdAt ? { createdAt: d.createdAt } : {}),
+    ...overrides,
+  });
+
   const handleStatusChange = (defectId: string, newStatus: string) => {
-    updateDefect.mutate({ projectId: projectId!, id: defectId, body: { status: newStatus as Defect['status'] } });
+    const d = defects.find((x) => x.id === defectId);
+    if (!d) return;
+    updateDefect.mutate({ projectId: projectId!, id: defectId, body: buildDefectUpdateBody(d, { status: newStatus as Defect['status'] }) });
   };
 
   const handleSeverityChange = (defectId: string, newSeverity: string) => {
-    updateDefect.mutate({ projectId: projectId!, id: defectId, body: { severity: newSeverity as Defect['severity'] } });
+    const d = defects.find((x) => x.id === defectId);
+    if (!d) return;
+    updateDefect.mutate({ projectId: projectId!, id: defectId, body: buildDefectUpdateBody(d, { severity: newSeverity as Defect['severity'] }) });
   };
 
   const handleDeleteDefect = () => {
@@ -216,18 +287,7 @@ const ReportDetail = () => {
   const handleEdit = () => {
     if (editTarget) {
       updateDefect.mutate(
-        {
-          projectId: projectId!,
-          id: editTarget.id,
-          body: {
-            title:       editTarget.title,
-            description: editTarget.description,
-            severity:    editTarget.severity,
-            status:      editTarget.status,
-            source:      editTarget.source,
-            link:        editTarget.link,
-          },
-        },
+        { projectId: projectId!, id: editTarget.id, body: buildDefectUpdateBody(editTarget, {}) },
         { onSuccess: () => setEditOpen(false) }
       );
     }
