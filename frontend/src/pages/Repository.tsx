@@ -1044,17 +1044,25 @@ const Repository = () => {
                       <div className="mb-4">
                         <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Attachments</label>
                         <div className="flex flex-wrap gap-1.5">
-                          {caseAttachments.map((att) => (
-                            <a
-                              key={att.id}
-                              href={`/api/projects/${projectId}/attachments/${att.id}/content`}
-                              download={att.fileName}
-                              className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-0.5 cursor-pointer hover:bg-muted/50 transition-colors group"
-                            >
-                              <FileText className="h-3 w-3 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                              <span className="text-[11px] text-foreground truncate max-w-[120px] group-hover:underline">{att.fileName}</span>
-                            </a>
-                          ))}
+                          {caseAttachments.map((att) => {
+                            const isImage = att.fileType?.startsWith('image/');
+                            return (
+                              <button
+                                key={att.id}
+                                onClick={() => {
+                                  setPreviewAttachment({
+                                    name: att.fileName,
+                                    url: `/api/projects/${projectId}/attachments/${att.id}/view`,
+                                    type: att.fileType || 'application/octet-stream',
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-2.5 py-0.5 cursor-pointer hover:bg-muted/50 transition-colors group"
+                              >
+                                <FileText className="h-3 w-3 text-muted-foreground shrink-0" strokeWidth={1.5} />
+                                <span className="text-[11px] text-foreground truncate max-w-[120px] group-hover:underline">{att.fileName}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1225,7 +1233,7 @@ const Repository = () => {
             <DialogDescription className="sr-only">File preview</DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-center min-h-[300px] rounded-md border border-input bg-muted/30 p-4">
-            {previewAttachment?.type === 'image' ? (
+            {previewAttachment?.type?.startsWith('image/') ? (
               <img src={previewAttachment.url} alt={previewAttachment.name} className="max-w-full max-h-[60vh] object-contain rounded" />
             ) : (
               <div className="text-center space-y-3">
@@ -1237,6 +1245,16 @@ const Repository = () => {
               </div>
             )}
           </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPreviewAttachment(null)}>Close</Button>
+            {previewAttachment && (
+              <a href={previewAttachment.url} download={previewAttachment.name}>
+                <Button className="gap-1.5">
+                  <Download className="h-3.5 w-3.5" /> Download
+                </Button>
+              </a>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

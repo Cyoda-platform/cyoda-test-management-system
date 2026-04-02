@@ -79,6 +79,9 @@ const Attachments = () => {
   const downloadUrl = (att: Attachment) =>
     `${BASE_URL}/projects/${projectId}/attachments/${att.id}/content`;
 
+  const viewUrl = (att: Attachment) =>
+    `${BASE_URL}/projects/${projectId}/attachments/${att.id}/view`;
+
   // ── render ────────────────────────────────────────────────────────────────────
 
   return (
@@ -238,7 +241,7 @@ const Attachments = () => {
           </DialogHeader>
           <div className="flex items-center justify-center min-h-[300px] bg-muted/20 rounded-lg overflow-hidden">
             {previewFile && isPreviewable(previewFile.fileType) ? (
-              <img src={downloadUrl(previewFile)} alt={previewFile.fileName} className="max-w-full max-h-[60vh] object-contain" />
+              <img src={viewUrl(previewFile)} alt={previewFile.fileName} className="max-w-full max-h-[60vh] object-contain" />
             ) : (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <FileText className="h-16 w-16" strokeWidth={1} />
