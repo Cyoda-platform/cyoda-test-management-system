@@ -40,10 +40,12 @@ public class TestRunService {
     }
 
     public TestRunDTO createTestRun(TestRunDTO testRun) {
-        testRun.setStartedAt(LocalDateTime.now());
-        TestRunDTO created = withId(entityService.create(testRun));
-        // Trigger initialize_run workflow transition to activate SnapshotProcessor
-        return withId(entityService.update(created.getId(), created, "initialize_run"));
+        LocalDateTime now = LocalDateTime.now();
+        testRun.setCreatedAt(now);
+        testRun.setStartedAt(now);
+        // Create the test run in "initial" state
+        // Note: initialize_run transition will be called via API when user is ready
+        return withId(entityService.create(testRun));
     }
 
     public Optional<TestRunDTO> getTestRunById(UUID id) {
