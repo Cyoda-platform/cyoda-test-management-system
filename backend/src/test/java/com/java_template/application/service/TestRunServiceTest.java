@@ -53,7 +53,7 @@ public class TestRunServiceTest {
         projectId = UUID.randomUUID();
         testRun = new TestRunDTO();
         testRun.setProjectId(projectId);
-        testRun.setTitle("Test Run 1");
+        testRun.setName("Test Run 1");
         testRun.setEnvironment("STAGING");
     }
 
@@ -61,13 +61,11 @@ public class TestRunServiceTest {
     public void testCreateTestRun() {
         when(entityService.create(any(TestRunDTO.class)))
                 .thenAnswer(inv -> entityWithMetadata(inv.getArgument(0), runId));
-        when(entityService.update(eq(runId), any(TestRunDTO.class), eq("initialize_run")))
-                .thenAnswer(inv -> entityWithMetadata(inv.getArgument(1), runId));
 
         TestRunDTO created = testRunService.createTestRun(testRun);
 
         assertNotNull(created.getId());
-        assertEquals("Test Run 1", created.getTitle());
+        assertEquals("Test Run 1", created.getName());
         assertNotNull(created.getStartedAt());
     }
 
@@ -87,7 +85,7 @@ public class TestRunServiceTest {
     public void testGetTestRunsByProjectId() {
         PageResult<EntityWithMetadata<TestRunDTO>> page =
                 PageResult.of(null, List.of(entityWithMetadata(testRun, runId)), 0, 20, 1);
-        when(entityService.search(any(), any(), eq(TestRunDTO.class), any())).thenReturn(page);
+        when(entityService.findAll(any(), eq(TestRunDTO.class))).thenReturn(page);
 
         var result = testRunService.getTestRunsByProjectId(projectId, 0, 20);
 

@@ -41,7 +41,7 @@ public class TestCaseControllerTest {
         created.setId(caseId);
         created.setProjectId(projectId);
         created.setSuiteId(suiteId);
-        created.setName("Test1");
+        created.setTitle("Test1");
 
         when(testCaseService.createTestCase(any(TestCaseDTO.class))).thenReturn(created);
 
@@ -59,6 +59,6 @@ public class TestCaseControllerTest {
         verify(testCaseService).createTestCase(argThat(testCase ->
                 projectId.equals(testCase.getProjectId())
                         && suiteId.equals(testCase.getSuiteId())
-                        && "Test1".equals(testCase.getName())));
+                        && "Test1".equals(testCase.getTitle())));
     }
 }
