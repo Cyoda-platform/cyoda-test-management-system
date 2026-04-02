@@ -10,6 +10,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.java_template.common.dto.PageResult;
 import java.util.List;
@@ -25,6 +27,7 @@ import java.util.UUID;
 @Tag(name = "Attachments", description = "Attachment management endpoints")
 public class AttachmentController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AttachmentController.class);
     private final AttachmentService attachmentService;
 
     public AttachmentController(AttachmentService attachmentService) {
@@ -115,21 +118,37 @@ public class AttachmentController {
             @PathVariable UUID projectId,
             @PathVariable UUID id) {
         try {
+            logger.info("📸 View attachment request: projectId={}, attachmentId={}", projectId, id);
+
             Optional<AttachmentDTO> meta = attachmentService.getAttachmentById(id)
                     .filter(a -> a.getProjectId().equals(projectId));
-            if (meta.isEmpty()) return ResponseEntity.notFound().build();
-
-            Optional<byte[]> content = attachmentService.getAttachmentContent(id);
-            if (content.isEmpty()) return ResponseEntity.notFound().build();
+            if (meta.isEmpty()) {
+                logger.warn("⚠️  Attachment not found or project mismatch: id={}, projectId={}", id, projectId);
+                return ResponseEntity.notFound().build();
+            }
 
             AttachmentDTO attachment = meta.get();
+            logger.debug("✅ Found attachment metadata: fileName={}, fileType={}, fileSize={}",
+                    attachment.getFileName(), attachment.getFileType(), attachment.getFileSize());
+
+            Optional<byte[]> content = attachmentService.getAttachmentContent(id);
+            if (content.isEmpty()) {
+                logger.warn("⚠️  Could not retrieve content for attachment: id={}", id);
+                return ResponseEntity.notFound().build();
+            }
+
+            byte[] data = content.get();
+            logger.info("✅ Returning attachment for inline view: fileName={}, size={} bytes, contentType={}",
+                    attachment.getFileName(), data.length, attachment.getFileType());
+
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION,
                             "inline; filename=\"" + attachment.getFileName() + "\"")
                     .contentType(MediaType.parseMediaType(
                             attachment.getFileType() != null ? attachment.getFileType() : MediaType.APPLICATION_OCTET_STREAM_VALUE))
-                    .body(content.get());
+                    .body(data);
         } catch (Exception e) {
+            logger.error("❌ Error in view attachment: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
