@@ -1,4 +1,5 @@
 import type { LocalSuite as Suite, LocalCase as TestCase, LocalStep as TestStep } from '@/lib/localTypes';
+import { formatDate } from '@/lib/utils';
 
 // ── Helpers ──
 
@@ -185,7 +186,7 @@ function exportPDF(opts: ExportOptions) {
   @media print { body { margin: 0; } }
 </style></head><body>
 <h1>Test Cases — ${opts.projectName}</h1>
-<div class="meta">Exported on ${new Date().toLocaleDateString()} | ${rows.length} rows</div>
+<div class="meta">Exported on ${formatDate(new Date())} | ${rows.length} rows</div>
 <table><thead><tr>
 <th>Suite</th><th>Case ID</th><th>Title</th><th>Priority</th><th>Description</th>`;
   if (opts.includePreconditions) html += '<th>Pre-Conditions</th>';

@@ -20,6 +20,7 @@ import {
   keys,
 } from '@/hooks/useApi';
 import { testCasesApi, defectsApi, attachmentsApi } from '@/lib/api';
+import { isUuid } from '@/lib/utils';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -114,6 +115,29 @@ const RunExecution = () => {
 
   const allCases = suitesWithCases.flatMap((s) => s.cases);
 
+  /** Returns a human-readable source label for a given case ID. */
+  const getCaseSourceLabel = (caseId: string): string => {
+    for (const suite of suitesWithCases) {
+      const idx = suite.cases.findIndex((c) => c.id === caseId);
+      if (idx !== -1) {
+        const c = suite.cases[idx];
+        if (c.displayId?.trim()) return c.displayId.trim();
+        if (c.shortId?.trim()) return c.shortId.trim();
+        // Derive prefix from suite name (same logic as Repository.tsx)
+        const words = suite.name.match(/[A-Za-z0-9]+/g) ?? [];
+        let prefix = 'TC';
+        if (words.length > 0) {
+          const acronym = words.find((w) => /^[A-Z0-9]{2,4}$/.test(w));
+          if (acronym) prefix = acronym.slice(0, 4);
+          else if (words.length > 1) prefix = words.slice(0, 3).map((w) => w[0]).join('').toUpperCase();
+          else prefix = words[0].slice(0, 3).toUpperCase();
+        }
+        return `${prefix}-${idx + 1}`;
+      }
+    }
+    return isUuid(caseId) ? caseId.slice(0, 8) : caseId;
+  };
+
   // Mutations
   const updateStep     = useUpdateTestStep();
   const completeRun    = useCompleteTestRun();
@@ -180,7 +204,7 @@ const RunExecution = () => {
 
     // Auto-trigger defect modal on 'failed'
     if (status === 'failed') {
-      setDefectContext({ caseId, stepIdx, source: caseId });
+      setDefectContext({ caseId, stepIdx, source: getCaseSourceLabel(caseId) });
       setDefectModalOpen(true);
     }
   };
@@ -220,7 +244,7 @@ const RunExecution = () => {
 
   const handleBugClick = (caseId: string, stepIdx?: number) => {
     if (isReadOnly) return;
-    setDefectContext({ caseId, stepIdx, source: caseId });
+    setDefectContext({ caseId, stepIdx, source: getCaseSourceLabel(caseId) });
     setDefectModalOpen(true);
   };
 

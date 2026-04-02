@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
+import { formatDate } from '@/lib/utils';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -21,13 +22,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1048576).toFixed(1)} MB`;
-}
-
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' });
 }
 
 function fileIconComponent(mimeType: string | null | undefined) {

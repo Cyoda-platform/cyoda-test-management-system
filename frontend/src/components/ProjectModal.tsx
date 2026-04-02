@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
+import { listDisplayId } from '@/lib/utils';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -16,9 +17,10 @@ interface ProjectModalProps {
   initialName?: string;
   initialDescription?: string;
   projectId?: string;
+  projectIndex?: number;
 }
 
-const ProjectModal = ({ open, onClose, onSave, mode, initialName = '', initialDescription = '', projectId }: ProjectModalProps) => {
+const ProjectModal = ({ open, onClose, onSave, mode, initialName = '', initialDescription = '', projectId, projectIndex }: ProjectModalProps) => {
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
 
@@ -63,7 +65,8 @@ const ProjectModal = ({ open, onClose, onSave, mode, initialName = '', initialDe
             <Label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Project ID</Label>
             <div className="relative">
               <Input
-                value={mode === 'edit' ? projectId : 'PROJ-XXXX'}
+                value={mode === 'edit' && projectIndex !== undefined ? listDisplayId('PROJ', projectIndex) : 'PROJ-XXXX'}
+              title={mode === 'edit' ? projectId : undefined}
                 disabled
                 className="bg-secondary pr-10 border-0 font-mono text-xs"
               />

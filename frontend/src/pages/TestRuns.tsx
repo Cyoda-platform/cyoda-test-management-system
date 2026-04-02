@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, ExternalLink, Trash2, Lock, Search, AlertTriangle, Pencil, Loader2 } from 'lucide-react';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useProject, useTestRuns, useUpdateTestRun, useDeleteTestRun } from '@/hooks/useApi';
 import type { TestRun } from '@/lib/api';
+import { listDisplayId } from '@/lib/utils';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const cls = status === 'initial' ? 'badge-status-initial' : status === 'active' ? 'badge-status-active' : 'badge-status-completed';
@@ -59,6 +60,14 @@ const TestRuns = () => {
   // Delete modal
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TestRun | null>(null);
+
+  // Build a stable display-ID map (TR-01, TR-02…) ordered by creation time
+  const runDisplayIdMap = useMemo(() => {
+    const sorted = [...runs].filter(Boolean).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    const map: Record<string, string> = {};
+    sorted.forEach((r, i) => { map[r.id] = listDisplayId('TR', i); });
+    return map;
+  }, [runs]);
 
   const filtered = runs
     .filter((r) => {
@@ -221,7 +230,7 @@ const TestRuns = () => {
               if (!run) return null;
               return (
               <tr key={run.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50">
-                <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">{run.id ?? '-'}</td>
+                <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={run.id ?? undefined}>{runDisplayIdMap[run.id] ?? '-'}</td>
                 <td className="px-5 py-3.5 font-medium text-foreground">
                   <button
                     className="hover:text-primary transition-colors text-left cursor-pointer"

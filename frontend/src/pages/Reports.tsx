@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useProject } from '@/hooks/useApi';
+import { formatDate } from '@/lib/utils';
 
 export interface MockReport {
   id: string;
@@ -126,7 +127,7 @@ const Reports = () => {
                   </span>
                 </td>
                 <td className="px-5 py-3.5 text-muted-foreground">{r.createdBy}</td>
-                <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{r.date}</td>
+                <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(r.date)}</td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-1">
                     <Button
