@@ -20,7 +20,7 @@ import {
   keys,
 } from '@/hooks/useApi';
 import { testCasesApi, defectsApi, attachmentsApi } from '@/lib/api';
-import { isUuid } from '@/lib/utils';
+import { isUuid, listDisplayId } from '@/lib/utils';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -457,7 +457,7 @@ const RunExecution = () => {
                 <div className="px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted/40 rounded-md mb-0.5">
                   {suite.name}
                 </div>
-                {suite.cases.map((tc) => {
+                {suite.cases.map((tc, index) => {
                   const globalIdx = allCases.findIndex((c) => c.id === tc.id);
                   const cStatus = getCaseStatus(tc.id);
                   return (
@@ -470,7 +470,9 @@ const RunExecution = () => {
                     >
                       <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${caseStatusIcon[cStatus]}`} />
                       <div className="flex-1 text-left min-w-0">
-                        <span className="text-[10px] text-muted-foreground font-mono tracking-wider">{tc.id}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono tracking-wider" title={tc.id}>
+                          {listDisplayId('TC', index)}
+                        </span>
                         <p className="text-xs font-medium text-foreground truncate">{tc.title}</p>
                       </div>
                     </button>
@@ -700,8 +702,8 @@ const RunExecution = () => {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">
-                        {d.stepIdx !== undefined ? `Step ${d.stepIdx + 1}` : d.caseId}
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={d.stepIdx === undefined ? d.caseId : ''}>
+                        {d.stepIdx !== undefined ? `Step ${d.stepIdx + 1}` : getCaseSourceLabel(d.caseId)}
                       </td>
                       <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{d.createdAt}</td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
@@ -756,7 +758,7 @@ const RunExecution = () => {
             <DialogDescription className="text-muted-foreground">
               Attach screenshots, logs, or files for{' '}
               {evidenceTarget ? `Step ${(evidenceTarget.stepIdx + 1)}` : ''} of case{' '}
-              {evidenceTarget ? evidenceTarget.caseId : ''}.
+              {evidenceTarget ? getCaseSourceLabel(evidenceTarget.caseId) : ''}.
             </DialogDescription>
           </DialogHeader>
 
