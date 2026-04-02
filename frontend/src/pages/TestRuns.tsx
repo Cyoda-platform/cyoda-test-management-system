@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useProject, useTestRuns, useUpdateTestRun, useDeleteTestRun } from '@/hooks/useApi';
 import type { TestRun } from '@/lib/api';
-import { listDisplayId } from '@/lib/utils';
+import { listDisplayId, formatDate } from '@/lib/utils';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const cls = status === 'initial' ? 'badge-status-initial' : status === 'active' ? 'badge-status-active' : 'badge-status-completed';
@@ -244,7 +244,7 @@ const TestRuns = () => {
                 <td className="px-5 py-3.5">
                   <ProgressBar passed={run.passed ?? 0} failed={run.failed ?? 0} untested={run.untested ?? 0} />
                 </td>
-                <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap text-[10px] font-mono tracking-wider">{run.createdAt ?? '-'}</td>
+                <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap text-[10px] font-mono tracking-wider">{formatDate(run.createdAt)}</td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
