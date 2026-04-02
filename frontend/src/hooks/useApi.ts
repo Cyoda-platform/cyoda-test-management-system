@@ -66,10 +66,10 @@ export const keys = {
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
-export function useProjects(page = 0) {
+export function useProjects(page = 0, size = 10) {
   return useQuery({
     queryKey: keys.projects.list(page),
-    queryFn:  () => projectsApi.list(page),
+    queryFn:  () => projectsApi.list(page, size),
     select:   (res) => res.data,
   });
 }
@@ -322,6 +322,10 @@ export function useTestRuns(projectId: string, page = 0) {
     queryFn:  () => testRunsApi.list(projectId, page),
     enabled:  !!projectId,
     select:   (res) => res.data,
+    // Override global staleTime so the list always re-fetches on mount,
+    // ensuring progress/status reflect changes made inside a run execution.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -330,6 +334,8 @@ export function useTestRun(projectId: string, runId: string) {
     queryKey: keys.runs.detail(projectId, runId),
     queryFn:  () => testRunsApi.get(projectId, runId),
     enabled:  !!projectId && !!runId,
+    // Always fetch fresh so re-entering a run sees latest saved counts
+    staleTime: 0,
   });
 }
 
@@ -465,6 +471,14 @@ export function useDeleteDefect() {
 }
 
 // ── Attachments ───────────────────────────────────────────────────────────────
+
+export function useAttachmentsByCase(projectId: string, caseId: string) {
+  return useQuery({
+    queryKey: ['attachments', projectId, 'case', caseId],
+    queryFn:  () => attachmentsApi.listByCase(projectId, caseId),
+    enabled:  !!projectId && !!caseId,
+  });
+}
 
 export function useAttachments(projectId: string) {
   return useQuery({

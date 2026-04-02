@@ -142,7 +142,7 @@ const Attachments = () => {
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Size</th>
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Type</th>
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Uploaded</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Actions</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -162,7 +162,7 @@ const Attachments = () => {
                         <td className="px-5 py-3.5 text-muted-foreground font-mono text-xs">{formatSize(f.fileSize)}</td>
                         <td className="px-5 py-3.5 text-muted-foreground text-xs truncate max-w-[140px]">{f.fileType ?? '—'}</td>
                         <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(f.uploadedAt)}</td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-3.5 w-px whitespace-nowrap">
                           <div className="flex items-center gap-1">
                             <a href={downloadUrl(f)} download={f.fileName} onClick={e => e.stopPropagation()}>
                               <Button variant="ghost" size="icon" className="h-7 w-7">

@@ -80,6 +80,50 @@ const CreateTestRun = () => {
     setPriorityFilter(next);
   };
 
+  // ── Select-all helpers ───────────────────────────────────────────────────────
+
+  // All cases visible after the priority filter, across every suite
+  const allFilteredCaseIds = suitesWithCases.flatMap((s) =>
+    s.cases.filter((c) => priorityFilter.has(c.priority)).map((c) => c.id)
+  );
+  const allGlobalSelected =
+    allFilteredCaseIds.length > 0 &&
+    allFilteredCaseIds.every((id) => selectedCases.has(id));
+  const someGlobalSelected = allFilteredCaseIds.some((id) => selectedCases.has(id));
+  const globalCheckState: boolean | 'indeterminate' = allGlobalSelected
+    ? true
+    : someGlobalSelected
+    ? 'indeterminate'
+    : false;
+
+  const toggleAllCases = () => {
+    const next = new Set(selectedCases);
+    if (allGlobalSelected) {
+      allFilteredCaseIds.forEach((id) => next.delete(id));
+    } else {
+      allFilteredCaseIds.forEach((id) => next.add(id));
+    }
+    setSelectedCases(next);
+  };
+
+  const toggleSuiteCases = (suiteId: string) => {
+    const suite = suitesWithCases.find((s) => s.id === suiteId);
+    if (!suite) return;
+    const ids = suite.cases
+      .filter((c) => priorityFilter.has(c.priority))
+      .map((c) => c.id);
+    const allInSuiteSelected = ids.length > 0 && ids.every((id) => selectedCases.has(id));
+    const next = new Set(selectedCases);
+    if (allInSuiteSelected) {
+      ids.forEach((id) => next.delete(id));
+    } else {
+      ids.forEach((id) => next.add(id));
+      // Expand the suite so the user can see what was selected
+      setExpandedSuites((prev) => new Set([...prev, suiteId]));
+    }
+    setSelectedCases(next);
+  };
+
   const handleCreate = () => {
     if (!runName.trim()) {
       toast.error('Run name is required');
@@ -206,16 +250,53 @@ const CreateTestRun = () => {
                     <span className="text-sm">Loading test cases…</span>
                   </div>
                 )}
+
+                {/* Global select-all row */}
+                {!suitesLoading && !casesLoading && allFilteredCaseIds.length > 0 && (
+                  <div
+                    className="flex items-center gap-3 px-4 py-2.5 bg-muted/40 hover:bg-muted/60 cursor-pointer transition-colors sticky top-0 z-10"
+                    onClick={toggleAllCases}
+                  >
+                    <Checkbox
+                      checked={globalCheckState}
+                      onCheckedChange={toggleAllCases}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span className="text-xs font-semibold text-foreground flex-1">Select all cases</span>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {selectedCases.size}/{allFilteredCaseIds.length}
+                    </span>
+                  </div>
+                )}
+
                 {!suitesLoading && suitesWithCases.map((suite) => {
                   const filteredCases = suite.cases.filter((c) => priorityFilter.has(c.priority));
                   const isExpanded = expandedSuites.has(suite.id);
                   const selectedInSuite = filteredCases.filter((c) => selectedCases.has(c.id)).length;
+                  const allInSuiteSelected =
+                    filteredCases.length > 0 && filteredCases.every((c) => selectedCases.has(c.id));
+                  const someInSuiteSelected = filteredCases.some((c) => selectedCases.has(c.id));
+                  const suiteCheckState: boolean | 'indeterminate' = allInSuiteSelected
+                    ? true
+                    : someInSuiteSelected
+                    ? 'indeterminate'
+                    : false;
 
                   return (
                     <div key={suite.id}>
-                      <div className="flex items-center gap-2 px-4 py-3 hover:bg-secondary/40 cursor-pointer transition-colors">
+                      <div
+                        className="flex items-center gap-2 px-4 py-3 hover:bg-secondary/40 cursor-pointer transition-colors"
+                        onClick={() => toggleSuiteExpand(suite.id)}
+                      >
+                        {/* Suite-level checkbox */}
+                        <Checkbox
+                          checked={suiteCheckState}
+                          onCheckedChange={() => toggleSuiteCases(suite.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="shrink-0"
+                        />
                         <button
-                          onClick={() => toggleSuiteExpand(suite.id)}
+                          onClick={(e) => { e.stopPropagation(); toggleSuiteExpand(suite.id); }}
                           className="shrink-0 text-muted-foreground hover:text-foreground"
                         >
                           {isExpanded ? (

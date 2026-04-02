@@ -107,7 +107,7 @@ const Reports = () => {
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Type</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created By</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Date</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Actions</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -128,7 +128,7 @@ const Reports = () => {
                 </td>
                 <td className="px-5 py-3.5 text-muted-foreground">{r.createdBy}</td>
                 <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(r.date)}</td>
-                <td className="px-5 py-3.5">
+                <td className="px-5 py-3.5 w-px whitespace-nowrap">
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"

@@ -23,16 +23,18 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const ProgressBar = ({ passed = 0, failed = 0, untested = 0 }: { passed?: number; failed?: number; untested?: number }) => {
+const ProgressBar = ({ passed = 0, failed = 0, skipped = 0, untested = 0 }: { passed?: number; failed?: number; skipped?: number; untested?: number }) => {
   const p = passed ?? 0;
   const f = failed ?? 0;
+  const s = skipped ?? 0;
   const u = untested ?? 0;
-  const total = p + f + u;
+  const total = p + f + s + u;
   if (total === 0) return <div className="h-1.5 rounded-full bg-secondary w-full" />;
   return (
-    <div className="flex h-1.5 rounded-full overflow-hidden w-full bg-secondary" title={`Passed: ${p} | Failed: ${f} | Untested: ${u}`}>
+    <div className="flex h-1.5 rounded-full overflow-hidden w-full bg-secondary" title={`Passed: ${p} | Failed: ${f} | Skipped: ${s} | Untested: ${u}`}>
       {p > 0 && <div className="bg-success" style={{ width: `${(p / total) * 100}%` }} />}
       {f > 0 && <div className="bg-destructive" style={{ width: `${(f / total) * 100}%` }} />}
+      {s > 0 && <div className="bg-warning" style={{ width: `${(s / total) * 100}%` }} />}
       {u > 0 && <div className="bg-muted-foreground/20" style={{ width: `${(u / total) * 100}%` }} />}
     </div>
   );
@@ -98,6 +100,7 @@ const TestRuns = () => {
           environment: editTarget.environment,
           buildVersion: editTarget.buildVersion,
           description: editTarget.description,
+          ...(editTarget.createdAt ? { createdAt: editTarget.createdAt } : {}),
         },
       },
       {
@@ -222,7 +225,7 @@ const TestRuns = () => {
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Status</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-40">Progress</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Actions</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -242,10 +245,10 @@ const TestRuns = () => {
                 <td className="px-5 py-3.5 text-muted-foreground">{run.environment ?? '-'}</td>
                 <td className="px-5 py-3.5"><StatusBadge status={run.status ?? 'initial'} /></td>
                 <td className="px-5 py-3.5">
-                  <ProgressBar passed={run.passed ?? 0} failed={run.failed ?? 0} untested={run.untested ?? 0} />
+                  <ProgressBar passed={run.passed ?? 0} failed={run.failed ?? 0} skipped={run.skipped ?? 0} untested={run.untested ?? 0} />
                 </td>
                 <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap text-[10px] font-mono tracking-wider">{formatDate(run.createdAt)}</td>
-                <td className="px-5 py-3.5">
+                <td className="px-5 py-3.5 w-px whitespace-nowrap">
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
                       onClick={() => navigate(`/projects/${projectId}/runs/${run.id}`)}>
