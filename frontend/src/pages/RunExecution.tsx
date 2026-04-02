@@ -165,33 +165,38 @@ const RunExecution = () => {
     activeCase?.id ?? '',
   );
 
+  // Sort steps by stepNumber to ensure consistent ordering
+  const sortedSteps = useMemo(() =>
+    [...steps].sort((a, b) => (a.stepNumber || 0) - (b.stepNumber || 0)),
+    [steps]
+  );
+
   // Initialise local step-status state from API data when a new case is loaded
   useEffect(() => {
-    if (steps.length > 0 && activeCase) {
+    if (sortedSteps.length > 0 && activeCase) {
       setStepStatuses((prev) => {
         if (prev[activeCase.id]) return prev; // already initialised — keep user changes
-        const initial: StepStatus[] = steps.map((s) => {
+        const initial: StepStatus[] = sortedSteps.map((s) => {
           const v = s.status as StepStatus;
           return ['passed', 'failed', 'skipped'].includes(v) ? v : 'untested';
         });
         return { ...prev, [activeCase.id]: initial };
       });
     }
-  }, [steps, activeCase?.id]);
+  }, [sortedSteps, activeCase?.id]);
 
   const getStepStatuses = (caseId: string): StepStatus[] => {
     return stepStatuses[caseId] || [];
   };
 
-  const setStepStatus = (caseId: string, stepIdx: number, status: StepStatus) => {
+  const setStepStatus = (caseId: string, stepNumber: number, stepId: string, status: StepStatus) => {
     if (isReadOnly) return;
-    const current = stepStatuses[caseId] || Array(steps.length).fill('untested');
+    const current = stepStatuses[caseId] || Array(sortedSteps.length).fill('untested');
     const updated = [...current];
-    updated[stepIdx] = status;
+    updated[stepNumber - 1] = status; // stepNumber is 1-based, array is 0-based
     setStepStatuses({ ...stepStatuses, [caseId]: updated });
 
     // Persist to API
-    const stepId = steps[stepIdx]?.id;
     if (stepId && activeCase) {
       updateStep.mutate({
         projectId: projectId!,
@@ -204,7 +209,7 @@ const RunExecution = () => {
 
     // Auto-trigger defect modal on 'failed'
     if (status === 'failed') {
-      setDefectContext({ caseId, stepIdx, source: getCaseSourceLabel(caseId) });
+      setDefectContext({ caseId, stepIdx: stepNumber - 1, source: getCaseSourceLabel(caseId) });
       setDefectModalOpen(true);
     }
   };
@@ -582,7 +587,7 @@ const RunExecution = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {steps.map((step, sIdx) => {
+                  {sortedSteps.map((step, sIdx) => {
                     const currentStatus = (stepStatuses[activeCase.id] || [])[sIdx] ?? 'untested';
                     const evidenceFiles = getEvidenceFiles(activeCase.id, sIdx);
                     return (
@@ -595,7 +600,7 @@ const RunExecution = () => {
                             {(['untested', 'passed', 'failed', 'skipped'] as StepStatus[]).map((s) => (
                               <button
                                 key={s}
-                                onClick={() => setStepStatus(activeCase.id, sIdx, s)}
+                                onClick={() => setStepStatus(activeCase.id, step.stepNumber, step.id, s)}
                                 disabled={isReadOnly}
                                 className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-medium uppercase tracking-widest transition-colors ${
                                   currentStatus === s ? statusColors[s] : statusOutline[s]
@@ -614,7 +619,7 @@ const RunExecution = () => {
                                 variant="ghost"
                                 size="icon"
                                 className={`h-7 w-7 ${evidenceFiles.length > 0 ? 'text-primary' : 'text-muted-foreground'} ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                onClick={() => handleEvidenceClick(activeCase.id, sIdx)}
+                                onClick={() => handleEvidenceClick(activeCase.id, step.stepNumber - 1)}
                                 disabled={isReadOnly}
                               >
                                 <Paperclip className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -630,7 +635,7 @@ const RunExecution = () => {
                               variant="ghost"
                               size="icon"
                               className={`h-7 w-7 text-muted-foreground hover:text-destructive ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              onClick={() => handleBugClick(activeCase.id, sIdx)}
+                              onClick={() => handleBugClick(activeCase.id, step.stepNumber - 1)}
                               disabled={isReadOnly}
                             >
                               <Bug className="h-3.5 w-3.5" strokeWidth={1.5} />
