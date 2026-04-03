@@ -1,76 +1,76 @@
 import { useState } from 'react';
-import { Plus, Eye, Download, Trash2, AlertTriangle, FileText, Table2 } from 'lucide-react';
+import { Plus, Eye, Download, Trash2, AlertTriangle, FileText, Table2, Loader2 } from 'lucide-react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { useProject } from '@/hooks/useApi';
-import { formatDate } from '@/lib/utils';
-
-export interface MockReport {
-  id: string;
-  name: string;
-  type: 'Summary' | 'Regression' | 'Sprint' | 'Custom';
-  createdBy: string;
-  date: string;
-}
-
+import { useProject, useReports, useDeleteReport } from '@/hooks/useApi';
+import type { Report } from '@/lib/api';
+import { listDisplayId, formatDate } from '@/lib/utils';
+import { toast } from 'sonner';
+import { useMemo } from 'react';
 
 const typeBadge: Record<string, string> = {
-  Summary: 'text-success',
+  Summary:    'text-success',
   Regression: 'text-accent',
-  Sprint: 'text-warning',
-  Custom: 'text-muted-foreground',
+  Sprint:     'text-warning',
+  Custom:     'text-muted-foreground',
 };
 
 const Reports = () => {
   const { projectId } = useParams<{ projectId: string }>();
-  const navigate = useNavigate();
-  const { data: project } = useProject(projectId!);
+  const navigate      = useNavigate();
 
-  const [reports, setReports] = useState<MockReport[]>(() => {
-    const reportsKey = `reports-${projectId}`;
-    const saved = localStorage.getItem(reportsKey);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      } catch {
-        // ignore parse errors
-      }
-    }
-    return [];
-  });
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<MockReport | null>(null);
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const [downloadTarget, setDownloadTarget] = useState<MockReport | null>(null);
+  const { data: project }                              = useProject(projectId!);
+  const { data: reports = [], isLoading, isError }     = useReports(projectId!);
+  const deleteReport                                   = useDeleteReport();
+
+  const [deleteOpen,   setDeleteOpen]   = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Report | null>(null);
+  const [downloadOpen,   setDownloadOpen]   = useState(false);
+  const [downloadTarget, setDownloadTarget] = useState<Report | null>(null);
+
+  // Stable display-ID map (REP-01, REP-02…) ordered by creation time
+  const reportDisplayIdMap = useMemo(() => {
+    const sorted = [...reports].sort((a, b) =>
+      (a.createdAt ?? '').localeCompare(b.createdAt ?? '')
+    );
+    const map: Record<string, string> = {};
+    sorted.forEach((r, i) => { map[r.id] = listDisplayId('REP', i); });
+    return map;
+  }, [reports]);
 
   const handleDelete = () => {
-    if (deleteTarget) {
-      setReports((prev) => {
-        const filtered = prev.filter((r) => r.id !== deleteTarget.id);
-        localStorage.setItem(`reports-${projectId}`, JSON.stringify(filtered));
-        return filtered;
-      });
-      setDeleteOpen(false);
-      setDeleteTarget(null);
-    }
+    if (!deleteTarget) return;
+    deleteReport.mutate(
+      { projectId: projectId!, id: deleteTarget.id },
+      {
+        onSuccess: () => {
+          toast.success('Report deleted');
+          setDeleteOpen(false);
+          setDeleteTarget(null);
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
   };
 
   const handleDownload = (format: string) => {
-    if (downloadTarget) {
-      const blob = new Blob([`${downloadTarget.name} — exported as ${format}`], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${downloadTarget.name.replace(/\s+/g, '_')}.${format.toLowerCase()}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setDownloadOpen(false);
-      setDownloadTarget(null);
-    }
+    if (!downloadTarget) return;
+    const blob = new Blob([`${downloadTarget.name} — exported as ${format}`], { type: 'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${downloadTarget.name.replace(/\s+/g, '_')}.${format.toLowerCase()}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setDownloadOpen(false);
+    setDownloadTarget(null);
   };
+
+  const sorted = [...reports].sort((a, b) =>
+    (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -97,73 +97,77 @@ const Reports = () => {
             </div>
           </div>
 
+          {/* Loading */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading reports…</span>
+            </div>
+          )}
+
+          {/* Error */}
+          {isError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 text-destructive px-5 py-4 text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+              Failed to load reports.
+            </div>
+          )}
+
           {/* Table */}
-          <div className="bg-card rounded-lg shadow-soft overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-slate-200 dark:bg-slate-700 sticky top-0 z-10">
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">ID</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Report Name</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Type</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created By</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Date</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...reports].sort((a, b) => b.date.localeCompare(a.date)).map((r) => (
-              <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card">
-                <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">{r.id}</td>
-                <td className="px-5 py-3.5 font-medium text-foreground">
-                  <Link
-                    to={`/projects/${projectId}/reports/${r.id}`}
-                  >
-                    {r.name}
-                  </Link>
-                </td>
-                <td className="px-5 py-3.5">
-                  <span className={`${typeBadge[r.type] || 'text-muted-foreground'} text-[10px] px-2.5 py-0.5 font-mono uppercase tracking-widest inline-flex items-center gap-1`}>
-                    {r.type}
-                  </span>
-                </td>
-                <td className="px-5 py-3.5 text-muted-foreground">{r.createdBy}</td>
-                <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(r.date)}</td>
-                <td className="px-5 py-3.5 w-px whitespace-nowrap">
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => navigate(`/projects/${projectId}/reports/${r.id}`)}
-                    >
-                      <Eye className="h-4 w-4" strokeWidth={1.5} />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => { setDownloadTarget(r); setDownloadOpen(true); }}
-                    >
-                      <Download className="h-4 w-4" strokeWidth={1.5} />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }}
-                    >
-                      <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {reports.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No reports yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-          </div>
+          {!isLoading && !isError && (
+            <div className="bg-card rounded-lg shadow-soft overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-200 dark:bg-slate-700 sticky top-0 z-10">
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">ID</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Report Name</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Type</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created By</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((r) => (
+                    <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card">
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider">{reportDisplayIdMap[r.id] ?? '—'}</td>
+                      <td className="px-5 py-3.5 font-medium text-foreground">
+                        <Link to={`/projects/${projectId}/reports/${r.id}`} className="hover:underline">
+                          {r.name}
+                        </Link>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`${typeBadge[r.type] || 'text-muted-foreground'} text-[10px] px-2.5 py-0.5 font-mono uppercase tracking-widest inline-flex items-center gap-1`}>
+                          {r.type}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-muted-foreground">{r.createdBy || '—'}</td>
+                      <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(r.createdAt)}</td>
+                      <td className="px-5 py-3.5 w-px whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => navigate(`/projects/${projectId}/reports/${r.id}`)}>
+                            <Eye className="h-4 w-4" strokeWidth={1.5} />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => { setDownloadTarget(r); setDownloadOpen(true); }}>
+                            <Download className="h-4 w-4" strokeWidth={1.5} />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }}>
+                            <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {sorted.length === 0 && (
+                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No reports yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
@@ -181,12 +185,12 @@ const Reports = () => {
           </DialogHeader>
           <DialogFooter className="mt-6">
             <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleteReport.isPending}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Download format picker */}
+      {/* Export format picker */}
       <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}>
         <DialogContent className="sm:max-w-sm bg-card rounded-xl">
           <DialogHeader>
@@ -194,18 +198,14 @@ const Reports = () => {
             <DialogDescription>Choose a format for <span className="font-semibold text-foreground">{downloadTarget?.name}</span></DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 py-2">
-            <button
-              onClick={() => handleDownload('pdf')}
-              className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors"
-            >
+            <button onClick={() => handleDownload('pdf')}
+              className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors">
               <FileText className="h-8 w-8 text-accent" strokeWidth={1.5} />
               <span className="text-sm font-medium text-foreground">PDF</span>
               <span className="text-[10px] text-muted-foreground">Visual summary with charts</span>
             </button>
-            <button
-              onClick={() => handleDownload('csv')}
-              className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors"
-            >
+            <button onClick={() => handleDownload('csv')}
+              className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors">
               <Table2 className="h-8 w-8 text-accent" strokeWidth={1.5} />
               <span className="text-sm font-medium text-foreground">Excel / CSV</span>
               <span className="text-[10px] text-muted-foreground">Raw data table export</span>

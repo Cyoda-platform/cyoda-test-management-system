@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Download, FileText, Table2, ExternalLink, Trash2, AlertTriangle, Eye, Pencil } from 'lucide-react';
-import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useSuites, keys } from '@/hooks/useApi';
+import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useSuites, useReport, keys } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
 import { testCasesApi, testStepsApi } from '@/lib/api';
 import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
@@ -17,57 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
 } from 'recharts';
 
-interface ReportSections {
-  executiveSummary: boolean;
-  suiteAnalytics: boolean;
-  defectTable: boolean;
-  environmentInfo: boolean;
-}
-
-interface ReportMeta {
-  id: string;
-  name: string;
-  type: string;
-  createdBy: string;
-  date: string;
-  summary?: string;
-  sections: ReportSections;
-  linkedRuns?: string[];    // hardcoded fallback format
-  selectedRuns?: string[];  // saved by CreateReport
-  description?: string;
-  dateFrom?: string;
-  dateTo?: string;
-}
-
-const reportData: Record<string, ReportMeta> = {
-  'REP-01': {
-    name: 'Weekly Regression - Week 12',
-    type: 'Regression',
-    createdBy: 'admin',
-    date: '2026-03-20',
-    summary: 'Full regression cycle covering 57 test cases across Authorization, Dashboard, and API Integration suites. 52 passed, 3 failed, 2 skipped.',
-    sections: { executiveSummary: true, suiteAnalytics: true, defectTable: true, environmentInfo: true },
-    linkedRuns: ['TR-01', 'TR-02'],
-  },
-  'REP-02': {
-    name: 'Sprint 11 Summary',
-    type: 'Sprint',
-    createdBy: 'qa_lead',
-    date: '2026-03-14',
-    summary: 'Sprint 11 release validation. All critical paths verified against acceptance criteria.',
-    sections: { executiveSummary: true, suiteAnalytics: false, defectTable: false, environmentInfo: true },
-    linkedRuns: ['TR-02'],
-  },
-  'REP-03': {
-    name: 'Security Audit Report',
-    type: 'Custom',
-    createdBy: 'admin',
-    date: '2026-03-05',
-    summary: 'SOC2 compliance audit tracking. Penetration tests and vulnerability scans completed.',
-    sections: { executiveSummary: true, suiteAnalytics: true, defectTable: true, environmentInfo: false },
-    linkedRuns: ['TR-03', 'TR-04'],
-  },
-};
+import type { Report } from '@/lib/api';
 
 const typeBadge: Record<string, string> = {
   Summary: 'text-success',
@@ -157,21 +107,8 @@ const ReportDetail = () => {
     return map;
   }, [defects]);
 
-  // Load report config: try localStorage first, fall back to hardcoded reportData
-  const report = useMemo<ReportMeta | null>(() => {
-    const key = `reports-${projectId}`;
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved) {
-        const parsed = JSON.parse(saved) as ReportMeta[];
-        const found = parsed.find((r) => r.id === reportId);
-        if (found) return found;
-      }
-    } catch {}
-    // fallback to hardcoded data for the pre-seeded sample reports
-    const fallback = (reportData as Record<string, Omit<ReportMeta, 'id'>>)[reportId ?? ''];
-    return fallback ? ({ ...fallback, id: reportId! }) : null;
-  }, [projectId, reportId]);
+  // Load report from API
+  const { data: report, isLoading: reportLoading } = useReport(projectId!, reportId!);
 
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -179,6 +116,14 @@ const ReportDetail = () => {
   const [viewOpen, setViewOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Defect | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+
+  if (reportLoading) {
+    return (
+      <div className="h-full flex items-center justify-center text-muted-foreground">
+        <p>Loading report…</p>
+      </div>
+    );
+  }
 
   if (!report) {
     return (
@@ -188,8 +133,8 @@ const ReportDetail = () => {
     );
   }
 
-  // Linked runs — support both field names written by CreateReport vs hardcoded reportData
-  const linkedRunIds: string[] = report.selectedRuns ?? report.linkedRuns ?? [];
+  // Linked runs
+  const linkedRunIds: string[] = report.selectedRuns ?? [];
   const linkedRuns = linkedRunIds.length > 0
     ? allRuns.filter((r) => linkedRunIds.includes(r.id))
     : allRuns;
@@ -326,7 +271,7 @@ const ReportDetail = () => {
         <div className="w-full max-w-[1200px] space-y-6 pb-20">
 
           {/* Executive Summary */}
-          {report.sections.executiveSummary && (
+          {report.sectionExecutiveSummary && (
             <div className="bg-card rounded-xl border border-border/40 shadow-sm overflow-hidden">
               <div className="px-5 py-3.5 border-b border-border/40">
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Executive Summary</h2>
@@ -430,7 +375,7 @@ const ReportDetail = () => {
           )}
 
           {/* Environment Info */}
-          {report.sections.environmentInfo && linkedRuns.length > 0 && (
+          {report.sectionEnvironmentInfo && linkedRuns.length > 0 && (
             <div className="bg-card rounded-xl border border-border/40 shadow-sm overflow-hidden">
               <div className="px-5 py-3.5 border-b border-border/40">
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Environment Details</h2>
@@ -456,7 +401,7 @@ const ReportDetail = () => {
                   <div className="bg-background rounded-lg border border-border/40 p-4">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Created By</p>
                     <p className="text-sm font-medium text-foreground">{report.createdBy}</p>
-                    <p className="text-[10px] text-muted-foreground font-mono mt-1">{report.date}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono mt-1">{formatDate(report.createdAt)}</p>
                   </div>
                 </div>
               </div>
@@ -464,7 +409,7 @@ const ReportDetail = () => {
           )}
 
           {/* Suite Analysis */}
-          {report.sections.suiteAnalytics && (
+          {report.sectionSuiteAnalytics && (
             <div className="bg-card rounded-xl border border-border/40 shadow-sm overflow-hidden">
               <div className="px-5 py-3.5 border-b border-border/40">
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Suite Analysis</h2>
@@ -506,7 +451,7 @@ const ReportDetail = () => {
           )}
 
           {/* Defect Table */}
-          {report.sections.defectTable && (
+          {report.sectionDefectTable && (
             <div className="bg-card rounded-lg shadow-soft overflow-hidden">
               <table className="w-full text-sm">
                 <thead>

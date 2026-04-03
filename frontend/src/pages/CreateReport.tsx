@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PieChart, BarChart3, Bug, Server } from 'lucide-react';
 import { toast } from 'sonner';
-import { useProject, useTestRuns } from '@/hooks/useApi';
+import { useProject, useTestRuns, useCreateReport } from '@/hooks/useApi';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -23,8 +23,9 @@ const sectionOptions = [
 const CreateReport = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { data: project } = useProject(projectId!);
+  const { data: project }  = useProject(projectId!);
   const { data: runs = [] } = useTestRuns(projectId!);
+  const createReport        = useCreateReport();
 
   const [reportName, setReportName] = useState('');
   const [reportType, setReportType] = useState<string>('Summary');
@@ -57,33 +58,31 @@ const CreateReport = () => {
       return;
     }
 
-    // Get existing reports to generate next ID
-    const reportsKey = `reports-${projectId}`;
-    const existingReports = JSON.parse(localStorage.getItem(reportsKey) || '[]');
-
-    // Generate next sequential ID (REP-04, REP-05, etc.)
-    const nextNumber = (existingReports.length + 1).toString().padStart(2, '0');
-    const newId = `REP-${nextNumber}`;
-
-    // Create new report object
-    const newReport = {
-      id: newId,
-      name: reportName.trim(),
-      type: reportType,
-      createdBy: 'current_user',
-      date: new Date().toISOString().split('T')[0],
-      description,
-      dateFrom,
-      dateTo,
-      selectedRuns: Array.from(selectedRuns),
-      sections,
-    };
-
-    // Add new report to existing ones
-    localStorage.setItem(reportsKey, JSON.stringify([...existingReports, newReport]));
-
-    toast.success(`Report "${reportName}" created`);
-    navigate(`/projects/${projectId}/reports`);
+    createReport.mutate(
+      {
+        projectId: projectId!,
+        body: {
+          name:                    reportName.trim(),
+          type:                    reportType as 'Summary' | 'Regression' | 'Sprint' | 'Custom',
+          description,
+          createdBy:               'current_user',
+          dateFrom:                dateFrom || undefined,
+          dateTo:                  dateTo   || undefined,
+          selectedRuns:            Array.from(selectedRuns),
+          sectionExecutiveSummary: sections.executiveSummary,
+          sectionSuiteAnalytics:   sections.suiteAnalytics,
+          sectionDefectTable:      sections.defectTable,
+          sectionEnvironmentInfo:  sections.environmentInfo,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Report "${reportName}" created`);
+          navigate(`/projects/${projectId}/reports`);
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
   };
 
   return (
@@ -198,8 +197,9 @@ const CreateReport = () => {
           size="sm"
           className="bg-primary text-primary-foreground hover:bg-primary/90 border-0 px-6"
           onClick={handleCreate}
+          disabled={createReport.isPending}
         >
-          Create Report
+          {createReport.isPending ? 'Creating…' : 'Create Report'}
         </Button>
       </div>
     </div>

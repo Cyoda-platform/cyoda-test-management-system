@@ -1,0 +1,17 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440020",
+  "projectId": "550e8400-e29b-41d4-a716-446655440001",
+  "name": "Weekly Regression - Week 12",
+  "type": "Regression",
+  "description": "Full regression cycle covering all test suites.",
+  "createdBy": "admin",
+  "dateFrom": "",
+  "dateTo": "",
+  "selectedRuns": [],
+  "sectionExecutiveSummary": true,
+  "sectionSuiteAnalytics": true,
+  "sectionDefectTable": true,
+  "sectionEnvironmentInfo": true,
+  "createdAt": "2026-03-20T10:00:00",
+  "updatedAt": "2026-03-20T10:00:00"
+}

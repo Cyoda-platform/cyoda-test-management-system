@@ -1,0 +1,68 @@
+{
+  "version": "1",
+  "name": "Report",
+  "description": "Workflow for QA report lifecycle within a project",
+  "initialState": "initial",
+  "active": true,
+  "states": {
+    "initial": {
+      "transitions": [
+        {
+          "name": "create_report",
+          "description": "Creates a new report for a project",
+          "manual": true,
+          "next": "active",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "active": {
+      "transitions": [
+        {
+          "name": "update_report",
+          "description": "Updates report metadata or linked runs",
+          "manual": true,
+          "next": "active",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        },
+        {
+          "name": "delete_report",
+          "description": "Removes the report",
+          "manual": true,
+          "next": "deleted",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireTesterOrAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "deleted": {
+      "transitions": []
+    }
+  }
+}
