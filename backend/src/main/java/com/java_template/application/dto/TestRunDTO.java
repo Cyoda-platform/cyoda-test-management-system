@@ -31,6 +31,10 @@ public class TestRunDTO implements CyodaEntity {
     // projectId is always set from the URL path parameter — never sent in the request body
     private UUID projectId;
 
+    /** Human-readable, stable identifier (e.g. "TR-01"). Generated on creation and never recomputed from list position. */
+    @Size(max = 50, message = "Display ID must not exceed 50 characters")
+    private String displayId;
+
     @NotBlank(message = "Test run name is required")
     @Size(max = 255, message = "Name must not exceed 255 characters")
     private String name;

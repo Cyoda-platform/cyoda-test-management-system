@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useProject, useSuites, useCreateTestRun, keys } from '@/hooks/useApi';
+import { useProject, useSuites, useTestRuns, useCreateTestRun, keys } from '@/hooks/useApi';
 import { testCasesApi } from '@/lib/api';
-import { listDisplayId } from '@/lib/utils';
+import { nextListDisplayId } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -22,6 +22,7 @@ const CreateTestRun = () => {
   // Live data
   const { data: project } = useProject(projectId!);
   const { data: suites = [], isLoading: suitesLoading } = useSuites(projectId!);
+  const { data: existingRuns = [] } = useTestRuns(projectId!);
   const createTestRun = useCreateTestRun();
 
   // Fetch cases for every suite in parallel
@@ -30,7 +31,7 @@ const CreateTestRun = () => {
       queryKey: keys.cases.all(projectId!, suite.id),
       queryFn:  () => testCasesApi.list(projectId!, suite.id),
       enabled:  !!projectId && suites.length > 0,
-      select:   (res: { data: Array<{ id: string; title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; suiteId: string; projectId: string; description: string; preconditions: string; deleted: boolean }> }) => res.data,
+      select:   (res: { data: Array<{ id: string; displayId?: string; title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; suiteId: string; projectId: string; description: string; preconditions: string; deleted: boolean }> }) => res.data,
     })),
   });
 
@@ -142,6 +143,7 @@ const CreateTestRun = () => {
           environment,
           buildVersion,
           description,
+          displayId: nextListDisplayId('TR', existingRuns),
           status: 'initial',
           passed: 0,
           failed: 0,
@@ -313,7 +315,7 @@ const CreateTestRun = () => {
 
                       {isExpanded && (
                         <div className="divide-y divide-border/40">
-                          {filteredCases.map((tc, index) => (
+                          {filteredCases.map((tc) => (
                             <div
                               key={tc.id}
                               onClick={() => toggleCaseSelect(tc.id)}
@@ -325,7 +327,7 @@ const CreateTestRun = () => {
                                 onClick={(e) => e.stopPropagation()}
                               />
                               <span className="text-[10px] font-mono text-muted-foreground w-12 shrink-0" title={tc.id}>
-                                {listDisplayId('TC', index)}
+                                {tc.displayId ?? tc.id.slice(0, 8)}
                               </span>
                               <span className="text-sm text-foreground flex-1 truncate">{tc.title}</span>
                             </div>

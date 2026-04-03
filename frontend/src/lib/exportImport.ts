@@ -29,6 +29,7 @@ interface ExportOptions {
 interface FlatCase {
   suiteId: string;
   suiteName: string;
+  /** Human-readable stable ID (displayId if set, UUID fallback). Used as Case_ID in exports. */
   caseId: string;
   title: string;
   priority: string;
@@ -43,11 +44,12 @@ function flattenCases(suites: Suite[], includeSteps: boolean, includePreconditio
   const rows: FlatCase[] = [];
   for (const suite of suites) {
     for (const tc of suite.cases.filter(c => !c.deleted)) {
+      const caseId = tc.displayId || tc.id;
       if (includeSteps && tc.steps.length > 0) {
         for (const step of tc.steps) {
           rows.push({
             suiteId: suite.id, suiteName: suite.name,
-            caseId: tc.id, title: tc.title, priority: tc.priority,
+            caseId, title: tc.title, priority: tc.priority,
             description: tc.description,
             preconditions: includePreconditions ? tc.preconditions : '',
             stepOrder: step.order, stepAction: step.action, stepExpected: step.expectedResult,
@@ -56,7 +58,7 @@ function flattenCases(suites: Suite[], includeSteps: boolean, includePreconditio
       } else {
         rows.push({
           suiteId: suite.id, suiteName: suite.name,
-          caseId: tc.id, title: tc.title, priority: tc.priority,
+          caseId, title: tc.title, priority: tc.priority,
           description: tc.description,
           preconditions: includePreconditions ? tc.preconditions : '',
           stepOrder: '', stepAction: '', stepExpected: '',
@@ -100,7 +102,7 @@ function exportJSON(opts: ExportOptions) {
     suiteName: s.name,
     cases: s.cases.filter(c => !c.deleted).map(tc => {
       const c: Record<string, unknown> = {
-        id: tc.id, title: tc.title, priority: tc.priority, description: tc.description,
+        id: tc.displayId || tc.id, title: tc.title, priority: tc.priority, description: tc.description,
       };
       if (opts.includePreconditions) c.preconditions = tc.preconditions;
       if (opts.includeSteps) c.steps = tc.steps.map(st => ({ order: st.order, action: st.action, expectedResult: st.expectedResult }));
@@ -121,7 +123,7 @@ function exportXML(opts: ExportOptions) {
   for (const suite of opts.suites) {
     xml += `  <Suite id="${escapeXML(suite.id)}" name="${escapeXML(suite.name)}">\n`;
     for (const tc of suite.cases.filter(c => !c.deleted)) {
-      xml += `    <TestCase id="${escapeXML(tc.id)}" priority="${tc.priority}">\n`;
+      xml += `    <TestCase id="${escapeXML(tc.displayId || tc.id)}" priority="${tc.priority}">\n`;
       xml += `      <Title>${escapeXML(tc.title)}</Title>\n`;
       xml += `      <Description>${escapeXML(tc.description)}</Description>\n`;
       if (opts.includePreconditions) xml += `      <PreConditions>${escapeXML(tc.preconditions)}</PreConditions>\n`;
@@ -426,9 +428,13 @@ export async function performImport(
     actualTargetId = newSuiteId;
   }
 
-  // Build a map of existing case IDs across all suites
+  // Build a map of existing cases indexed by both UUID and displayId so that
+  // re-importing an exported file (which uses displayId as Case_ID) still detects duplicates.
   const existingMap = new Map<string, { suiteIdx: number; caseIdx: number }>();
-  updatedSuites.forEach((s, si) => s.cases.forEach((c, ci) => existingMap.set(c.id, { suiteIdx: si, caseIdx: ci })));
+  updatedSuites.forEach((s, si) => s.cases.forEach((c, ci) => {
+    existingMap.set(c.id, { suiteIdx: si, caseIdx: ci });
+    if (c.displayId) existingMap.set(c.displayId, { suiteIdx: si, caseIdx: ci });
+  }));
 
   for (const pc of parsed) {
     if (!pc.title) continue;

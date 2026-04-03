@@ -204,6 +204,7 @@ export const testStepsApi = {
 
 export interface TestRun {
   id: string;
+  displayId?: string;
   projectId: string;
   name: string;
   environment: string;
@@ -238,6 +239,7 @@ export const testRunsApi = {
 
 export interface Defect {
   id: string;
+  displayId?: string;
   projectId: string;
   title: string;
   description: string;
@@ -272,6 +274,7 @@ export interface ReportSections {
 
 export interface Report {
   id: string;
+  displayId?: string;
   projectId: string;
   name: string;
   type: 'Summary' | 'Regression' | 'Sprint' | 'Custom';

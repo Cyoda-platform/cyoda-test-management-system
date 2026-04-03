@@ -30,13 +30,14 @@ const Reports = () => {
   const [downloadOpen,   setDownloadOpen]   = useState(false);
   const [downloadTarget, setDownloadTarget] = useState<Report | null>(null);
 
-  // Stable display-ID map (REP-01, REP-02…) ordered by creation time
+  // Stable display-ID map: prefer the persisted displayId, fall back to
+  // position-based generation only for legacy records that predate the fix.
   const reportDisplayIdMap = useMemo(() => {
     const sorted = [...reports].sort((a, b) =>
       (a.createdAt ?? '').localeCompare(b.createdAt ?? '')
     );
     const map: Record<string, string> = {};
-    sorted.forEach((r, i) => { map[r.id] = listDisplayId('REP', i); });
+    sorted.forEach((r, i) => { map[r.id] = r.displayId || listDisplayId('REP', i); });
     return map;
   }, [reports]);
 
