@@ -92,7 +92,13 @@ service:
 ingress:
   enabled: true
   className: "nginx"
-  annotations: {}
+  annotations:
+    # Allow uploads up to 150MB (raw multipart body; Spring Boot limit is 100MB + envelope overhead)
+    nginx.ingress.kubernetes.io/proxy-body-size: "150m"
+    # Extended timeouts for large file transfers
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "120"
   path: /
   pathType: Prefix
   tls: []

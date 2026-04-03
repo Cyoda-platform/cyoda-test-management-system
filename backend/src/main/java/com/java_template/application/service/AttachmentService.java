@@ -74,19 +74,19 @@ public class AttachmentService {
         attachment.setFileSize(fileSizeBytes);
         attachment.setUploadedAt(java.time.LocalDateTime.now());
 
-        // Store METADATA only in EdgeMessage (NOT the file content)
-        // This avoids Nginx 413 PAYLOAD_TOO_LARGE errors
+        // Store file content + metadata in EdgeMessage.
+        // Nginx is configured with proxy-body-size: 150m and Spring Boot multipart limits are 100MB,
+        // so uploads up to 100MB are supported end-to-end.
         try {
-            logger.info("📝 Creating EdgeMessage metadata for file '{}'...", file.getOriginalFilename());
+            logger.info("📝 Creating EdgeMessage with file content for '{}'...", file.getOriginalFilename());
 
-            // Create EdgeMessage with metadata ONLY - NO file content
             ObjectNode content = objectMapper.createObjectNode();
             content.put("fileName", file.getOriginalFilename());
             content.put("fileType", file.getContentType());
             content.put("fileSize", fileSizeBytes);
             content.put("uploadedAt", attachment.getUploadedAt().toString());
-            // NOTE: We do NOT include "data" field with base64-encoded file content
-            // This avoids Nginx 413 PAYLOAD_TOO_LARGE errors and Cyoda DEADLINE_EXCEEDED
+            // Base64-encode file bytes so the binary content travels safely as JSON through gRPC
+            content.put("data", Base64.getEncoder().encodeToString(file.getBytes()));
 
             ObjectNode metadata = objectMapper.createObjectNode();
             metadata.put("projectId", projectId.toString());
@@ -95,12 +95,12 @@ public class AttachmentService {
 
             UUID messageId = edgeMessageService.createMessage(EDGE_MESSAGE_SUBJECT, content, metadata);
             attachment.setMessageId(messageId);
-            logger.info("✅ Successfully created EdgeMessage metadata for file '{}': {} (size: {}KB)",
+            logger.info("✅ EdgeMessage created for file '{}': messageId={} (size: {}KB)",
                     file.getOriginalFilename(), messageId, fileSizeBytes / 1024);
         } catch (Exception e) {
-            logger.error("❌ EdgeMessage metadata creation failed for file '{}': {}",
+            logger.error("❌ EdgeMessage creation failed for file '{}': {}",
                     file.getOriginalFilename(), e.getMessage());
-            logger.warn("⚠️  Will proceed without EdgeMessage reference (metadata will be in entity only)");
+            logger.warn("⚠️  Will proceed without EdgeMessage reference (metadata stored in entity only — view/download will not work)");
         }
 
         logger.info("💾 Creating Attachment entity in Cyoda...");
