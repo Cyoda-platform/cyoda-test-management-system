@@ -61,6 +61,23 @@ const formatCaseDisplayId = ({
   return `${buildSuitePrefix(suiteName)}-${caseIndex + 1}`;
 };
 
+/**
+ * Generates the next stable display ID for a new test case in a suite.
+ * Reads the highest sequential number from existing displayIds so the new ID
+ * is unique and independent of list position.
+ */
+const buildNextDisplayId = (suiteId: string, suiteName: string, currentSuites: Suite[]): string => {
+  const suite = currentSuites.find(s => s.id === suiteId);
+  const prefix = buildSuitePrefix(suiteName);
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^${escapedPrefix}-(\\d+)$`);
+  const maxNum = (suite?.cases ?? []).reduce((max, c) => {
+    const m = (c.displayId ?? '').match(pattern);
+    return m ? Math.max(max, parseInt(m[1], 10)) : max;
+  }, 0);
+  return `${prefix}-${maxNum + 1}`;
+};
+
 const getCaseDisplayId = (testCase: Pick<TestCase, 'id' | 'displayId'>) => testCase.displayId || testCase.id;
 
 const Repository = () => {
@@ -306,15 +323,32 @@ const Repository = () => {
   const handleBulkCopy = async () => {
     if (!projectId) return;
     try {
-      await Promise.all([...selectedCases].map(caseId => {
+      // Track per-suite counters so simultaneous copies within a suite get unique IDs
+      const suiteCounters: Record<string, { prefix: string; next: number }> = {};
+      const getNextId = (suite: Suite) => {
+        if (!suiteCounters[suite.id]) {
+          const prefix = buildSuitePrefix(suite.name);
+          const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const pattern = new RegExp(`^${escapedPrefix}-(\\d+)$`);
+          const maxNum = suite.cases.reduce((max, c) => {
+            const m = (c.displayId ?? '').match(pattern);
+            return m ? Math.max(max, parseInt(m[1], 10)) : max;
+          }, 0);
+          suiteCounters[suite.id] = { prefix, next: maxNum + 1 };
+        }
+        const counter = suiteCounters[suite.id];
+        return `${counter.prefix}-${counter.next++}`;
+      };
+      for (const caseId of selectedCases) {
         const suite = suites.find(s => s.cases.some(c => c.id === caseId));
         const tc = suite?.cases.find(c => c.id === caseId);
-        if (!suite || !tc) return Promise.resolve();
-        return testCasesApi.create(projectId, suite.id, {
+        if (!suite || !tc) continue;
+        await testCasesApi.create(projectId, suite.id, {
           title: `${tc.title} (Copy)`, priority: tc.priority,
           description: tc.description, preconditions: tc.preconditions,
+          displayId: getNextId(suite),
         });
-      }));
+      }
       suites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
       toast.success(`Duplicated ${selectedCases.size} case(s)`);
       clearSelection();
@@ -474,6 +508,24 @@ const Repository = () => {
       const targetId = importSuiteTarget === 'root' ? '__new__' : importSuiteTarget;
       const { updatedSuites, result } = await performImport(importFile, targetId, importConflict, suites, projectId);
       const affectedSuiteIds = new Set<string>();
+      // Per-suite counters so multiple cases imported into the same suite each get a unique displayId
+      const importCounters: Record<string, { prefix: string; next: number }> = {};
+      const getImportDisplayId = (resolvedSuiteId: string, suiteName: string) => {
+        if (!importCounters[resolvedSuiteId]) {
+          const prefix = buildSuitePrefix(suiteName);
+          const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const pattern = new RegExp(`^${escapedPrefix}-(\\d+)$`);
+          const existingSuite = suites.find(s => s.id === resolvedSuiteId);
+          const maxNum = (existingSuite?.cases ?? []).reduce((max, c) => {
+            const m = (c.displayId ?? '').match(pattern);
+            return m ? Math.max(max, parseInt(m[1], 10)) : max;
+          }, 0);
+          importCounters[resolvedSuiteId] = { prefix, next: maxNum + 1 };
+        }
+        const counter = importCounters[resolvedSuiteId];
+        return `${counter.prefix}-${counter.next++}`;
+      };
+
       // Persist parsed cases to the backend
       for (const suite of updatedSuites) {
         const existing = suites.find(s => s.id === suite.id);
@@ -488,9 +540,11 @@ const Repository = () => {
         }
         affectedSuiteIds.add(suiteId);
         for (const tc of newCases) {
+          const importedDisplayId = getImportDisplayId(suiteId, suite.name);
           const created = await testCasesApi.create(projectId, suiteId, {
             title: tc.title, priority: tc.priority,
             description: tc.description, preconditions: tc.preconditions,
+            displayId: importedDisplayId,
           });
           // Create steps for the case
           for (const step of tc.steps || []) {
@@ -576,12 +630,16 @@ const Repository = () => {
       const newSuite = await suitesApi.create(projectId, {
         name: `${suite.name} (Copy)`,
       });
-      for (const tc of suite.cases) {
+      const newSuiteName = `${suite.name} (Copy)`;
+      const newSuitePrefix = buildSuitePrefix(newSuiteName);
+      for (let i = 0; i < suite.cases.length; i++) {
+        const tc = suite.cases[i];
         await testCasesApi.create(projectId, newSuite.id, {
           title: tc.title,
           priority: tc.priority,
           description: tc.description || '',
           preconditions: tc.preconditions || '',
+          displayId: `${newSuitePrefix}-${i + 1}`,
         });
       }
       queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
@@ -621,9 +679,12 @@ const Repository = () => {
     if (!projectId) return;
     try {
       if (caseModalMode === 'create') {
+        const targetSuite = suites.find(s => s.id === targetSuiteId);
+        const generatedDisplayId = buildNextDisplayId(targetSuiteId, targetSuite?.name ?? '', suites);
         const newCase = await testCasesApi.create(projectId, targetSuiteId, {
           title: data.title, priority: data.priority,
           description: data.description, preconditions: data.preconditions,
+          displayId: generatedDisplayId,
         });
         for (const step of data.steps) {
           await testStepsApi.create(projectId, targetSuiteId, newCase.id, {
@@ -670,9 +731,12 @@ const Repository = () => {
   const copyCase = async (tc: TestCase) => {
     if (!projectId) return;
     try {
+      const tcSuite = suites.find(s => s.id === tc.suiteId);
+      const copiedDisplayId = buildNextDisplayId(tc.suiteId, tcSuite?.name ?? '', suites);
       await testCasesApi.create(projectId, tc.suiteId, {
         title: `${tc.title} (Copy)`, priority: tc.priority,
         description: tc.description, preconditions: tc.preconditions,
+        displayId: copiedDisplayId,
       });
       queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, tc.suiteId) });
       toast.success('Test case duplicated');

@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,18 +41,31 @@ public class ProjectService {
         ProjectDTO entity = result.entity();
         entity.setId(result.getId());
 
-        // Timestamps are already set as strings in the entity
-        // If somehow they're still null, set them to current time
+        // Use the actual Cyoda metadata creation date as a fallback when
+        // the entity's own createdAt field is missing. Never default to
+        // the current time, which would mask missing data with today's date.
         if (entity.getCreatedAt() == null) {
-            String now = java.time.LocalDateTime.now().toString() + "Z";
-            entity.setCreatedAt(now);
-            logger.warn("[Project] Setting createdAt to current time: {}", now);
+            java.util.Date metaCreated = result.getCreationDate();
+            if (metaCreated != null) {
+                entity.setCreatedAt(metaCreated.toInstant().toString());
+                logger.warn("[Project] createdAt missing on entity {}; using metadata creation date: {}",
+                        result.getId(), entity.getCreatedAt());
+            } else {
+                logger.warn("[Project] createdAt missing on entity {} and no metadata date available",
+                        result.getId());
+            }
         }
 
         if (entity.getUpdatedAt() == null) {
-            String now = java.time.LocalDateTime.now().toString() + "Z";
-            entity.setUpdatedAt(now);
-            logger.warn("[Project] Setting updatedAt to current time: {}", now);
+            java.util.Date metaCreated = result.getCreationDate();
+            if (metaCreated != null) {
+                entity.setUpdatedAt(metaCreated.toInstant().toString());
+                logger.warn("[Project] updatedAt missing on entity {}; using metadata creation date: {}",
+                        result.getId(), entity.getUpdatedAt());
+            } else {
+                logger.warn("[Project] updatedAt missing on entity {} and no metadata date available",
+                        result.getId());
+            }
         }
 
         return entity;
@@ -76,8 +90,8 @@ public class ProjectService {
     public ProjectDTO createProject(ProjectDTO project) {
         project.setStatus("ACTIVE");
 
-        // Set timestamps as ISO-8601 strings BEFORE saving to Cyoda
-        String now = java.time.LocalDateTime.now().toString() + "Z";
+        // Set timestamps as ISO-8601 UTC strings BEFORE saving to Cyoda
+        String now = Instant.now().toString();
         project.setCreatedAt(now);
         project.setUpdatedAt(now);
 

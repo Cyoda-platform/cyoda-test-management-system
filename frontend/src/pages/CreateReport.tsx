@@ -9,7 +9,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PieChart, BarChart3, Bug, Server } from 'lucide-react';
 import { toast } from 'sonner';
-import { useProject, useTestRuns, useCreateReport } from '@/hooks/useApi';
+import { useProject, useTestRuns, useReports, useCreateReport } from '@/hooks/useApi';
+import { nextListDisplayId } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -23,9 +24,10 @@ const sectionOptions = [
 const CreateReport = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { data: project }  = useProject(projectId!);
-  const { data: runs = [] } = useTestRuns(projectId!);
-  const createReport        = useCreateReport();
+  const { data: project }          = useProject(projectId!);
+  const { data: runs = [] }        = useTestRuns(projectId!);
+  const { data: existingReports = [] } = useReports(projectId!);
+  const createReport               = useCreateReport();
 
   const [reportName, setReportName] = useState('');
   const [reportType, setReportType] = useState<string>('Summary');
@@ -63,6 +65,7 @@ const CreateReport = () => {
         projectId: projectId!,
         body: {
           name:                    reportName.trim(),
+          displayId:               nextListDisplayId('REP', existingReports),
           type:                    reportType as 'Summary' | 'Regression' | 'Sprint' | 'Custom',
           description,
           createdBy:               'current_user',

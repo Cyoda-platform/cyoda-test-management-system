@@ -99,11 +99,12 @@ const ReportDetail = () => {
   const updateDefect = useUpdateDefect();
   const deleteDefect = useDeleteDefect();
 
-  // Build a stable display-ID map (DEF-01, DEF-02…) ordered by creation time
+  // Build a stable display-ID map: prefer the persisted displayId, fall back to
+  // position-based generation only for legacy records that predate the fix.
   const defectDisplayIdMap = useMemo(() => {
     const sorted = [...defects].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const map: Record<string, string> = {};
-    sorted.forEach((d, i) => { map[d.id] = listDisplayId('DEF', i); });
+    sorted.forEach((d, i) => { map[d.id] = d.displayId || listDisplayId('DEF', i); });
     return map;
   }, [defects]);
 

@@ -63,11 +63,12 @@ const TestRuns = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TestRun | null>(null);
 
-  // Build a stable display-ID map (TR-01, TR-02…) ordered by creation time
+  // Build a stable display-ID map: prefer the persisted displayId, fall back to
+  // position-based generation only for legacy records that predate the fix.
   const runDisplayIdMap = useMemo(() => {
     const sorted = [...runs].filter(Boolean).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
     const map: Record<string, string> = {};
-    sorted.forEach((r, i) => { map[r.id] = listDisplayId('TR', i); });
+    sorted.forEach((r, i) => { map[r.id] = r.displayId || listDisplayId('TR', i); });
     return map;
   }, [runs]);
 

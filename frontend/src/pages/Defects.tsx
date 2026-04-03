@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { useProject, useDefects, useCreateDefect, useUpdateDefect, useDeleteDefect } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
-import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
+import { listDisplayId, nextListDisplayId, formatDate, isUuid } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -116,11 +116,12 @@ const Defects = () => {
   const [viewOpen, setViewOpen] = useState(false);
   const [viewTarget, setViewTarget] = useState<Defect | null>(null);
 
-  // Build a stable display-ID map (DEF-01, DEF-02…) ordered by creation time
+  // Build a stable display-ID map: prefer the persisted displayId, fall back to
+  // position-based generation only for legacy records that predate the fix.
   const defectDisplayIdMap = useMemo(() => {
     const sorted = [...defects].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const map: Record<string, string> = {};
-    sorted.forEach((d, i) => { map[d.id] = listDisplayId('DEF', i); });
+    sorted.forEach((d, i) => { map[d.id] = d.displayId || listDisplayId('DEF', i); });
     return map;
   }, [defects]);
 
@@ -167,6 +168,7 @@ const Defects = () => {
           link:        formLink,
           status:      formStatus,
           source:      formSource,
+          displayId:   nextListDisplayId('DEF', defects),
         },
       },
       {
