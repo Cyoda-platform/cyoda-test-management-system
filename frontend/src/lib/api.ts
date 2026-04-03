@@ -261,6 +261,47 @@ export const defectsApi = {
     api.delete<void>(`/projects/${projectId}/defects/${id}`),
 };
 
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export interface ReportSections {
+  executiveSummary: boolean;
+  suiteAnalytics:   boolean;
+  defectTable:      boolean;
+  environmentInfo:  boolean;
+}
+
+export interface Report {
+  id: string;
+  projectId: string;
+  name: string;
+  type: 'Summary' | 'Regression' | 'Sprint' | 'Custom';
+  description: string;
+  createdBy: string;
+  dateFrom?: string;
+  dateTo?: string;
+  selectedRuns: string[];
+  /** Flattened section flags as stored by the backend */
+  sectionExecutiveSummary: boolean;
+  sectionSuiteAnalytics:   boolean;
+  sectionDefectTable:      boolean;
+  sectionEnvironmentInfo:  boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export const reportsApi = {
+  list:   (projectId: string, page = 0, size = 20) =>
+    api.get<{ data: Report[] }>(`/projects/${projectId}/reports?page=${page}&size=${size}`),
+  get:    (projectId: string, id: string) =>
+    api.get<Report>(`/projects/${projectId}/reports/${id}`),
+  create: (projectId: string, body: Partial<Report>) =>
+    api.post<Report>(`/projects/${projectId}/reports`, body),
+  update: (projectId: string, id: string, body: Partial<Report>) =>
+    api.put<Report>(`/projects/${projectId}/reports/${id}`, body),
+  delete: (projectId: string, id: string) =>
+    api.delete<void>(`/projects/${projectId}/reports/${id}`),
+};
+
 // ── Attachments ───────────────────────────────────────────────────────────────
 
 export interface Attachment {

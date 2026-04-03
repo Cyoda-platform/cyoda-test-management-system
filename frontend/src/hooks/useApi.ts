@@ -19,6 +19,7 @@ import {
   testStepsApi,
   testRunsApi,
   defectsApi,
+  reportsApi,
   attachmentsApi,
   type Project,
   type Suite,
@@ -26,6 +27,7 @@ import {
   type TestStep,
   type TestRun,
   type Defect,
+  type Report,
 } from '@/lib/api';
 
 // ── Query key factories ───────────────────────────────────────────────────────
@@ -58,6 +60,11 @@ export const keys = {
     all:    (projectId: string)              => ['defects', projectId]             as const,
     list:   (projectId: string, page = 0)   => ['defects', projectId, 'list', page] as const,
     detail: (projectId: string, id: string) => ['defects', projectId, 'detail', id] as const,
+  },
+  reports: {
+    all:    (projectId: string)              => ['reports', projectId]               as const,
+    list:   (projectId: string, page = 0)   => ['reports', projectId, 'list', page] as const,
+    detail: (projectId: string, id: string) => ['reports', projectId, 'detail', id] as const,
   },
   attachments: {
     all: (projectId: string) => ['attachments', projectId] as const,
@@ -467,6 +474,69 @@ export function useDeleteDefect() {
       defectsApi.delete(projectId, id),
     onSuccess: (_data, { projectId }) =>
       qc.invalidateQueries({ queryKey: keys.defects.all(projectId) }),
+  });
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export function useReports(projectId: string, page = 0) {
+  return useQuery({
+    queryKey: keys.reports.list(projectId, page),
+    queryFn:  () => reportsApi.list(projectId, page),
+    enabled:  !!projectId,
+    select:   (res) => res.data,
+  });
+}
+
+export function useReport(projectId: string, reportId: string) {
+  return useQuery({
+    queryKey: keys.reports.detail(projectId, reportId),
+    queryFn:  () => reportsApi.get(projectId, reportId),
+    enabled:  !!projectId && !!reportId,
+  });
+}
+
+export function useCreateReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      body,
+    }: {
+      projectId: string;
+      body: Partial<Report>;
+    }) => reportsApi.create(projectId, body),
+    onSuccess: (_data, { projectId }) =>
+      qc.invalidateQueries({ queryKey: keys.reports.all(projectId) }),
+  });
+}
+
+export function useUpdateReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      id,
+      body,
+    }: {
+      projectId: string;
+      id: string;
+      body: Partial<Report>;
+    }) => reportsApi.update(projectId, id, body),
+    onSuccess: (_data, { projectId, id }) => {
+      qc.invalidateQueries({ queryKey: keys.reports.all(projectId) });
+      qc.invalidateQueries({ queryKey: keys.reports.detail(projectId, id) });
+    },
+  });
+}
+
+export function useDeleteReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, id }: { projectId: string; id: string }) =>
+      reportsApi.delete(projectId, id),
+    onSuccess: (_data, { projectId }) =>
+      qc.invalidateQueries({ queryKey: keys.reports.all(projectId) }),
   });
 }
 
