@@ -343,11 +343,23 @@ const Repository = () => {
         const suite = suites.find(s => s.cases.some(c => c.id === caseId));
         const tc = suite?.cases.find(c => c.id === caseId);
         if (!suite || !tc) continue;
-        await testCasesApi.create(projectId, suite.id, {
+        const newCase = await testCasesApi.create(projectId, suite.id, {
           title: `${tc.title} (Copy)`, priority: tc.priority,
           description: tc.description, preconditions: tc.preconditions,
           displayId: getNextId(suite),
         });
+        // Copy steps
+        const steps = await testStepsApi.list(projectId, suite.id, tc.id);
+        for (const step of steps) {
+          await testStepsApi.create(projectId, suite.id, newCase.id, {
+            stepNumber: step.stepNumber, action: step.action, expectedResult: step.expectedResult,
+          });
+        }
+        // Copy attachments
+        const attachments = await attachmentsApi.listByCase(projectId, tc.id);
+        for (const att of attachments) {
+          await attachmentsApi.copy(projectId, att.id, newCase.id);
+        }
       }
       suites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
       toast.success(`Duplicated ${selectedCases.size} case(s)`);
@@ -634,13 +646,25 @@ const Repository = () => {
       const newSuitePrefix = buildSuitePrefix(newSuiteName);
       for (let i = 0; i < suite.cases.length; i++) {
         const tc = suite.cases[i];
-        await testCasesApi.create(projectId, newSuite.id, {
+        const newCase = await testCasesApi.create(projectId, newSuite.id, {
           title: tc.title,
           priority: tc.priority,
           description: tc.description || '',
           preconditions: tc.preconditions || '',
           displayId: `${newSuitePrefix}-${i + 1}`,
         });
+        // Copy steps
+        const steps = await testStepsApi.list(projectId, suite.id, tc.id);
+        for (const step of steps) {
+          await testStepsApi.create(projectId, newSuite.id, newCase.id, {
+            stepNumber: step.stepNumber, action: step.action, expectedResult: step.expectedResult,
+          });
+        }
+        // Copy attachments
+        const attachments = await attachmentsApi.listByCase(projectId, tc.id);
+        for (const att of attachments) {
+          await attachmentsApi.copy(projectId, att.id, newCase.id);
+        }
       }
       queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
       setExpandedSuites((prev) => new Set([...prev, newSuite.id]));
@@ -733,11 +757,23 @@ const Repository = () => {
     try {
       const tcSuite = suites.find(s => s.id === tc.suiteId);
       const copiedDisplayId = buildNextDisplayId(tc.suiteId, tcSuite?.name ?? '', suites);
-      await testCasesApi.create(projectId, tc.suiteId, {
+      const newCase = await testCasesApi.create(projectId, tc.suiteId, {
         title: `${tc.title} (Copy)`, priority: tc.priority,
         description: tc.description, preconditions: tc.preconditions,
         displayId: copiedDisplayId,
       });
+      // Copy steps
+      const steps = await testStepsApi.list(projectId, tc.suiteId, tc.id);
+      for (const step of steps) {
+        await testStepsApi.create(projectId, tc.suiteId, newCase.id, {
+          stepNumber: step.stepNumber, action: step.action, expectedResult: step.expectedResult,
+        });
+      }
+      // Copy attachments
+      const attachments = await attachmentsApi.listByCase(projectId, tc.id);
+      for (const att of attachments) {
+        await attachmentsApi.copy(projectId, att.id, newCase.id);
+      }
       queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, tc.suiteId) });
       toast.success('Test case duplicated');
     } catch (e) {

@@ -153,6 +153,26 @@ public class AttachmentController {
         }
     }
 
+    @PostMapping("/{id}/copy")
+    @Operation(summary = "Copy an attachment to a different case (server-side, no file transfer)")
+    public ResponseEntity<?> copyAttachment(
+            @PathVariable UUID projectId,
+            @PathVariable UUID id,
+            @RequestParam UUID toCaseId) {
+        try {
+            Optional<AttachmentDTO> source = attachmentService.getAttachmentById(id)
+                    .filter(a -> a.getProjectId().equals(projectId));
+            if (source.isEmpty()) return ResponseEntity.notFound().build();
+
+            AttachmentDTO copied = attachmentService.copyAttachment(id, projectId, toCaseId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(copied);
+        } catch (Exception e) {
+            logger.error("Failed to copy attachment {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(java.util.Map.of("error", e.getMessage() != null ? e.getMessage() : "Copy failed"));
+        }
+    }
+
     @DeleteMapping("/{id}")
     @Operation(summary = "Delete attachment and its EdgeMessage")
     public ResponseEntity<Void> deleteAttachment(

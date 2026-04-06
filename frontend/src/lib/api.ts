@@ -324,6 +324,8 @@ export const attachmentsApi = {
     api.get<Attachment[]>(`/projects/${projectId}/attachments/by-case/${caseId}`),
   delete: (projectId: string, id: string) =>
     api.delete<void>(`/projects/${projectId}/attachments/${id}`),
+  copy: (projectId: string, id: string, toCaseId: string) =>
+    api.post<Attachment>(`/projects/${projectId}/attachments/${id}/copy?toCaseId=${toCaseId}`, {}),
   upload: (projectId: string, file: File, caseId?: string) => {
     const form = new FormData();
     form.append('file', file);

@@ -186,6 +186,49 @@ public class AttachmentService {
     }
 
     /**
+     * Copies an attachment (metadata + content) to a new case.
+     * Re-creates the EdgeMessage for the copy so each record is independent.
+     * If content is unavailable (e.g. EdgeMessage was never stored), only metadata is copied.
+     */
+    public AttachmentDTO copyAttachment(UUID sourceId, UUID targetProjectId, UUID targetCaseId) throws Exception {
+        AttachmentDTO source = getAttachmentById(sourceId)
+                .orElseThrow(() -> new IllegalArgumentException("Attachment not found: " + sourceId));
+
+        AttachmentDTO copy = new AttachmentDTO();
+        copy.setProjectId(targetProjectId);
+        copy.setCaseId(targetCaseId);
+        copy.setFileName(source.getFileName());
+        copy.setFileType(source.getFileType());
+        copy.setFileSize(source.getFileSize());
+        copy.setUploadedAt(java.time.LocalDateTime.now());
+
+        // Try to copy content via a new EdgeMessage
+        if (source.getMessageId() != null) {
+            try {
+                var content = edgeMessageService.getMessageContent(source.getMessageId());
+                if (content != null) {
+                    ObjectNode metadata = objectMapper.createObjectNode();
+                    metadata.put("projectId", targetProjectId.toString());
+                    if (targetCaseId != null) metadata.put("caseId", targetCaseId.toString());
+                    metadata.put("contentType", source.getFileType() != null ? source.getFileType() : "application/octet-stream");
+                    UUID newMessageId = edgeMessageService.createMessage(EDGE_MESSAGE_SUBJECT, (ObjectNode) content, metadata);
+                    copy.setMessageId(newMessageId);
+                    logger.info("✅ Copied EdgeMessage {} → {} for attachment {}", source.getMessageId(), newMessageId, sourceId);
+                }
+            } catch (Exception e) {
+                logger.warn("⚠️  Could not copy EdgeMessage for attachment {}: {}", sourceId, e.getMessage());
+            }
+        } else if (source.getContent() != null) {
+            // Inline base64 fallback — just carry it over directly
+            copy.setContent(source.getContent());
+        }
+
+        AttachmentDTO result = withId(entityService.create(copy));
+        logger.info("✅ Attachment copied: {} → {}", sourceId, result.getId());
+        return result;
+    }
+
+    /**
      * Deletes attachment metadata and the corresponding EdgeMessage.
      */
     public boolean deleteAttachment(UUID id) {

@@ -188,26 +188,25 @@ const CaseFormPage = ({ mode, suites, initialSuiteId, initialCase, projectName, 
             <div>
               <label className={labelCls}>Attachments</label>
               <div
-                className={`rounded-md border border-dashed transition-colors h-10 px-3 flex items-center gap-3 ${
-                  dragOver ? 'border-primary bg-primary/5' : 'border-input bg-white'
+                className={`rounded-md border-2 border-dashed transition-colors cursor-pointer h-10 px-3 flex items-center justify-center gap-2 ${
+                  dragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 bg-muted/30 hover:border-muted-foreground/50 hover:bg-muted/50'
                 }`}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleFileDrop}
+                onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                <span className="text-xs text-muted-foreground flex-1 text-center truncate">
-                  {attachments.length > 0
-                    ? `${attachments.length} file${attachments.length > 1 ? 's' : ''} attached`
-                    : 'Drop files or'}
-                </span>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground/70 font-medium hover:text-muted-foreground hover:underline shrink-0"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  browse
-                </button>
+                {attachments.length > 0 ? (
+                  <span className="text-xs text-muted-foreground truncate">
+                    {attachments.length} file{attachments.length > 1 ? 's' : ''} attached — click or drop to add more
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    Drop files or{' '}
+                    <span className="font-medium text-foreground underline underline-offset-2">browse</span>
+                  </span>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"
