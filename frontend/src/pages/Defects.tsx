@@ -87,27 +87,34 @@ const Defects = () => {
     ...overrides,
   });
 
+  // Tracks which defect ID has an in-flight inline update so we can show a spinner.
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
   // Inline severity / status quick-update
   const handleSeverityChange = (defectId: string, newSeverity: string) => {
     const d = defects.find((x) => x.id === defectId);
-    if (!d) return;
+    if (!d || updatingId) return;
+    setUpdatingId(defectId);
     updateDefect.mutate(
       { projectId: projectId!, id: defectId, body: buildUpdateBody(d, { severity: newSeverity as Defect['severity'] }) },
       {
         onSuccess: () => toast.success(`Severity updated to ${newSeverity}`),
         onError:   (e) => toast.error(e.message),
+        onSettled: () => setUpdatingId(null),
       }
     );
   };
 
   const handleStatusChange = (defectId: string, newStatus: string) => {
     const d = defects.find((x) => x.id === defectId);
-    if (!d) return;
+    if (!d || updatingId) return;
+    setUpdatingId(defectId);
     updateDefect.mutate(
       { projectId: projectId!, id: defectId, body: buildUpdateBody(d, { status: newStatus as Defect['status'] }) },
       {
         onSuccess: () => toast.success(`Status updated to ${newStatus}`),
         onError:   (e) => toast.error(e.message),
+        onSettled: () => setUpdatingId(null),
       }
     );
   };
@@ -322,29 +329,41 @@ const Defects = () => {
                       <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>{defectDisplayIdMap[d.id] ?? '-'}</td>
                       <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <Select value={d.severity} onValueChange={(val) => handleSeverityChange(d.id, val)}>
-                          <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${severityBadge[d.severity] || ''}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Critical">Critical</SelectItem>
-                            <SelectItem value="Major">Major</SelectItem>
-                            <SelectItem value="Minor">Minor</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {updatingId === d.id ? (
+                          <span className="inline-flex items-center gap-1 h-7 px-2.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" /> {d.severity}
+                          </span>
+                        ) : (
+                          <Select value={d.severity} onValueChange={(val) => handleSeverityChange(d.id, val)} disabled={!!updatingId}>
+                            <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${severityBadge[d.severity] || ''}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Critical">Critical</SelectItem>
+                              <SelectItem value="Major">Major</SelectItem>
+                              <SelectItem value="Minor">Minor</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <Select value={d.status} onValueChange={(val) => handleStatusChange(d.id, val)}>
-                          <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${statusBadge[d.status] || ''}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Open">Open</SelectItem>
-                            <SelectItem value="In Progress">In Progress</SelectItem>
-                            <SelectItem value="Fixed">Fixed</SelectItem>
-                            <SelectItem value="Closed">Closed</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {updatingId === d.id ? (
+                          <span className="inline-flex items-center gap-1 h-7 px-2.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" /> {d.status}
+                          </span>
+                        ) : (
+                          <Select value={d.status} onValueChange={(val) => handleStatusChange(d.id, val)} disabled={!!updatingId}>
+                            <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${statusBadge[d.status] || ''}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Open">Open</SelectItem>
+                              <SelectItem value="In Progress">In Progress</SelectItem>
+                              <SelectItem value="Fixed">Fixed</SelectItem>
+                              <SelectItem value="Closed">Closed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={d.source || undefined}>
                         {d.source ? (isUuid(d.source) ? d.source.slice(0, 8) : d.source) : '—'}

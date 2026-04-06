@@ -1,5 +1,6 @@
 package com.java_template.application.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.ReorderItemDTO;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.common.dto.EntityWithMetadata;
@@ -7,6 +8,9 @@ import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
+import org.cyoda.cloud.api.event.common.condition.GroupCondition;
+import org.cyoda.cloud.api.event.common.condition.Operation;
+import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
@@ -25,10 +29,24 @@ public class TestCaseService {
 
     private final EntityService entityService;
     private final ProjectCounterService projectCounterService;
+    private final ObjectMapper objectMapper;
 
-    public TestCaseService(EntityService entityService, ProjectCounterService projectCounterService) {
+    public TestCaseService(EntityService entityService,
+                           ProjectCounterService projectCounterService,
+                           ObjectMapper objectMapper) {
         this.entityService = entityService;
         this.projectCounterService = projectCounterService;
+        this.objectMapper = objectMapper;
+    }
+
+    private GroupCondition conditionByField(String fieldName, Object value) {
+        SimpleCondition condition = new SimpleCondition()
+                .withJsonPath("$." + fieldName)
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(value));
+        return new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(condition));
     }
 
     private TestCaseDTO withId(EntityWithMetadata<TestCaseDTO> result) {
@@ -70,37 +88,55 @@ public class TestCaseService {
      */
     public PageResult<TestCaseDTO> getTestCasesBySuiteId(UUID suiteId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
-                .pageNumber(0).pageSize(1000).build();
-
-        PageResult<EntityWithMetadata<TestCaseDTO>> allTestCases = entityService.findAll(
-                MODEL_SPEC,
-                TestCaseDTO.class,
-                params);
-
-        List<TestCaseDTO> filtered = allTestCases.data().stream()
+                .pageNumber(page).pageSize(size).build();
+        SimpleCondition suiteCondition = new SimpleCondition()
+                .withJsonPath("$.suiteId")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(suiteId.toString()));
+        SimpleCondition deletedCondition = new SimpleCondition()
+                .withJsonPath("$.deleted")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(false));
+        GroupCondition condition = new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(suiteCondition, deletedCondition));
+        PageResult<EntityWithMetadata<TestCaseDTO>> result =
+                entityService.search(MODEL_SPEC, condition, TestCaseDTO.class, params);
+        List<TestCaseDTO> sorted = result.data().stream()
                 .map(this::withId)
-                .filter(testCase -> suiteId.equals(testCase.getSuiteId()))
-                .filter(testCase -> !testCase.isDeleted())
                 .sorted(Comparator.comparing(TestCaseDTO::getSortOrder,
                         Comparator.nullsLast(Comparator.naturalOrder())))
-                .skip((long) page * size)
-                .limit(size)
                 .toList();
+        return PageResult.of(result.searchId(), sorted, page, size, result.totalElements());
+    }
 
-        long total = allTestCases.data().stream()
+    /**
+     * Retrieves all non-deleted test cases for an entire project in one Cyoda call.
+     * Used by the repository aggregate endpoint to avoid per-suite fetches.
+     */
+    public List<TestCaseDTO> getCasesByProjectId(UUID projectId) {
+        SimpleCondition projectCondition = new SimpleCondition()
+                .withJsonPath("$.projectId")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(projectId.toString()));
+        SimpleCondition deletedCondition = new SimpleCondition()
+                .withJsonPath("$.deleted")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(false));
+        GroupCondition condition = new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(projectCondition, deletedCondition));
+        return entityService.search(MODEL_SPEC, condition, TestCaseDTO.class).data()
+                .stream()
                 .map(this::withId)
-                .filter(testCase -> suiteId.equals(testCase.getSuiteId()))
-                .filter(testCase -> !testCase.isDeleted())
-                .count();
-
-        return PageResult.of(allTestCases.searchId(), filtered, page, size, total);
+                .toList();
     }
 
     public List<TestCaseDTO> getAllTestCases() {
-        return entityService.findAll(MODEL_SPEC, TestCaseDTO.class).data()
+        GroupCondition condition = conditionByField("deleted", false);
+        return entityService.search(MODEL_SPEC, condition, TestCaseDTO.class).data()
                 .stream()
                 .map(this::withId)
-                .filter(testCase -> !testCase.isDeleted())
                 .toList();
     }
 
@@ -128,13 +164,21 @@ public class TestCaseService {
      * Bulk-updates the sortOrder for a list of test cases within a suite.
      * Each item carries the case UUID and its new 0-based position.
      * Unknown or deleted IDs are silently skipped.
+     * Uses {@code entityService.updateAll()} to avoid N individual update round-trips.
      */
     public void reorderTestCases(List<ReorderItemDTO> items) {
-        for (ReorderItemDTO item : items) {
-            getTestCaseById(item.id()).ifPresent(tc -> {
-                tc.setSortOrder(item.sortOrder());
-                entityService.update(tc.getId(), tc, null);
-            });
+        var orderMap = new java.util.HashMap<UUID, Integer>(items.size() * 2);
+        items.forEach(item -> orderMap.put(item.id(), item.sortOrder()));
+
+        List<TestCaseDTO> toUpdate = items.stream()
+                .map(item -> getTestCaseById(item.id()))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .peek(tc -> tc.setSortOrder(orderMap.get(tc.getId())))
+                .toList();
+
+        if (!toUpdate.isEmpty()) {
+            entityService.updateAll(toUpdate, null);
         }
     }
 

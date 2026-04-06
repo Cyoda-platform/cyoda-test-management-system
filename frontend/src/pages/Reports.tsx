@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { Plus, Eye, Download, Trash2, AlertTriangle, FileText, Table2, Loader2 } from 'lucide-react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { useProject, useReports, useDeleteReport } from '@/hooks/useApi';
 import type { Report } from '@/lib/api';
 import { listDisplayId, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
-import { useMemo } from 'react';
+import { useVirtualList } from '@/hooks/useVirtualList';
 
 const typeBadge: Record<string, string> = {
   Summary:    'text-success',
@@ -73,6 +73,14 @@ const Reports = () => {
     (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
   );
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const estimateSize = useCallback(() => 52, []);
+  const { virtualItems, totalSize } = useVirtualList(listRef, {
+    count: sorted.length,
+    estimateSize,
+    overscan: 5,
+  });
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-auto surface-base">
@@ -116,57 +124,100 @@ const Reports = () => {
 
           {/* Table */}
           {!isLoading && !isError && (
-            <div className="bg-card rounded-lg shadow-soft overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-200 dark:bg-slate-700 sticky top-0 z-10">
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">ID</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Report Name</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Type</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created By</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.map((r) => (
-                    <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card">
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider">{reportDisplayIdMap[r.id] ?? '—'}</td>
-                      <td className="px-5 py-3.5 font-medium text-foreground">
-                        <Link to={`/projects/${projectId}/reports/${r.id}`} className="hover:underline">
-                          {r.name}
-                        </Link>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`${typeBadge[r.type] || 'text-muted-foreground'} text-[10px] px-2.5 py-0.5 font-mono uppercase tracking-widest inline-flex items-center gap-1`}>
-                          {r.type}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-muted-foreground">{r.createdBy || '—'}</td>
-                      <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(r.createdAt)}</td>
-                      <td className="px-5 py-3.5 w-px whitespace-nowrap">
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            onClick={() => navigate(`/projects/${projectId}/reports/${r.id}`)}>
-                            <Eye className="h-4 w-4" strokeWidth={1.5} />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            onClick={() => { setDownloadTarget(r); setDownloadOpen(true); }}>
-                            <Download className="h-4 w-4" strokeWidth={1.5} />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }}>
-                            <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                          </Button>
+            <div className="bg-card rounded-lg shadow-soft overflow-hidden flex flex-col">
+              {/* Sticky column headers */}
+              <div
+                className="grid bg-slate-200 dark:bg-slate-700 shrink-0"
+                style={{ gridTemplateColumns: '96px 1fr 110px 150px 120px 108px' }}
+              >
+                {['ID', 'Report Name', 'Type', 'Created By', 'Created', 'Actions'].map((label) => (
+                  <div key={label} className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
+                    {label}
+                  </div>
+                ))}
+              </div>
+
+              {/* Empty state */}
+              {sorted.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground text-sm">No reports yet.</div>
+              )}
+
+              {/* Virtual scroll body */}
+              {sorted.length > 0 && (
+                <div
+                  ref={listRef}
+                  className="overflow-auto"
+                  style={{ maxHeight: 'calc(100vh - 240px)' }}
+                >
+                  <div style={{ height: totalSize, position: 'relative' }}>
+                    {virtualItems.map((vi) => {
+                      const r = sorted[vi.index];
+                      return (
+                        <div
+                          key={r.id}
+                          className="grid hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card items-center"
+                          style={{
+                            gridTemplateColumns: '96px 1fr 110px 150px 120px 108px',
+                            position: 'absolute',
+                            top: vi.start,
+                            left: 0,
+                            right: 0,
+                            height: vi.size,
+                          }}
+                        >
+                          <div className="px-5 font-mono text-[10px] text-accent tracking-wider truncate">
+                            {reportDisplayIdMap[r.id] ?? '—'}
+                          </div>
+                          <div className="px-5 font-medium text-foreground min-w-0">
+                            <Link
+                              to={`/projects/${projectId}/reports/${r.id}`}
+                              className="hover:underline truncate block"
+                            >
+                              {r.name}
+                            </Link>
+                          </div>
+                          <div className="px-5">
+                            <span className={`${typeBadge[r.type] || 'text-muted-foreground'} text-[10px] px-2.5 py-0.5 font-mono uppercase tracking-widest`}>
+                              {r.type}
+                            </span>
+                          </div>
+                          <div className="px-5 text-muted-foreground text-sm truncate">
+                            {r.createdBy || '—'}
+                          </div>
+                          <div className="px-5 text-muted-foreground font-mono text-[10px] tracking-wider">
+                            {formatDate(r.createdAt)}
+                          </div>
+                          <div className="px-5">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => navigate(`/projects/${projectId}/reports/${r.id}`)}
+                              >
+                                <Eye className="h-4 w-4" strokeWidth={1.5} />
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => { setDownloadTarget(r); setDownloadOpen(true); }}
+                              >
+                                <Download className="h-4 w-4" strokeWidth={1.5} />
+                              </Button>
+                              <Button
+                                variant="ghost" size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }}
+                              >
+                                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {sorted.length === 0 && (
-                    <tr><td colSpan={6} className="text-center py-12 text-muted-foreground">No reports yet.</td></tr>
-                  )}
-                </tbody>
-              </table>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

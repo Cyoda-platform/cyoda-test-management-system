@@ -1,8 +1,8 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
+import { useVirtualList } from '@/hooks/useVirtualList';
 import Breadcrumbs from '@/components/Breadcrumbs';
-import { useQueries } from '@tanstack/react-query';
 import { Search, Paperclip, Lock, CheckCircle2, XCircle, MinusCircle, AlertCircle, Upload, FileText, Image, File, Bug, Trash2, ExternalLink, Eye, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import CreateDefectModal from '@/components/CreateDefectModal';
 import {
   useTestRun,
-  useSuites,
+  useRepository,
   useTestSteps,
   useUpdateTestStep,
   useUpdateTestRun,
@@ -99,24 +99,47 @@ const RunExecution = () => {
 
   // Live API data
   const { data: run, isLoading: runLoading } = useTestRun(projectId!, runId!);
-  const { data: suites = [], isLoading: suitesLoading } = useSuites(projectId!);
 
-  // Fetch cases for every suite in parallel
-  const casesQueries = useQueries({
-    queries: suites.map((suite) => ({
-      queryKey: keys.cases.all(projectId!, suite.id),
-      queryFn:  () => testCasesApi.list(projectId!, suite.id),
-      enabled:  !!projectId && suites.length > 0,
-      select:   (res: { data: Array<{ id: string; displayId?: string; shortId?: string; projectId: string; suiteId: string; title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; deleted: boolean }> }) => res.data,
-    })),
-  });
+  // Single aggregate call: all suites + cases in one round-trip (no more 1+N waterfall)
+  const { data: repositoryData, isLoading: suitesLoading } = useRepository(projectId!);
 
-  const suitesWithCases = suites.map((suite, i) => ({
+  const suitesWithCases = (repositoryData?.suites ?? []).map((suite) => ({
     ...suite,
-    cases: casesQueries[i]?.data ?? [],
+    cases: suite.cases,
   }));
 
   const allCases = suitesWithCases.flatMap((s) => s.cases);
+
+  // ── Virtual list for the left case panel ──────────────────────────────────
+  type RunItem =
+    | { type: 'suite-header'; suiteName: string }
+    | { type: 'case'; tc: typeof allCases[0]; localIdx: number; globalIdx: number };
+
+  const runItems = useMemo<RunItem[]>(() => {
+    const items: RunItem[] = [];
+    let globalOffset = 0;
+    for (const suite of suitesWithCases) {
+      items.push({ type: 'suite-header', suiteName: suite.name });
+      suite.cases.forEach((tc, localIdx) => {
+        items.push({ type: 'case', tc, localIdx, globalIdx: globalOffset + localIdx });
+      });
+      globalOffset += suite.cases.length;
+    }
+    return items;
+  }, [suitesWithCases]);
+
+  const caseListRef = useRef<HTMLDivElement>(null);
+
+  const estimateRunItemSize = useCallback((i: number) => {
+    return runItems[i]?.type === 'suite-header' ? 36 : 52;
+  }, [runItems]);
+
+  const { virtualItems: runVirtualItems, totalSize: runTotalSize } =
+    useVirtualList(caseListRef, {
+      count: runItems.length,
+      estimateSize: estimateRunItemSize,
+      overscan: 8,
+    });
 
   /** Returns a human-readable source label for a given case ID. */
   const getCaseSourceLabel = (caseId: string): string => {
@@ -125,7 +148,6 @@ const RunExecution = () => {
       if (idx !== -1) {
         const c = suite.cases[idx];
         if (c.displayId?.trim()) return c.displayId.trim();
-        if (c.shortId?.trim()) return c.shortId.trim();
         // Derive prefix from suite name (same logic as Repository.tsx)
         const words = suite.name.match(/[A-Za-z0-9]+/g) ?? [];
         let prefix = 'TC';
@@ -444,7 +466,7 @@ const RunExecution = () => {
   if (!run) return <div className="p-8 text-muted-foreground">Run not found</div>;
 
   // While cases are still loading show a minimal placeholder body
-  if (!activeCase && casesQueries.some((q) => q.isLoading)) {
+  if (!activeCase && suitesLoading) {
     return (
       <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
@@ -546,43 +568,48 @@ const RunExecution = () => {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Case List Grouped by Suite */}
-        <div className="w-64 surface-low overflow-auto shrink-0">
-          <div className="p-3">
+        {/* Left: Case List Grouped by Suite — virtualised */}
+        <div className="w-64 surface-low shrink-0 flex flex-col overflow-hidden">
+          <div className="p-3 shrink-0">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />
               <Input placeholder="Find case..." className="pl-8 h-8 text-xs bg-card border-0 focus-visible:ring-1 focus-visible:ring-accent/40" />
             </div>
           </div>
-          <div className="px-1.5 pb-2">
-            {suitesWithCases.map((suite) => (
-              <div key={suite.id} className="mb-1">
-                <div className="px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted/40 rounded-md mb-0.5">
-                  {suite.name}
-                </div>
-                {suite.cases.map((tc, index) => {
-                  const globalIdx = allCases.findIndex((c) => c.id === tc.id);
-                  const cStatus = getCaseStatus(tc.id);
-                  return (
-                    <button
-                      key={tc.id}
-                      onClick={() => setSelectedIdx(globalIdx)}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-colors ${
-                        globalIdx === selectedIdx ? 'bg-card shadow-soft' : 'hover:bg-card/60'
-                      }`}
-                    >
-                      <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${caseStatusIcon[cStatus]}`} />
-                      <div className="flex-1 text-left min-w-0">
-                        <span className="text-[10px] text-muted-foreground font-mono tracking-wider" title={tc.id}>
-                          {listDisplayId('TC', index)}
-                        </span>
-                        <p className="text-xs font-medium text-foreground truncate">{tc.title}</p>
+          {/* Scroll container — only this div scrolls, height is flex-1 */}
+          <div ref={caseListRef} className="flex-1 overflow-auto px-1.5 pb-2">
+            <div style={{ height: runTotalSize, position: 'relative' }}>
+              {runVirtualItems.map((vi) => {
+                const item = runItems[vi.index];
+                return (
+                  <div
+                    key={vi.key}
+                    style={{ position: 'absolute', top: vi.start, left: 0, width: '100%', height: vi.size }}
+                  >
+                    {item.type === 'suite-header' ? (
+                      <div className="px-3 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted/40 rounded-md mb-0.5">
+                        {item.suiteName}
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+                    ) : (
+                      <button
+                        onClick={() => setSelectedIdx(item.globalIdx)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-colors ${
+                          item.globalIdx === selectedIdx ? 'bg-card shadow-soft' : 'hover:bg-card/60'
+                        }`}
+                      >
+                        <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${caseStatusIcon[getCaseStatus(item.tc.id)]}`} />
+                        <div className="flex-1 text-left min-w-0">
+                          <span className="text-[10px] text-muted-foreground font-mono tracking-wider" title={item.tc.id}>
+                            {listDisplayId('TC', item.localIdx)}
+                          </span>
+                          <p className="text-xs font-medium text-foreground truncate">{item.tc.title}</p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 

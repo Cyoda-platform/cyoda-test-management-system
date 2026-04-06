@@ -1,10 +1,14 @@
 package com.java_template.application.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestRunDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
+import org.cyoda.cloud.api.event.common.condition.GroupCondition;
+import org.cyoda.cloud.api.event.common.condition.Operation;
+import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -22,9 +26,21 @@ public class TestRunService {
             new ModelSpec().withName(TestRunDTO.ENTITY_NAME).withVersion(TestRunDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
+    private final ObjectMapper objectMapper;
 
-    public TestRunService(EntityService entityService) {
+    public TestRunService(EntityService entityService, ObjectMapper objectMapper) {
         this.entityService = entityService;
+        this.objectMapper = objectMapper;
+    }
+
+    private GroupCondition conditionByField(String fieldName, Object value) {
+        SimpleCondition condition = new SimpleCondition()
+                .withJsonPath("$." + fieldName)
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(value));
+        return new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(condition));
     }
 
     private TestRunDTO withId(EntityWithMetadata<TestRunDTO> result) {
@@ -72,10 +88,10 @@ public class TestRunService {
     }
 
     public List<TestRunDTO> getTestRunsByStatus(String status) {
-        return entityService.findAll(MODEL_SPEC, TestRunDTO.class)
-                .data().stream()
+        GroupCondition condition = conditionByField("status", status);
+        return entityService.search(MODEL_SPEC, condition, TestRunDTO.class).data()
+                .stream()
                 .map(this::withId)
-                .filter(r -> status.equals(r.getStatus()))
                 .toList();
     }
 

@@ -1,6 +1,7 @@
 package com.java_template.application.controller;
 
 import com.java_template.application.dto.AttachmentDTO;
+import com.java_template.application.dto.AttachmentMetadataDTO;
 import com.java_template.application.service.AttachmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,7 +43,7 @@ public class AttachmentController {
             @RequestParam(value = "caseId", required = false) UUID caseId) {
         try {
             AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, file);
-            return ResponseEntity.status(HttpStatus.CREATED).body(uploaded);
+            return ResponseEntity.status(HttpStatus.CREATED).body(AttachmentMetadataDTO.from(uploaded));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(java.util.Map.of("error", e.getMessage() != null ? e.getMessage() : "Upload failed"));
@@ -51,38 +52,51 @@ public class AttachmentController {
 
     @GetMapping("/by-case/{caseId}")
     @Operation(summary = "Get all attachments for a specific test case")
-    public ResponseEntity<List<AttachmentDTO>> getAttachmentsByCase(
+    public ResponseEntity<List<AttachmentMetadataDTO>> getAttachmentsByCase(
             @PathVariable UUID projectId,
             @PathVariable UUID caseId) {
-        return ResponseEntity.ok(attachmentService.getAttachmentsByCaseId(caseId));
+        List<AttachmentMetadataDTO> result = attachmentService.getAttachmentsByCaseId(caseId)
+                .stream()
+                .map(AttachmentMetadataDTO::from)
+                .toList();
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping(consumes = "application/json")
     @Operation(summary = "Create attachment metadata only (no file content)")
-    public ResponseEntity<AttachmentDTO> createAttachmentMetadata(
+    public ResponseEntity<AttachmentMetadataDTO> createAttachmentMetadata(
             @PathVariable UUID projectId,
             @RequestBody AttachmentDTO attachment) {
         attachment.setProjectId(projectId);
         AttachmentDTO created = attachmentService.uploadAttachment(attachment);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        return ResponseEntity.status(HttpStatus.CREATED).body(AttachmentMetadataDTO.from(created));
     }
 
     @GetMapping
     @Operation(summary = "Get all attachments for a project")
-    public ResponseEntity<PageResult<AttachmentDTO>> getAttachmentsByProject(
+    public ResponseEntity<PageResult<AttachmentMetadataDTO>> getAttachmentsByProject(
             @PathVariable UUID projectId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(attachmentService.getAttachmentsByProjectId(projectId, page, size));
+        PageResult<AttachmentDTO> raw = attachmentService.getAttachmentsByProjectId(projectId, page, size);
+        PageResult<AttachmentMetadataDTO> response = PageResult.of(
+                raw.searchId(),
+                raw.data().stream().map(AttachmentMetadataDTO::from).toList(),
+                raw.pageNumber(),
+                raw.pageSize(),
+                raw.totalElements()
+        );
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Get attachment metadata by ID")
-    public ResponseEntity<AttachmentDTO> getAttachment(
+    public ResponseEntity<AttachmentMetadataDTO> getAttachment(
             @PathVariable UUID projectId,
             @PathVariable UUID id) {
         return attachmentService.getAttachmentById(id)
                 .filter(a -> a.getProjectId().equals(projectId))
+                .map(AttachmentMetadataDTO::from)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -165,7 +179,7 @@ public class AttachmentController {
             if (source.isEmpty()) return ResponseEntity.notFound().build();
 
             AttachmentDTO copied = attachmentService.copyAttachment(id, projectId, toCaseId);
-            return ResponseEntity.status(HttpStatus.CREATED).body(copied);
+            return ResponseEntity.status(HttpStatus.CREATED).body(AttachmentMetadataDTO.from(copied));
         } catch (Exception e) {
             logger.error("Failed to copy attachment {}: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

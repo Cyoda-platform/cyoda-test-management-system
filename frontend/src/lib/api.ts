@@ -145,7 +145,7 @@ export const suitesApi = {
     api.get<{ data: Suite[] }>(`/projects/${projectId}/suites`),
   get:    (projectId: string, id: string) =>
     api.get<Suite>(`/projects/${projectId}/suites/${id}`),
-  create: (projectId: string, body: Omit<Suite, 'id'>) =>
+  create: (projectId: string, body: Omit<Suite, 'id' | 'projectId'>) =>
     api.post<Suite>(`/projects/${projectId}/suites`, { ...body, projectId }),
   update: (projectId: string, id: string, body: Partial<Suite>) =>
     api.put<Suite>(`/projects/${projectId}/suites/${id}`, body),
@@ -359,4 +359,39 @@ export const attachmentsApi = {
       return r.json() as Promise<Attachment>;
     });
   },
+};
+
+// ── Repository aggregate ──────────────────────────────────────────────────────
+
+export interface RepositoryCase {
+  id: string;
+  displayId?: string;
+  suiteId: string;
+  projectId: string;
+  title: string;
+  description: string;
+  preconditions: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  status: string;
+  sortOrder: number;
+  deleted: boolean;
+}
+
+export interface RepositorySuite {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  cases: RepositoryCase[];
+}
+
+export interface Repository {
+  suites: RepositorySuite[];
+}
+
+export const repositoryApi = {
+  /** Fetches all suites + cases for a project in a single round-trip. */
+  get: (projectId: string) =>
+    api.get<Repository>(`/projects/${projectId}/repository`),
 };

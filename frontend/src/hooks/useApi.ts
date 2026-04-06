@@ -21,6 +21,7 @@ import {
   defectsApi,
   reportsApi,
   attachmentsApi,
+  repositoryApi,
   type Project,
   type Suite,
   type TestCase,
@@ -68,6 +69,9 @@ export const keys = {
   },
   attachments: {
     all: (projectId: string) => ['attachments', projectId] as const,
+  },
+  repository: {
+    all: (projectId: string) => ['repository', projectId] as const,
   },
 };
 
@@ -146,8 +150,10 @@ export function useCreateSuite() {
       projectId: string;
       body: Pick<Suite, 'name' | 'description'>;
     }) => suitesApi.create(projectId, body),
-    onSuccess: (_data, { projectId }) =>
-      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) }),
+    onSuccess: (_data, { projectId }) => {
+      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+    },
   });
 }
 
@@ -163,8 +169,10 @@ export function useUpdateSuite() {
       id: string;
       body: Partial<Suite>;
     }) => suitesApi.update(projectId, id, body),
-    onSuccess: (_data, { projectId }) =>
-      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) }),
+    onSuccess: (_data, { projectId }) => {
+      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+    },
   });
 }
 
@@ -173,8 +181,10 @@ export function useDeleteSuite() {
   return useMutation({
     mutationFn: ({ projectId, id }: { projectId: string; id: string }) =>
       suitesApi.delete(projectId, id),
-    onSuccess: (_data, { projectId }) =>
-      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) }),
+    onSuccess: (_data, { projectId }) => {
+      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+    },
   });
 }
 
@@ -183,8 +193,10 @@ export function useReorderSuites() {
   return useMutation({
     mutationFn: ({ projectId, items }: { projectId: string; items: { id: string; sortOrder: number }[] }) =>
       suitesApi.reorder(projectId, items),
-    onSuccess: (_data, { projectId }) =>
-      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) }),
+    onSuccess: (_data, { projectId }) => {
+      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+    },
   });
 }
 
@@ -219,8 +231,10 @@ export function useCreateTestCase() {
       suiteId: string;
       body: Partial<TestCase>;
     }) => testCasesApi.create(projectId, suiteId, body),
-    onSuccess: (_data, { projectId, suiteId }) =>
-      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) }),
+    onSuccess: (_data, { projectId, suiteId }) => {
+      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+    },
   });
 }
 
@@ -241,6 +255,7 @@ export function useUpdateTestCase() {
     onSuccess: (_data, { projectId, suiteId, id }) => {
       qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) });
       qc.invalidateQueries({ queryKey: keys.cases.detail(projectId, suiteId, id) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
     },
   });
 }
@@ -257,8 +272,10 @@ export function useDeleteTestCase() {
       suiteId: string;
       id: string;
     }) => testCasesApi.delete(projectId, suiteId, id),
-    onSuccess: (_data, { projectId, suiteId }) =>
-      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) }),
+    onSuccess: (_data, { projectId, suiteId }) => {
+      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+    },
   });
 }
 
@@ -274,8 +291,10 @@ export function useReorderTestCases() {
       suiteId: string;
       items: { id: string; sortOrder: number }[];
     }) => testCasesApi.reorder(projectId, suiteId, items),
-    onSuccess: (_data, { projectId, suiteId }) =>
-      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) }),
+    onSuccess: (_data, { projectId, suiteId }) => {
+      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+    },
   });
 }
 
@@ -298,6 +317,7 @@ export function useMoveTestCase() {
     onSuccess: (_data, { projectId, suiteId, targetSuiteId }) => {
       qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) });
       qc.invalidateQueries({ queryKey: keys.cases.all(projectId, targetSuiteId) });
+      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
     },
   });
 }
@@ -379,10 +399,11 @@ export function useTestRuns(projectId: string, page = 0) {
     queryFn:  () => testRunsApi.list(projectId, page),
     enabled:  !!projectId,
     select:   (res) => res.data,
-    // Override global staleTime so the list always re-fetches on mount,
-    // ensuring progress/status reflect changes made inside a run execution.
-    staleTime: 0,
-    refetchOnWindowFocus: true,
+    // Treat data as fresh for 30 seconds. Mutations (complete, update, delete)
+    // already call invalidateQueries so the list stays accurate after user
+    // actions without needing a refetch on every mount or tab focus.
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -391,8 +412,10 @@ export function useTestRun(projectId: string, runId: string) {
     queryKey: keys.runs.detail(projectId, runId),
     queryFn:  () => testRunsApi.get(projectId, runId),
     enabled:  !!projectId && !!runId,
-    // Always fetch fresh so re-entering a run sees latest saved counts
-    staleTime: 0,
+    // 30-second freshness window. The run detail is invalidated explicitly by
+    // useCompleteTestRun, useUpdateTestRun, and useUnlockTestRun mutations,
+    // so a staleTime of 0 is unnecessary and causes redundant fetches.
+    staleTime: 30_000,
   });
 }
 
@@ -472,6 +495,7 @@ export function useDefects(projectId: string, page = 0) {
     queryFn:  () => defectsApi.list(projectId, page),
     enabled:  !!projectId,
     select:   (res) => res.data,
+    staleTime: 30_000,
   });
 }
 
@@ -480,6 +504,7 @@ export function useDefect(projectId: string, defectId: string) {
     queryKey: keys.defects.detail(projectId, defectId),
     queryFn:  () => defectsApi.get(projectId, defectId),
     enabled:  !!projectId && !!defectId,
+    staleTime: 30_000,
   });
 }
 
@@ -535,6 +560,7 @@ export function useReports(projectId: string, page = 0) {
     queryFn:  () => reportsApi.list(projectId, page),
     enabled:  !!projectId,
     select:   (res) => res.data,
+    staleTime: 30_000,
   });
 }
 
@@ -543,6 +569,7 @@ export function useReport(projectId: string, reportId: string) {
     queryKey: keys.reports.detail(projectId, reportId),
     queryFn:  () => reportsApi.get(projectId, reportId),
     enabled:  !!projectId && !!reportId,
+    staleTime: 30_000,
   });
 }
 
@@ -590,6 +617,23 @@ export function useDeleteReport() {
   });
 }
 
+// ── Repository aggregate ──────────────────────────────────────────────────────
+
+/**
+ * Fetches all suites + cases for a project in a single round-trip.
+ * Use this in the Repository and RunExecution views to avoid the 1+N serial waterfall
+ * (suites first, then one cases request per suite).
+ * Mutations that create/update/delete suites or cases invalidate this key automatically.
+ */
+export function useRepository(projectId: string) {
+  return useQuery({
+    queryKey: keys.repository.all(projectId),
+    queryFn:  () => repositoryApi.get(projectId),
+    enabled:  !!projectId,
+    staleTime: 30_000,
+  });
+}
+
 // ── Attachments ───────────────────────────────────────────────────────────────
 
 export function useAttachmentsByCase(projectId: string, caseId: string) {
@@ -597,6 +641,7 @@ export function useAttachmentsByCase(projectId: string, caseId: string) {
     queryKey: ['attachments', projectId, 'case', caseId],
     queryFn:  () => attachmentsApi.listByCase(projectId, caseId),
     enabled:  !!projectId && !!caseId,
+    staleTime: 30_000,
   });
 }
 
@@ -606,16 +651,22 @@ export function useAttachments(projectId: string) {
     queryFn:  () => attachmentsApi.list(projectId),
     enabled:  !!projectId,
     select:   (res) => res.data,
+    staleTime: 30_000,
   });
 }
 
 export function useUploadAttachment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ projectId, file }: { projectId: string; file: File }) =>
-      attachmentsApi.upload(projectId, file),
-    onSuccess: (_data, { projectId }) =>
-      qc.invalidateQueries({ queryKey: keys.attachments.all(projectId) }),
+    mutationFn: ({ projectId, file, caseId }: { projectId: string; file: File; caseId?: string }) =>
+      attachmentsApi.upload(projectId, file, caseId),
+    onSuccess: (_data, { projectId, caseId }) => {
+      qc.invalidateQueries({ queryKey: keys.attachments.all(projectId) });
+      if (caseId) {
+        qc.invalidateQueries({ queryKey: ['attachments', projectId, 'case', caseId] });
+        qc.invalidateQueries({ queryKey: ['attachments', projectId, caseId] });
+      }
+    },
   });
 }
 

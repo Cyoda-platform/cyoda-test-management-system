@@ -1,11 +1,15 @@
 package com.java_template.application.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.DefectDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
+import org.cyoda.cloud.api.event.common.condition.GroupCondition;
+import org.cyoda.cloud.api.event.common.condition.Operation;
+import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -23,9 +27,21 @@ public class DefectService {
             new ModelSpec().withName(DefectDTO.ENTITY_NAME).withVersion(DefectDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
+    private final ObjectMapper objectMapper;
 
-    public DefectService(EntityService entityService) {
+    public DefectService(EntityService entityService, ObjectMapper objectMapper) {
         this.entityService = entityService;
+        this.objectMapper = objectMapper;
+    }
+
+    private GroupCondition conditionByField(String jsonPath, String value) {
+        SimpleCondition condition = new SimpleCondition()
+                .withJsonPath("$." + jsonPath)
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(value));
+        return new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(condition));
     }
 
     private DefectDTO withId(EntityWithMetadata<DefectDTO> result) {
@@ -60,25 +76,26 @@ public class DefectService {
     public PageResult<DefectDTO> getDefectsByProjectId(UUID projectId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(page).pageSize(size).build();
-        PageResult<EntityWithMetadata<DefectDTO>> allDefects =
-                entityService.findAll(MODEL_SPEC, DefectDTO.class, params);
-
-        var filteredDefects = allDefects.data().stream()
-                .filter(d -> d.entity().getProjectId() != null && d.entity().getProjectId().equals(projectId))
-                .toList();
-
-        return PageResult.of(allDefects.searchId(),
-                filteredDefects.stream().map(this::withId).toList(),
-                page, size, filteredDefects.size());
+        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        PageResult<EntityWithMetadata<DefectDTO>> result =
+                entityService.search(MODEL_SPEC, condition, DefectDTO.class, params);
+        return toPage(result);
     }
 
     public List<DefectDTO> getDefectsByStatus(UUID projectId, String status) {
-        // Search by projectId first, then filter by status in memory
-        // (Cyoda search supports one simple condition at a time via this helper)
-        return getDefectsByProjectId(projectId, 0, Integer.MAX_VALUE)
-                .data().stream()
-                .filter(d -> status.equals(d.getStatus()))
-                .toList();
+        SimpleCondition projectCondition = new SimpleCondition()
+                .withJsonPath("$.projectId")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(projectId.toString()));
+        SimpleCondition statusCondition = new SimpleCondition()
+                .withJsonPath("$.status")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(status));
+        GroupCondition condition = new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(projectCondition, statusCondition));
+        return entityService.search(MODEL_SPEC, condition, DefectDTO.class)
+                .data().stream().map(this::withId).toList();
     }
 
     public DefectDTO updateDefect(UUID id, DefectDTO defect) {

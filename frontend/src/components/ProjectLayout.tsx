@@ -40,7 +40,7 @@ const ProjectLayout = () => {
         <AppSidebar
           projectName={project.name}
           projectId={project.id}
-          projectInitials={project.initials}
+          projectInitials={project.name.substring(0, 2).toUpperCase()}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         />

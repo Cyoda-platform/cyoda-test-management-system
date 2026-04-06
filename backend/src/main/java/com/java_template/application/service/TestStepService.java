@@ -1,11 +1,13 @@
 package com.java_template.application.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
-import com.java_template.common.dto.PageResult;
-import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
+import org.cyoda.cloud.api.event.common.condition.GroupCondition;
+import org.cyoda.cloud.api.event.common.condition.Operation;
+import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
@@ -22,9 +24,21 @@ public class TestStepService {
             new ModelSpec().withName(TestStepDTO.ENTITY_NAME).withVersion(TestStepDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
+    private final ObjectMapper objectMapper;
 
-    public TestStepService(EntityService entityService) {
+    public TestStepService(EntityService entityService, ObjectMapper objectMapper) {
         this.entityService = entityService;
+        this.objectMapper = objectMapper;
+    }
+
+    private GroupCondition conditionByField(String fieldName, Object value) {
+        SimpleCondition condition = new SimpleCondition()
+                .withJsonPath("$." + fieldName)
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(value));
+        return new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(condition));
     }
 
     private TestStepDTO withId(EntityWithMetadata<TestStepDTO> result) {
@@ -58,17 +72,10 @@ public class TestStepService {
      * Retrieves all test steps for a specific test case
      */
     public List<TestStepDTO> getTestStepsByTestCaseId(UUID testCaseId) {
-        SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
-                .pageNumber(0).pageSize(1000).build();
-
-        PageResult<EntityWithMetadata<TestStepDTO>> allTestSteps = entityService.findAll(
-                MODEL_SPEC,
-                TestStepDTO.class,
-                params);
-
-        return allTestSteps.data().stream()
+        GroupCondition condition = conditionByField("testCaseId", testCaseId.toString());
+        return entityService.search(MODEL_SPEC, condition, TestStepDTO.class).data()
+                .stream()
                 .map(this::withId)
-                .filter(testStep -> testCaseId.equals(testStep.getTestCaseId()))
                 .sorted(Comparator.comparing(TestStepDTO::getStepNumber, Comparator.nullsLast(Integer::compareTo)))
                 .toList();
     }
