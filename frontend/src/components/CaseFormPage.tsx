@@ -12,7 +12,15 @@ interface Attachment {
   name: string;
   size: number;
   type: string;
-  file: File;
+  /** Undefined for attachments that are already saved on the server. */
+  file?: File;
+}
+
+interface ExistingAttachment {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
 }
 
 interface CaseFormPageProps {
@@ -22,7 +30,8 @@ interface CaseFormPageProps {
   initialCase?: TestCase;
   projectName?: string;
   projectId?: string;
-  onSave: (suiteId: string, data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: TestStep[]; files: File[] }) => void;
+  existingAttachments?: ExistingAttachment[];
+  onSave: (suiteId: string, data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: TestStep[]; files: File[]; removedAttachmentIds: string[] }) => void;
   onCancel: () => void;
 }
 
@@ -36,7 +45,7 @@ const formatSize = (bytes: number) => {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 };
 
-const CaseFormPage = ({ mode, suites, initialSuiteId, initialCase, projectName, projectId, onSave, onCancel }: CaseFormPageProps) => {
+const CaseFormPage = ({ mode, suites, initialSuiteId, initialCase, existingAttachments = [], projectName, projectId, onSave, onCancel }: CaseFormPageProps) => {
   const navigate = useNavigate();
   const [suiteId, setSuiteId] = useState(initialSuiteId);
   const [title, setTitle] = useState(initialCase?.title || '');
@@ -48,7 +57,17 @@ const CaseFormPage = ({ mode, suites, initialSuiteId, initialCase, projectName, 
       ? initialCase.steps.map((s, i) => ({ ...s, order: i + 1 }))
       : []
   );
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>(() =>
+    existingAttachments.map(a => ({
+      id: a.id,
+      name: a.fileName,
+      size: a.fileSize,
+      type: a.fileType,
+      file: undefined,
+    }))
+  );
+  // Track which pre-existing attachment IDs the user has removed
+  const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -109,6 +128,10 @@ const CaseFormPage = ({ mode, suites, initialSuiteId, initialCase, projectName, 
 
   const removeAttachment = (id: string) => {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
+    // If this was a server-side attachment, record its removal so the caller can delete it
+    if (existingAttachments.some(a => a.id === id)) {
+      setRemovedAttachmentIds((prev) => [...prev, id]);
+    }
   };
 
   const handleFileDrop = (e: React.DragEvent) => {
@@ -125,7 +148,8 @@ const CaseFormPage = ({ mode, suites, initialSuiteId, initialCase, projectName, 
       description: description.trim(),
       preconditions: preconditions.trim(),
       steps,
-      files: attachments.map((a) => a.file),
+      files: attachments.filter((a) => a.file !== undefined).map((a) => a.file as File),
+      removedAttachmentIds,
     });
   };
 

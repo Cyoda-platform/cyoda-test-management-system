@@ -937,7 +937,7 @@ const Repository = () => {
 
   const handleSaveCase = async (
     targetSuiteId: string,
-    data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: LocalStep[]; files: File[] }
+    data: { title: string; priority: 'HIGH' | 'MEDIUM' | 'LOW'; description: string; preconditions: string; steps: LocalStep[]; files: File[]; removedAttachmentIds: string[] }
   ) => {
     if (!projectId) return;
     try {
@@ -971,12 +971,24 @@ const Repository = () => {
             stepNumber: step.order, action: step.action, expectedResult: step.expectedResult,
           });
         }
+        for (const id of data.removedAttachmentIds) {
+          await attachmentsApi.delete(projectId, id);
+        }
         for (const file of data.files) {
           await attachmentsApi.upload(projectId, file, editingCaseId);
         }
         queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, caseSuiteId) });
         queryClient.invalidateQueries({ queryKey: keys.steps.all(projectId, caseSuiteId, editingCaseId) });
         queryClient.invalidateQueries({ queryKey: ['attachments', projectId, editingCaseId] });
+        // Optimistically update localSuites so the list title refreshes immediately
+        // without waiting for the query-invalidation round-trip.
+        setLocalSuites(prev => prev.map(s => ({
+          ...s,
+          cases: s.cases.map(c => c.id === editingCaseId
+            ? { ...c, title: data.title, priority: data.priority, description: data.description, preconditions: data.preconditions }
+            : c
+          ),
+        })));
         if (selectedCase?.id === editingCaseId) {
           setSelectedCase({ ...selectedCase, title: data.title, priority: data.priority, description: data.description, preconditions: data.preconditions, suiteId: targetSuiteId });
         }
@@ -1068,6 +1080,7 @@ const Repository = () => {
           suites={localSuites}
           initialSuiteId={caseSuiteId}
           initialCase={editingCaseWithSteps || undefined}
+          existingAttachments={caseModalMode === 'edit' ? caseAttachments : []}
           projectName={project?.name}
           projectId={projectId}
           onSave={handleSaveCase}
