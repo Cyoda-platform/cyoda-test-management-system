@@ -22,9 +22,11 @@ public class TestCaseService {
             new ModelSpec().withName(TestCaseDTO.ENTITY_NAME).withVersion(TestCaseDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
+    private final ProjectCounterService projectCounterService;
 
-    public TestCaseService(EntityService entityService) {
+    public TestCaseService(EntityService entityService, ProjectCounterService projectCounterService) {
         this.entityService = entityService;
+        this.projectCounterService = projectCounterService;
     }
 
     private TestCaseDTO withId(EntityWithMetadata<TestCaseDTO> result) {
@@ -40,11 +42,15 @@ public class TestCaseService {
     }
 
     /**
-     * Creates a new test case with ACTIVE status
+     * Creates a new test case with ACTIVE status.
+     * Always generates a server-side display ID using the project counter so IDs
+     * are unique across the project, independent of suite names, and never reused.
      */
     public TestCaseDTO createTestCase(TestCaseDTO testCase) {
         testCase.setStatus("ACTIVE");
         testCase.setDeleted(false);
+        // Always override any client-supplied displayId with a server-generated one
+        testCase.setDisplayId(projectCounterService.nextDisplayId(testCase.getProjectId()));
         return withId(entityService.create(testCase));
     }
 
