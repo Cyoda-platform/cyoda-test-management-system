@@ -49,6 +49,7 @@ public class TestCaseDTO implements CyodaEntity {
     private Priority priority;
 
     private String status;
+    private Integer sortOrder;
     private boolean deleted;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

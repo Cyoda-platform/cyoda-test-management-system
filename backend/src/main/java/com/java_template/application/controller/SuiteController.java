@@ -1,5 +1,6 @@
 package com.java_template.application.controller;
 
+import com.java_template.application.dto.ReorderItemDTO;
 import com.java_template.application.dto.SuiteDTO;
 import com.java_template.application.service.SuiteService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import com.java_template.common.dto.PageResult;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -69,5 +71,19 @@ public class SuiteController {
         }
         return ResponseEntity.notFound().build();
     }
-}
 
+    /**
+     * Bulk-reorder suites within a project.
+     * The request body is an ordered array of {@code {id, sortOrder}} pairs.
+     * The server updates each suite's {@code sortOrder} field; subsequent GETs
+     * will return suites in ascending {@code sortOrder} order.
+     */
+    @PatchMapping("/reorder")
+    @Operation(summary = "Reorder suites within a project")
+    public ResponseEntity<Void> reorderSuites(
+            @PathVariable UUID projectId,
+            @RequestBody List<ReorderItemDTO> items) {
+        suiteService.reorderSuites(items);
+        return ResponseEntity.ok().build();
+    }
+}

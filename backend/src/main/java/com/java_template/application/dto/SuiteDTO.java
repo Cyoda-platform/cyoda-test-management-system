@@ -39,6 +39,7 @@ public class SuiteDTO implements CyodaEntity {
     private String description;
 
     private String status;
+    private Integer sortOrder;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

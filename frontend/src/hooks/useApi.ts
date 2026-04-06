@@ -178,6 +178,16 @@ export function useDeleteSuite() {
   });
 }
 
+export function useReorderSuites() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, items }: { projectId: string; items: { id: string; sortOrder: number }[] }) =>
+      suitesApi.reorder(projectId, items),
+    onSuccess: (_data, { projectId }) =>
+      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) }),
+  });
+}
+
 // ── Test Cases ────────────────────────────────────────────────────────────────
 
 export function useTestCases(projectId: string, suiteId: string) {
@@ -249,6 +259,46 @@ export function useDeleteTestCase() {
     }) => testCasesApi.delete(projectId, suiteId, id),
     onSuccess: (_data, { projectId, suiteId }) =>
       qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) }),
+  });
+}
+
+export function useReorderTestCases() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      suiteId,
+      items,
+    }: {
+      projectId: string;
+      suiteId: string;
+      items: { id: string; sortOrder: number }[];
+    }) => testCasesApi.reorder(projectId, suiteId, items),
+    onSuccess: (_data, { projectId, suiteId }) =>
+      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) }),
+  });
+}
+
+export function useMoveTestCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      suiteId,
+      id,
+      targetSuiteId,
+      sortOrder,
+    }: {
+      projectId: string;
+      suiteId: string;
+      id: string;
+      targetSuiteId: string;
+      sortOrder: number;
+    }) => testCasesApi.move(projectId, suiteId, id, { targetSuiteId, sortOrder }),
+    onSuccess: (_data, { projectId, suiteId, targetSuiteId }) => {
+      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, suiteId) });
+      qc.invalidateQueries({ queryKey: keys.cases.all(projectId, targetSuiteId) });
+    },
   });
 }
 

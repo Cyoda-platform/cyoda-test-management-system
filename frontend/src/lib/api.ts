@@ -62,10 +62,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new Error(`API ${res.status}: ${body}`);
   }
 
-  // 204 No Content
+  // 204 No Content — or 200/2xx with an empty body (e.g. reorder endpoints)
   if (res.status === 204) return undefined as T;
 
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  if (!text) return undefined as T;
+
+  return JSON.parse(text) as T;
 }
 
 export const api = {
@@ -148,6 +151,9 @@ export const suitesApi = {
     api.put<Suite>(`/projects/${projectId}/suites/${id}`, body),
   delete: (projectId: string, id: string) =>
     api.delete<void>(`/projects/${projectId}/suites/${id}`),
+  /** Persist a new vertical order for all suites in a project. */
+  reorder: (projectId: string, items: { id: string; sortOrder: number }[]) =>
+    api.patch<void>(`/projects/${projectId}/suites/reorder`, items),
 };
 
 // ── Test Cases ────────────────────────────────────────────────────────────────
@@ -176,6 +182,12 @@ export const testCasesApi = {
     api.put<TestCase>(`/projects/${projectId}/suites/${suiteId}/cases/${id}`, body),
   delete: (projectId: string, suiteId: string, id: string) =>
     api.delete<void>(`/projects/${projectId}/suites/${suiteId}/cases/${id}`),
+  /** Persist a new display order for all cases in a suite. */
+  reorder: (projectId: string, suiteId: string, items: { id: string; sortOrder: number }[]) =>
+    api.patch<void>(`/projects/${projectId}/suites/${suiteId}/cases/reorder`, items),
+  /** Move a case to a different suite and assign it a position in that suite. */
+  move: (projectId: string, suiteId: string, id: string, body: { targetSuiteId: string; sortOrder: number }) =>
+    api.patch<TestCase>(`/projects/${projectId}/suites/${suiteId}/cases/${id}/move`, body),
 };
 
 // ── Test Steps ────────────────────────────────────────────────────────────────

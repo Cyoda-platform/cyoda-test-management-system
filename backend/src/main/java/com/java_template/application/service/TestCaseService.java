@@ -1,5 +1,6 @@
 package com.java_template.application.service;
 
+import com.java_template.application.dto.ReorderItemDTO;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
@@ -8,6 +9,7 @@ import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -63,6 +65,9 @@ public class TestCaseService {
         }
     }
 
+    /**
+     * Retrieves test cases for a suite, ordered by sortOrder (nulls last).
+     */
     public PageResult<TestCaseDTO> getTestCasesBySuiteId(UUID suiteId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(0).pageSize(1000).build();
@@ -76,6 +81,8 @@ public class TestCaseService {
                 .map(this::withId)
                 .filter(testCase -> suiteId.equals(testCase.getSuiteId()))
                 .filter(testCase -> !testCase.isDeleted())
+                .sorted(Comparator.comparing(TestCaseDTO::getSortOrder,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
                 .skip((long) page * size)
                 .limit(size)
                 .toList();
@@ -116,5 +123,37 @@ public class TestCaseService {
             return true;
         }).orElse(false);
     }
-}
 
+    /**
+     * Bulk-updates the sortOrder for a list of test cases within a suite.
+     * Each item carries the case UUID and its new 0-based position.
+     * Unknown or deleted IDs are silently skipped.
+     */
+    public void reorderTestCases(List<ReorderItemDTO> items) {
+        for (ReorderItemDTO item : items) {
+            getTestCaseById(item.id()).ifPresent(tc -> {
+                tc.setSortOrder(item.sortOrder());
+                entityService.update(tc.getId(), tc, null);
+            });
+        }
+    }
+
+    /**
+     * Moves a test case to a different suite and assigns it a new sort position.
+     * The caller is responsible for re-indexing the remaining cases in both
+     * the source and destination suites.
+     *
+     * @param id           UUID of the test case to move
+     * @param targetSuiteId UUID of the destination suite
+     * @param sortOrder    0-based position within the destination suite
+     * @return the updated TestCaseDTO
+     * @throws IllegalArgumentException if the test case does not exist
+     */
+    public TestCaseDTO moveTestCase(UUID id, UUID targetSuiteId, Integer sortOrder) {
+        return getTestCaseById(id).map(tc -> {
+            tc.setSuiteId(targetSuiteId);
+            tc.setSortOrder(sortOrder);
+            return updateTestCase(id, tc);
+        }).orElseThrow(() -> new IllegalArgumentException("Test case not found: " + id));
+    }
+}

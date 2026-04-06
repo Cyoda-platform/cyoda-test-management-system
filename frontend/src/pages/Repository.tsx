@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Plus, Pencil, Copy, Trash2, MoreHorizontal, Download, Upload, X, AlertTriangle, FileText, Image, Paperclip, Loader2, File, Search, Play } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Pencil, Copy, Trash2, MoreHorizontal, Download, Upload, X, AlertTriangle, FileText, Image, Paperclip, Loader2, File, Search, Play, GripVertical } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { performExport, performImport, downloadCSVTemplate } from '@/lib/exportImport';
 import { toast } from 'sonner';
@@ -133,6 +133,25 @@ const Repository = () => {
 
   const isLoadingRepo = suitesLoading2 || caseQueries.some(q => q.isLoading && !q.data);
 
+  // ── Local ordered copy of suites (drives all rendering; DnD mutates this) ──
+  const [localSuites, setLocalSuites] = useState<Suite[]>([]);
+  // True while the drag gesture is active (prevents server sync from overwriting DnD state)
+  const isDraggingRef = useRef(false);
+  // True while a reorder/move API call is in flight (keeps isDraggingRef blocked until save completes)
+  const isPersistingRef = useRef(false);
+
+  // ── DnD tracking state ────────────────────────────────────────────────────
+  type DragItem =
+    | { type: 'suite'; id: string }
+    | { type: 'case';  id: string; suiteId: string };
+  type DropTarget =
+    | { type: 'suite';            id: string; position: 'before' | 'after' }
+    | { type: 'case';             id: string; position: 'before' | 'after' }
+    | { type: 'suite-container';  id: string };
+
+  const [activeDrag, setActiveDrag] = useState<DragItem | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+
   const [selectedCase, setSelectedCase] = useState<TestCase | null>(null);
 
   // Expand all suites once they first load
@@ -158,10 +177,62 @@ const Repository = () => {
     }
   }, [isLoadingRepo, suites]);
 
+  // Sync localSuites from the server whenever data changes, but never while a
+  // drag or save is in progress (to avoid overwriting the optimistic reordering).
+  // IMPORTANT: when nothing structurally changed (same suite/case IDs), we return
+  // `prev` unchanged so React bails out of the setState and breaks any render loop
+  // caused by useQueries returning a new array reference on every render.
+  useEffect(() => {
+    if (isDraggingRef.current || isPersistingRef.current) return;
+    setLocalSuites(prev => {
+      // Initial load: populate from server
+      if (prev.length === 0) return suites.length > 0 ? suites : prev;
+
+      const serverMap = new Map(suites.map(s => [s.id, s]));
+
+      // Check whether the set of suite IDs changed
+      const prevIds = prev.map(s => s.id);
+      const serverIdSet = new Set(suites.map(s => s.id));
+      const suitesChanged = prev.length !== suites.length || prevIds.some(id => !serverIdSet.has(id));
+
+      // Check whether the set of case IDs within any suite changed
+      const casesChanged = !suitesChanged && prev.some(ps => {
+        const ss = serverMap.get(ps.id);
+        if (!ss) return true;
+        const prevCaseIdSet = new Set(ps.cases.map(c => c.id));
+        if (ps.cases.length !== ss.cases.length) return true;
+        return ss.cases.some(c => !prevCaseIdSet.has(c.id));
+      });
+
+      // Nothing structurally changed → return the SAME reference so React bails out
+      // and does NOT schedule another render (breaks any infinite-loop caused by
+      // useQueries giving a new array reference on every render).
+      if (!suitesChanged && !casesChanged) return prev;
+
+      // Full merge: preserve user-chosen order, sync payload from server
+      const merged = prev
+        .filter(s => serverMap.has(s.id))
+        .map(s => {
+          const server = serverMap.get(s.id)!;
+          const serverCaseMap = new Map(server.cases.map(c => [c.id, c]));
+          // Preserve local case order, update case data from server
+          const existingCases = s.cases
+            .filter(c => serverCaseMap.has(c.id))
+            .map(c => serverCaseMap.get(c.id)!);
+          // Append any brand-new cases the server has that local doesn't
+          const newCases = server.cases.filter(c => !s.cases.some(lc => lc.id === c.id));
+          return { ...server, cases: [...existingCases, ...newCases] };
+        });
+      // Append brand-new suites from the server at the end
+      const newSuites = suites.filter(s => !prev.some(ls => ls.id === s.id));
+      return [...merged, ...newSuites];
+    });
+  }, [suites]);
+
   // 3. Fetch steps for the selected case (lazy)
   const selectedCaseSuiteId = useMemo(
-    () => suites.find(s => s.cases.some(c => c.id === selectedCase?.id))?.id ?? '',
-    [suites, selectedCase?.id]
+    () => localSuites.find(s => s.cases.some(c => c.id === selectedCase?.id))?.id ?? '',
+    [localSuites, selectedCase?.id]
   );
   const stepsQuery = useQueries({
     queries: selectedCase && selectedCaseSuiteId
@@ -198,6 +269,213 @@ const Repository = () => {
   const deleteCaseMut = useDeleteTestCase();
   const createRunMut   = useCreateTestRun();
 
+  // ── Drag-and-Drop handlers ────────────────────────────────────────────────
+
+  /** Suite drag start — left panel tree */
+  const handleSuiteDragStart = useCallback((e: React.DragEvent, suiteId: string) => {
+    isDraggingRef.current = true;
+    setActiveDrag({ type: 'suite', id: suiteId });
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'suite', id: suiteId }));
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  /** Case drag start — middle panel case row */
+  const handleCaseDragStart = useCallback((e: React.DragEvent, caseId: string, suiteId: string) => {
+    isDraggingRef.current = true;
+    setActiveDrag({ type: 'case', id: caseId, suiteId });
+    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'case', id: caseId, suiteId }));
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    // If a drop handler is currently persisting to the API, leave isDraggingRef
+    // alone — the drop handler's `finally` block will clear it after the save.
+    // For cancelled drags (no drop fired), we clear it here.
+    if (!isPersistingRef.current) {
+      isDraggingRef.current = false;
+    }
+    setActiveDrag(null);
+    setDropTarget(null);
+  }, []);
+
+  /** Suite drag-over — determines before/after position from cursor */
+  const handleSuiteDragOver = useCallback((e: React.DragEvent, targetSuiteId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    setDropTarget({ type: 'suite', id: targetSuiteId, position });
+  }, []);
+
+  /** Case drag-over — determines before/after position from cursor */
+  const handleCaseDragOver = useCallback((e: React.DragEvent, targetCaseId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    setDropTarget({ type: 'case', id: targetCaseId, position });
+  }, []);
+
+  /** Suite-header drag-over — accepts cases dropped onto a suite heading */
+  const handleSuiteContainerDragOver = useCallback((e: React.DragEvent, suiteId: string) => {
+    if (activeDrag?.type !== 'case') return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTarget({ type: 'suite-container', id: suiteId });
+  }, [activeDrag]);
+
+  const clearDragState = useCallback(() => {
+    isDraggingRef.current = false;
+    setActiveDrag(null);
+    setDropTarget(null);
+  }, []);
+
+  /**
+   * Drop handler for suite reordering (left panel tree).
+   * Optimistically reorders localSuites, then persists via PATCH /suites/reorder.
+   */
+  const handleSuiteDrop = useCallback(async (e: React.DragEvent, targetSuiteId: string) => {
+    e.preventDefault();
+    let data: { type: string; id: string } | null = null;
+    try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { /* ignore */ }
+    if (!data || data.type !== 'suite' || data.id === targetSuiteId) { clearDragState(); return; }
+
+    const draggedId = data.id;
+    const insertAfter = dropTarget?.type === 'suite' && dropTarget.id === targetSuiteId
+      ? dropTarget.position === 'after'
+      : false;
+    const snapshot = [...localSuites];
+
+    // Compute the new suite order
+    const reordered = [...localSuites];
+    const fromIdx = reordered.findIndex(s => s.id === draggedId);
+    const toIdx   = reordered.findIndex(s => s.id === targetSuiteId);
+    if (fromIdx === -1 || toIdx === -1) { clearDragState(); return; }
+    const [removed] = reordered.splice(fromIdx, 1);
+    const adjustedTo = reordered.findIndex(s => s.id === targetSuiteId);
+    reordered.splice(insertAfter ? adjustedTo + 1 : adjustedTo, 0, removed);
+
+    // Optimistic update — keep isDraggingRef true until save completes so that
+    // the server-sync useEffect does not revert the reordering mid-flight.
+    isPersistingRef.current = true;
+    setLocalSuites(reordered);
+    // Clear visual drag decorations immediately (the API call will clear the refs)
+    setActiveDrag(null);
+    setDropTarget(null);
+
+    try {
+      await suitesApi.reorder(projectId!, reordered.map((s, i) => ({ id: s.id, sortOrder: i })));
+      queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId!) });
+    } catch {
+      setLocalSuites(snapshot);
+      toast.error('Failed to save suite order');
+    } finally {
+      isPersistingRef.current = false;
+      isDraggingRef.current = false;
+    }
+  }, [localSuites, dropTarget, projectId, queryClient]);
+
+  /**
+   * Drop handler for case reordering and inter-suite movement (middle panel).
+   * Supports same-suite reorder and cross-suite moves.
+   * Uses PATCH /cases/reorder (same suite) or PATCH /cases/{id}/move (cross-suite).
+   */
+  const handleCaseDrop = useCallback(async (
+    e: React.DragEvent,
+    targetId: string,
+    targetType: 'case' | 'suite-container'
+  ) => {
+    e.preventDefault();
+    let data: { type: string; id: string; suiteId: string } | null = null;
+    try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { /* ignore */ }
+    if (!data || data.type !== 'case') { clearDragState(); return; }
+
+    const draggedCaseId = data.id;
+    const sourceSuiteId = data.suiteId;
+    const insertAfter = dropTarget?.type === 'case' && dropTarget.id === targetId
+      ? dropTarget.position === 'after'
+      : false;
+
+    // Find the dragged case in current local state
+    let draggedCase: TestCase | undefined;
+    for (const s of localSuites) {
+      draggedCase = s.cases.find(c => c.id === draggedCaseId);
+      if (draggedCase) break;
+    }
+    if (!draggedCase || draggedCaseId === targetId) { clearDragState(); return; }
+
+    // Resolve target suite
+    const targetSuiteId = targetType === 'suite-container'
+      ? targetId
+      : (localSuites.find(s => s.cases.some(c => c.id === targetId))?.id ?? sourceSuiteId);
+
+    const snapshot = localSuites.map(s => ({ ...s, cases: [...s.cases] }));
+
+    // Remove dragged case from its current suite
+    let updated = localSuites.map(s => ({
+      ...s,
+      cases: s.cases.filter(c => c.id !== draggedCaseId),
+    }));
+
+    // Insert into target suite
+    updated = updated.map(s => {
+      if (s.id !== targetSuiteId) return s;
+      const updatedCase: TestCase = { ...draggedCase!, suiteId: targetSuiteId };
+      if (targetType === 'suite-container') {
+        return { ...s, cases: [...s.cases, updatedCase] };
+      }
+      const tIdx = s.cases.findIndex(c => c.id === targetId);
+      const insertIdx = tIdx >= 0 ? (insertAfter ? tIdx + 1 : tIdx) : s.cases.length;
+      const newCases = [...s.cases];
+      newCases.splice(insertIdx, 0, updatedCase);
+      return { ...s, cases: newCases };
+    });
+
+    const isSameSuite = sourceSuiteId === targetSuiteId;
+    const targetSuiteAfter = updated.find(s => s.id === targetSuiteId)!;
+    const newSortOrder = targetSuiteAfter.cases.findIndex(c => c.id === draggedCaseId);
+
+    // Optimistic update — keep isDraggingRef true until save completes so that
+    // the server-sync useEffect does not revert the move mid-flight.
+    isPersistingRef.current = true;
+    setLocalSuites(updated);
+    // Clear visual drag decorations immediately
+    setActiveDrag(null);
+    setDropTarget(null);
+
+    try {
+      if (!isSameSuite) {
+        // 1. Move the case (updates suiteId + sortOrder)
+        await testCasesApi.move(projectId!, sourceSuiteId, draggedCaseId, {
+          targetSuiteId,
+          sortOrder: newSortOrder,
+        });
+        // 2. Re-index remaining cases in the source suite
+        const srcSuite = updated.find(s => s.id === sourceSuiteId)!;
+        if (srcSuite.cases.length > 0) {
+          await testCasesApi.reorder(projectId!, sourceSuiteId,
+            srcSuite.cases.map((c, i) => ({ id: c.id, sortOrder: i })));
+        }
+        // 3. Re-index all cases in the target suite
+        await testCasesApi.reorder(projectId!, targetSuiteId,
+          targetSuiteAfter.cases.map((c, i) => ({ id: c.id, sortOrder: i })));
+        queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId!, sourceSuiteId) });
+        queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId!, targetSuiteId) });
+      } else {
+        // Same-suite reorder only
+        await testCasesApi.reorder(projectId!, targetSuiteId,
+          targetSuiteAfter.cases.map((c, i) => ({ id: c.id, sortOrder: i })));
+        queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId!, targetSuiteId) });
+      }
+    } catch {
+      setLocalSuites(snapshot);
+      toast.error('Failed to save order. Your changes have been reverted.');
+    } finally {
+      isPersistingRef.current = false;
+      isDraggingRef.current = false;
+    }
+  }, [localSuites, dropTarget, projectId, queryClient]);
+
   // Fixed panel sizes
   const panelSizes = { left: 15, middle: 50, right: 35 };
 
@@ -217,15 +495,15 @@ const Repository = () => {
   const [newRunBuildVersion, setNewRunBuildVersion] = useState('');
   const [newRunDesc, setNewRunDesc] = useState('');
 
-  // Stats
-  const totalCases = suites.reduce((sum, s) => sum + s.cases.length, 0);
-  const totalSuites = suites.length;
+  // Stats (driven by localSuites so they reflect DnD moves immediately)
+  const totalCases = localSuites.reduce((sum, s) => sum + s.cases.length, 0);
+  const totalSuites = localSuites.length;
 
-  // Filtered suites for local search
+  // Filtered suites for local search (derived from localSuites to preserve order)
   const filteredSuites = useMemo(() => {
     const q = localSearch.trim().toLowerCase();
-    if (!q) return suites;
-    return suites
+    if (!q) return localSuites;
+    return localSuites
       .map((suite) => {
         const suiteMatch = suite.name.toLowerCase().includes(q);
         const filteredCases = suite.cases.filter(
@@ -241,7 +519,7 @@ const Repository = () => {
         return null;
       })
       .filter(Boolean) as Suite[];
-  }, [suites, localSearch]);
+  }, [localSuites, localSearch]);
 
   // Highlight helper
   const HighlightText = ({ text, query }: { text: string; query: string }) => {
@@ -283,7 +561,7 @@ const Repository = () => {
 
   // Toggle all cases across all suites
   const toggleSelectAll = () => {
-    const allCasesInAllSuites = suites.flatMap((s) => s.cases);
+    const allCasesInAllSuites = localSuites.flatMap((s) => s.cases);
     const allCasesSelected = allCasesInAllSuites.every((c) => selectedCases.has(c.id));
     if (allCasesSelected) {
       setSelectedCases(new Set());
@@ -294,7 +572,7 @@ const Repository = () => {
 
   // Check if all cases are selected
   const allCasesSelected = (() => {
-    const allCasesInAllSuites = suites.flatMap((s) => s.cases);
+    const allCasesInAllSuites = localSuites.flatMap((s) => s.cases);
     return allCasesInAllSuites.length > 0 && allCasesInAllSuites.every((c) => selectedCases.has(c.id));
   })();
 
@@ -305,12 +583,12 @@ const Repository = () => {
     const toDelete = [...selectedCases];
     try {
       await Promise.all(toDelete.map(caseId => {
-        const suite = suites.find(s => s.cases.some(c => c.id === caseId));
+        const suite = localSuites.find(s => s.cases.some(c => c.id === caseId));
         if (!suite) return Promise.resolve();
         return testCasesApi.delete(projectId, suite.id, caseId);
       }));
       // Invalidate all case queries
-      suites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
+      localSuites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
       if (selectedCase && selectedCases.has(selectedCase.id)) setSelectedCase(null);
       setSelectedCases(new Set());
       setBulkDeleteOpen(false);
@@ -324,7 +602,7 @@ const Repository = () => {
     if (!projectId) return;
     try {
       for (const caseId of selectedCases) {
-        const suite = suites.find(s => s.cases.some(c => c.id === caseId));
+        const suite = localSuites.find(s => s.cases.some(c => c.id === caseId));
         const tc = suite?.cases.find(c => c.id === caseId);
         if (!suite || !tc) continue;
         const newCase = await testCasesApi.create(projectId, suite.id, {
@@ -344,7 +622,7 @@ const Repository = () => {
           await attachmentsApi.copy(projectId, att.id, newCase.id);
         }
       }
-      suites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
+      localSuites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
       toast.success(`Duplicated ${selectedCases.size} case(s)`);
       clearSelection();
     } catch (e) {
@@ -396,7 +674,7 @@ const Repository = () => {
   const [importing, setImporting] = useState(false);
 
   const toggleExportSuite = (id: string) => {
-    const suite = suites.find(s => s.id === id);
+    const suite = localSuites.find(s => s.id === id);
     setExportSelectedSuites((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -417,7 +695,7 @@ const Repository = () => {
       const next = new Set(prev);
       next.has(caseId) ? next.delete(caseId) : next.add(caseId);
       // Auto-check/uncheck suite
-      const suite = suites.find(s => s.id === suiteId);
+      const suite = localSuites.find(s => s.id === suiteId);
       if (suite) {
         const allSelected = suite.cases.every(c => (c.id === caseId ? !prev.has(caseId) : next.has(c.id)));
         const nextSuites = new Set(exportSelectedSuites);
@@ -440,10 +718,10 @@ const Repository = () => {
     setExporting(true);
     try {
       const targetSuites = exportScope === 'selected'
-        ? suites
+        ? localSuites
             .filter(s => s.cases.some(c => exportSelectedCases.has(c.id)))
             .map(s => ({ ...s, cases: s.cases.filter(c => exportSelectedCases.has(c.id)) }))
-        : suites;
+        : localSuites;
 
       const suitesForExport = exportIncludeSteps
         ? await Promise.all(targetSuites.map(async (suite) => ({
@@ -501,12 +779,12 @@ const Repository = () => {
     setImporting(true);
     try {
       const targetId = importSuiteTarget === 'root' ? '__new__' : importSuiteTarget;
-      const { updatedSuites, result } = await performImport(importFile, targetId, importConflict, suites, projectId);
+      const { updatedSuites, result } = await performImport(importFile, targetId, importConflict, localSuites, projectId);
       const affectedSuiteIds = new Set<string>();
 
       // Persist parsed cases to the backend
       for (const suite of updatedSuites) {
-        const existing = suites.find(s => s.id === suite.id);
+        const existing = localSuites.find(s => s.id === suite.id);
         const newCases = existing
           ? suite.cases.filter(c => !existing.cases.some(ec => ec.id === c.id))
           : suite.cases;
@@ -643,7 +921,7 @@ const Repository = () => {
   // ── Case CRUD ──
   const openCreateCase = (suiteId?: string) => {
     setCaseModalMode('create');
-    setCaseSuiteId(suiteId || (suites.length > 0 ? suites[0].id : ''));
+    setCaseSuiteId(suiteId || (localSuites.length > 0 ? localSuites[0].id : ''));
     setEditingCaseId('');
     setEditingCase(null);
     setCaseFormOpen(true);
@@ -748,7 +1026,7 @@ const Repository = () => {
         { projectId, id: deleteTarget.id },
         {
           onSuccess: () => {
-            if (selectedCase && suites.find(s => s.id === deleteTarget.id)?.cases.some(c => c.id === selectedCase.id)) {
+            if (selectedCase && localSuites.find(s => s.id === deleteTarget.id)?.cases.some(c => c.id === selectedCase.id)) {
               setSelectedCase(null);
             }
             queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
@@ -760,7 +1038,7 @@ const Repository = () => {
         }
       );
     } else {
-      const suiteForCase = suites.find(s => s.cases.some(c => c.id === deleteTarget.id));
+      const suiteForCase = localSuites.find(s => s.cases.some(c => c.id === deleteTarget.id));
       if (!suiteForCase) return;
       deleteCaseMut.mutate(
         { projectId, suiteId: suiteForCase.id, id: deleteTarget.id },
@@ -787,7 +1065,7 @@ const Repository = () => {
       <div className="h-full">
         <CaseFormPage
           mode={caseModalMode}
-          suites={suites}
+          suites={localSuites}
           initialSuiteId={caseSuiteId}
           initialCase={editingCaseWithSteps || undefined}
           projectName={project?.name}
@@ -862,8 +1140,8 @@ const Repository = () => {
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => {
                     setExportScope('selected');
                     setExportSelectedCases(new Set(selectedCases));
-                    setExportSelectedSuites(new Set(suites.filter(s => s.cases.every(c => selectedCases.has(c.id))).map(s => s.id)));
-                    setExportExpandedSuites(new Set(suites.filter(s => s.cases.some(c => selectedCases.has(c.id))).map(s => s.id)));
+                    setExportSelectedSuites(new Set(localSuites.filter(s => s.cases.every(c => selectedCases.has(c.id))).map(s => s.id)));
+                    setExportExpandedSuites(new Set(localSuites.filter(s => s.cases.some(c => selectedCases.has(c.id))).map(s => s.id)));
                     setExportOpen(true);
                   }}>
                     <Download className="h-4 w-4" strokeWidth={1.5} />
@@ -931,30 +1209,56 @@ const Repository = () => {
                 </Button>
               </div>
               <div className="px-2 pb-2">
-                {suites.map((suite) => (
-                  <div
-                    key={suite.id}
-                    className="w-full flex items-center gap-2 px-2 py-2 rounded-md text-sm hover:bg-card transition-colors"
-                  >
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleSuite(suite.id); }}
-                      className="shrink-0 p-0.5 rounded hover:bg-muted transition-colors"
-                      aria-label={expandedSuites.has(suite.id) ? 'Collapse suite' : 'Expand suite'}
-                    >
-                      {expandedSuites.has(suite.id) ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />}
-                    </button>
-                    <button
-                      onClick={() => {
-                        const el = document.getElementById(`suite-section-${suite.id}`);
-                        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                {localSuites.map((suite) => {
+                  const isSuiteTarget = dropTarget?.type === 'suite' && dropTarget.id === suite.id;
+                  return (
+                    <div
+                      key={suite.id}
+                      className={[
+                        'w-full flex items-center gap-1 px-2 py-2 rounded-md text-sm hover:bg-card transition-colors relative group/suite-tree',
+                        isSuiteTarget && dropTarget?.position === 'before' ? 'border-t-2 border-primary/60' : '',
+                        isSuiteTarget && dropTarget?.position === 'after'  ? 'border-b-2 border-primary/60' : '',
+                      ].join(' ')}
+                      onDragOver={(e) => {
+                        if (activeDrag?.type === 'suite') handleSuiteDragOver(e, suite.id);
+                        else e.preventDefault();
                       }}
-                      className="flex-1 text-left truncate text-foreground hover:text-primary transition-colors"
+                      onDrop={(e) => handleSuiteDrop(e, suite.id)}
+                      onDragLeave={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null);
+                      }}
                     >
-                      {suite.name}
-                    </button>
-                    <span className="text-[10px] text-muted-foreground font-mono">{suite.cases.length}</span>
-                  </div>
-                ))}
+                      {/* Drag handle — grab here to reorder suites */}
+                      <div
+                        draggable
+                        onDragStart={(e) => { e.stopPropagation(); handleSuiteDragStart(e, suite.id); }}
+                        onDragEnd={handleDragEnd}
+                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0 opacity-0 group-hover/suite-tree:opacity-60 hover:!opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-muted"
+                        title="Drag to reorder suite"
+                      >
+                        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleSuite(suite.id); }}
+                        className="shrink-0 p-0.5 rounded hover:bg-muted transition-colors"
+                        aria-label={expandedSuites.has(suite.id) ? 'Collapse suite' : 'Expand suite'}
+                      >
+                        {expandedSuites.has(suite.id) ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const el = document.getElementById(`suite-section-${suite.id}`);
+                          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className="flex-1 text-left truncate text-foreground hover:text-primary transition-colors"
+                      >
+                        {suite.name}
+                      </button>
+                      <span className="text-[10px] text-muted-foreground font-mono">{suite.cases.length}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </ResizablePanel>
@@ -966,7 +1270,23 @@ const Repository = () => {
             <div className="h-full min-w-0 overflow-auto bg-card">
               {filteredSuites.map((suite) => (
                 <div key={suite.id} id={`suite-section-${suite.id}`} className="border-b border-border/40 last:border-b-0">
-                  <div className="group flex items-center justify-between px-5 py-2.5 surface-low">
+                  <div
+                    className={[
+                      'group flex items-center justify-between px-5 py-2.5 surface-low transition-colors',
+                      dropTarget?.type === 'suite-container' && dropTarget.id === suite.id
+                        ? 'bg-primary/5 ring-1 ring-inset ring-primary/20'
+                        : '',
+                    ].join(' ')}
+                    onDragOver={(e) => {
+                      if (activeDrag?.type === 'case') handleSuiteContainerDragOver(e, suite.id);
+                    }}
+                    onDrop={(e) => {
+                      if (activeDrag?.type === 'case') handleCaseDrop(e, suite.id, 'suite-container');
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null);
+                    }}
+                  >
                     <div className="flex items-center gap-2">
                       <div className={`flex items-center justify-center transition-opacity ${selectedCases.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                         <Checkbox
@@ -976,6 +1296,12 @@ const Repository = () => {
                         />
                       </div>
                       <span className="text-sm font-semibold text-foreground"><HighlightText text={suite.name} query={localSearch} /></span>
+                      {/* Drop hint label shown while dragging a case */}
+                      {activeDrag?.type === 'case' && (
+                        <span className="text-[10px] text-primary/60 font-mono ml-1 pointer-events-none">
+                          drop here
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openCreateCase(suite.id)}>
@@ -995,43 +1321,79 @@ const Repository = () => {
 
                   {expandedSuites.has(suite.id) && (
                     <div className="py-1">
-                      {suite.cases.map((tc) => (
-                        <div
-                          key={tc.id}
-                          onClick={() => setSelectedCase(tc)}
-                          className={`group grid grid-cols-[16px_minmax(60px,88px)_minmax(0,1fr)_auto_auto] items-center gap-3 px-5 py-2.5 mx-2 rounded cursor-pointer transition-colors ${selectedCases.has(tc.id) ? 'bg-indigo-50' : selectedCase?.id === tc.id ? 'surface-high' : 'hover:surface-low'}`}
-                        >
-                          <div className={`flex items-center justify-center transition-opacity ${selectedCases.has(tc.id) || selectedCases.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                            <Checkbox
-                              checked={selectedCases.has(tc.id)}
-                              onCheckedChange={() => toggleCaseSelection(tc.id)}
-                              className="h-3.5 w-3.5"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                          <span
-                            className="min-w-[60px] max-w-[88px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-mono tracking-wider text-muted-foreground"
-                            title={tc.id}
+                      {suite.cases.map((tc) => {
+                        const isCaseTarget = dropTarget?.type === 'case' && dropTarget.id === tc.id;
+                        return (
+                          <div
+                            key={tc.id}
+                            onClick={() => setSelectedCase(tc)}
+                            className={[
+                              'group grid grid-cols-[14px_16px_minmax(60px,88px)_minmax(0,1fr)_auto_auto]',
+                              'items-center gap-3 px-4 py-2.5 mx-2 rounded cursor-pointer transition-colors relative',
+                              isCaseTarget && dropTarget?.position === 'before' ? 'border-t-2 border-primary/60' : '',
+                              isCaseTarget && dropTarget?.position === 'after'  ? 'border-b-2 border-primary/60' : '',
+                              selectedCases.has(tc.id) ? 'bg-indigo-50' :
+                              selectedCase?.id === tc.id ? 'surface-high' : 'hover:surface-low',
+                            ].join(' ')}
+                            onDragOver={(e) => handleCaseDragOver(e, tc.id)}
+                            onDrop={(e) => { e.stopPropagation(); handleCaseDrop(e, tc.id, 'case'); }}
+                            onDragLeave={(e) => {
+                              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null);
+                            }}
                           >
-                            <HighlightText text={getCaseDisplayId(tc)} query={localSearch} />
-                          </span>
-                          <span className="min-w-0 text-sm font-medium text-foreground truncate">
-                            <HighlightText text={tc.title} query={localSearch} />
-                          </span>
-                          <PriorityBadge priority={tc.priority} className="ml-auto shrink-0 justify-self-end" />
-                          <div className="flex items-center gap-0.5 justify-self-end shrink-0">
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => { e.stopPropagation(); openEditCase(tc); }}>
-                              <Pencil className="h-3 w-3" strokeWidth={1.5} />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => { e.stopPropagation(); copyCase(tc); }}>
-                              <Copy className="h-3 w-3" strokeWidth={1.5} />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); confirmDeleteCase(tc); }}>
-                              <Trash2 className="h-3 w-3" strokeWidth={1.5} />
-                            </Button>
+                            {/* ── Drag handle (col 1) ── */}
+                            <div
+                              draggable
+                              onDragStart={(e) => { e.stopPropagation(); handleCaseDragStart(e, tc.id, suite.id); }}
+                              onDragEnd={handleDragEnd}
+                              onClick={(e) => e.stopPropagation()}
+                              className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-grab active:cursor-grabbing flex items-center justify-center"
+                              title="Drag to reorder or move to another suite"
+                            >
+                              <GripVertical className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} />
+                            </div>
+
+                            {/* ── Checkbox (col 2) ── */}
+                            <div className={`flex items-center justify-center transition-opacity ${selectedCases.has(tc.id) || selectedCases.size > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                              <Checkbox
+                                checked={selectedCases.has(tc.id)}
+                                onCheckedChange={() => toggleCaseSelection(tc.id)}
+                                className="h-3.5 w-3.5"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+
+                            {/* ── Display ID (col 3) ── */}
+                            <span
+                              className="min-w-[60px] max-w-[88px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-mono tracking-wider text-muted-foreground"
+                              title={tc.id}
+                            >
+                              <HighlightText text={getCaseDisplayId(tc)} query={localSearch} />
+                            </span>
+
+                            {/* ── Title (col 4) ── */}
+                            <span className="min-w-0 text-sm font-medium text-foreground truncate">
+                              <HighlightText text={tc.title} query={localSearch} />
+                            </span>
+
+                            {/* ── Priority badge (col 5) ── */}
+                            <PriorityBadge priority={tc.priority} className="ml-auto shrink-0 justify-self-end" />
+
+                            {/* ── Actions (col 6) ── */}
+                            <div className="flex items-center gap-0.5 justify-self-end shrink-0">
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => { e.stopPropagation(); openEditCase(tc); }}>
+                                <Pencil className="h-3 w-3" strokeWidth={1.5} />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => { e.stopPropagation(); copyCase(tc); }}>
+                                <Copy className="h-3 w-3" strokeWidth={1.5} />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); confirmDeleteCase(tc); }}>
+                                <Trash2 className="h-3 w-3" strokeWidth={1.5} />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       <div className="px-5 py-2">
                         <Button variant="ghost" size="sm" className="text-xs text-muted-foreground gap-1" onClick={() => { setQuickCreateSuiteId(suite.id); setQuickCreateTitle(''); setQuickCreateOpen(true); }}>
                           <Plus className="h-3 w-3" strokeWidth={1.5} /> Create quick test
@@ -1059,7 +1421,7 @@ const Repository = () => {
                           <span className="truncate">{selectedCase.title}</span>
                         </h2>
                         <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
-                          <span className="uppercase tracking-widest">{suites.find((s) => s.id === selectedCase.suiteId)?.name}</span>
+                          <span className="uppercase tracking-widest">{localSuites.find((s) => s.id === selectedCase.suiteId)?.name}</span>
                           <span>·</span>
                           <PriorityBadge priority={selectedCase.priority} />
                         </div>
@@ -1225,7 +1587,7 @@ const Repository = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {suites.map((s) => (
+                  {localSuites.map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1339,7 +1701,7 @@ const Repository = () => {
               </RadioGroup>
               {exportScope === 'selected' && (
                 <div className="mt-3 ml-6 border-l-2 border-input pl-3">
-                  {suites.map((s) => {
+                  {localSuites.map((s) => {
                     const isExpanded = exportExpandedSuites.has(s.id);
                     const selectedCount = s.cases.filter(c => exportSelectedCases.has(c.id)).length;
                     return (
@@ -1484,7 +1846,7 @@ const Repository = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="root">Root (No Suite)</SelectItem>
-                  {suites.map((s) => (
+                  {localSuites.map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1606,7 +1968,7 @@ const Repository = () => {
                 Selected Cases <span className="text-muted-foreground/60">({selectedCases.size})</span>
               </label>
               <div className="mt-1.5 rounded-lg bg-secondary overflow-hidden overflow-y-auto flex-1">
-                {suites.filter(s => s.cases.some(c => selectedCases.has(c.id))).map((suite) => (
+                {localSuites.filter(s => s.cases.some(c => selectedCases.has(c.id))).map((suite) => (
                   <div key={suite.id}>
                     <div className="flex items-center gap-2 px-3 py-2 bg-muted/30">
                       <span className="text-sm font-semibold text-foreground">{suite.name}</span>

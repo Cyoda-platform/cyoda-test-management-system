@@ -1,5 +1,6 @@
 package com.java_template.application.service;
 
+import com.java_template.application.dto.ReorderItemDTO;
 import com.java_template.application.dto.SuiteDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
@@ -7,6 +8,7 @@ import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -58,13 +60,15 @@ public class SuiteService {
     }
 
     /**
-     * Retrieves all suites for a specific project
+     * Retrieves all suites for a specific project, ordered by sortOrder (nulls last).
      */
     public PageResult<SuiteDTO> getSuitesByProjectId(UUID projectId, int page, int size) {
         List<SuiteDTO> all = entityService.findAll(MODEL_SPEC, SuiteDTO.class)
                 .data().stream()
                 .map(this::withId)
                 .filter(s -> projectId.equals(s.getProjectId()))
+                .sorted(Comparator.comparing(SuiteDTO::getSortOrder,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
         int from = page * size;
         int to = Math.min(from + size, all.size());
@@ -101,5 +105,18 @@ public class SuiteService {
     public boolean suiteExists(UUID id) {
         return getSuiteById(id).isPresent();
     }
-}
 
+    /**
+     * Bulk-updates the sortOrder for a list of suites.
+     * Each item carries the suite UUID and its new 0-based position.
+     * Unknown IDs are silently skipped to guard against stale client state.
+     */
+    public void reorderSuites(List<ReorderItemDTO> items) {
+        for (ReorderItemDTO item : items) {
+            getSuiteById(item.id()).ifPresent(suite -> {
+                suite.setSortOrder(item.sortOrder());
+                entityService.update(suite.getId(), suite, null);
+            });
+        }
+    }
+}

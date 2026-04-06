@@ -1,5 +1,7 @@
 package com.java_template.application.controller;
 
+import com.java_template.application.dto.MoveTestCaseDTO;
+import com.java_template.application.dto.ReorderItemDTO;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.application.service.TestCaseService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -9,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import com.java_template.common.dto.PageResult;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -72,5 +75,41 @@ public class TestCaseController {
         }
         return ResponseEntity.notFound().build();
     }
-}
 
+    /**
+     * Bulk-reorder test cases within a suite.
+     * The request body is an ordered array of {@code {id, sortOrder}} pairs.
+     * The server updates each case's {@code sortOrder} field; subsequent GETs
+     * will return cases in ascending {@code sortOrder} order.
+     */
+    @PatchMapping("/reorder")
+    @Operation(summary = "Reorder test cases within a suite")
+    public ResponseEntity<Void> reorderTestCases(
+            @PathVariable UUID projectId,
+            @PathVariable UUID suiteId,
+            @RequestBody List<ReorderItemDTO> items) {
+        testCaseService.reorderTestCases(items);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Move a test case to a different suite and/or position.
+     * Updates both {@code suiteId} (foreign key) and {@code sortOrder} atomically.
+     * After a successful move the caller should re-index the remaining cases in
+     * both the source and destination suites via {@code PATCH /reorder}.
+     */
+    @PatchMapping("/{id}/move")
+    @Operation(summary = "Move a test case to a different suite")
+    public ResponseEntity<TestCaseDTO> moveTestCase(
+            @PathVariable UUID projectId,
+            @PathVariable UUID suiteId,
+            @PathVariable UUID id,
+            @RequestBody MoveTestCaseDTO moveDTO) {
+        try {
+            TestCaseDTO moved = testCaseService.moveTestCase(id, moveDTO.targetSuiteId(), moveDTO.sortOrder());
+            return ResponseEntity.ok(moved);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+}
