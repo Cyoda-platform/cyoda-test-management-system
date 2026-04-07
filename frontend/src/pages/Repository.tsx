@@ -1270,7 +1270,7 @@ const Repository = () => {
                     setExportExpandedSuites(new Set(localSuites.filter(s => s.cases.some(c => selectedCases.has(c.id))).map(s => s.id)));
                     setExportOpen(true);
                   }}>
-                    <Download className="h-4 w-4" strokeWidth={1.5} />
+                    <Upload className="h-4 w-4" strokeWidth={1.5} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Export selected</TooltipContent>
