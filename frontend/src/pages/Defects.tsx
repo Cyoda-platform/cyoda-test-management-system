@@ -63,6 +63,7 @@ const Defects = () => {
   const [formLink, setFormLink] = useState('');
   const [formSource, setFormSource] = useState('');
   const [formFiles, setFormFiles] = useState<File[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Edit modal
@@ -165,6 +166,9 @@ const Defects = () => {
       return;
     }
 
+    if (isCreating) return; // Prevent double-click
+    setIsCreating(true);
+
     try {
       // Create defect
       const defectPayload = {
@@ -184,18 +188,18 @@ const Defects = () => {
       await new Promise<void>((resolve, reject) => {
         createDefect.mutate(defectPayload, {
           onSuccess: async () => {
-            // Upload files after defect is created
-            if (formFiles && formFiles.length > 0) {
-              try {
+            try {
+              // Upload files after defect is created
+              if (formFiles && formFiles.length > 0) {
                 for (const file of formFiles) {
                   await attachmentsApi.upload(projectId!, file);
                 }
                 toast.success(`Defect created with ${formFiles.length} file(s)`);
-              } catch (error) {
-                toast.warning('Defect created, but some files failed to upload');
+              } else {
+                toast.success('Defect created');
               }
-            } else {
-              toast.success('Defect created');
+            } catch (error) {
+              toast.warning('Defect created, but some files failed to upload');
             }
             resetForm();
             setCreateOpen(false);
@@ -209,6 +213,8 @@ const Defects = () => {
       });
     } catch (error) {
       // Error already handled by toast in onError
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -517,8 +523,8 @@ const Defects = () => {
             </div>
           </div>
           <DialogFooter className="mt-4">
-            <Button variant="ghost" onClick={() => { resetForm(); setCreateOpen(false); }}>Cancel</Button>
-            <Button onClick={handleCreate}>Create Defect</Button>
+            <Button variant="ghost" onClick={() => { resetForm(); setCreateOpen(false); }} disabled={isCreating}>Cancel</Button>
+            <Button onClick={handleCreate} disabled={isCreating}>{isCreating ? 'Creating...' : 'Create Defect'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
