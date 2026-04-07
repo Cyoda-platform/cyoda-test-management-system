@@ -366,14 +366,17 @@ export const attachmentsApi = {
     api.get<{ data: Attachment[] }>(`/projects/${projectId}/attachments`),
   listByCase: (projectId: string, caseId: string) =>
     api.get<Attachment[]>(`/projects/${projectId}/attachments/by-case/${caseId}`),
+  listByDefect: (projectId: string, defectId: string) =>
+    api.get<Attachment[]>(`/projects/${projectId}/attachments/by-defect/${defectId}`),
   delete: (projectId: string, id: string) =>
     api.delete<void>(`/projects/${projectId}/attachments/${id}`),
   copy: (projectId: string, id: string, toCaseId: string) =>
     api.post<Attachment>(`/projects/${projectId}/attachments/${id}/copy?toCaseId=${toCaseId}`, {}),
-  upload: (projectId: string, file: File, caseId?: string) => {
+  upload: (projectId: string, file: File, caseId?: string, defectId?: string) => {
     const form = new FormData();
     form.append('file', file);
     if (caseId) form.append('caseId', caseId);
+    if (defectId) form.append('defectId', defectId);
     const token = getAuthToken();
     const headers: HeadersInit = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;

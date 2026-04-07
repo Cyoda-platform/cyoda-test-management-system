@@ -40,9 +40,10 @@ public class AttachmentController {
     public ResponseEntity<?> uploadAttachment(
             @PathVariable UUID projectId,
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "caseId", required = false) UUID caseId) {
+            @RequestParam(value = "caseId", required = false) UUID caseId,
+            @RequestParam(value = "defectId", required = false) UUID defectId) {
         try {
-            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, file);
+            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, defectId, file);
             return ResponseEntity.status(HttpStatus.CREATED).body(AttachmentMetadataDTO.from(uploaded));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -56,6 +57,18 @@ public class AttachmentController {
             @PathVariable UUID projectId,
             @PathVariable UUID caseId) {
         List<AttachmentMetadataDTO> result = attachmentService.getAttachmentsByCaseId(caseId)
+                .stream()
+                .map(AttachmentMetadataDTO::from)
+                .toList();
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/by-defect/{defectId}")
+    @Operation(summary = "Get all attachments for a specific defect")
+    public ResponseEntity<List<AttachmentMetadataDTO>> getAttachmentsByDefect(
+            @PathVariable UUID projectId,
+            @PathVariable UUID defectId) {
+        List<AttachmentMetadataDTO> result = attachmentService.getAttachmentsByDefectId(defectId)
                 .stream()
                 .map(AttachmentMetadataDTO::from)
                 .toList();

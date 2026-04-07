@@ -73,7 +73,7 @@ public class AttachmentService {
      * Uploads a file. Stores metadata in EdgeMessage (NOT the file content!).
      * File content stays in memory temporarily, then entity references the EdgeMessage.
      */
-    public AttachmentDTO uploadAttachment(UUID projectId, UUID caseId, MultipartFile file) throws IOException {
+    public AttachmentDTO uploadAttachment(UUID projectId, UUID caseId, UUID defectId, MultipartFile file) throws IOException {
         long fileSizeBytes = file.getSize();
 
         logger.info("📤 Starting attachment upload: fileName='{}', size={}KB",
@@ -82,6 +82,7 @@ public class AttachmentService {
         AttachmentDTO attachment = new AttachmentDTO();
         attachment.setProjectId(projectId);
         attachment.setCaseId(caseId);
+        attachment.setDefectId(defectId);
         attachment.setFileName(file.getOriginalFilename());
         attachment.setFileType(file.getContentType());
         attachment.setFileSize(fileSizeBytes);
@@ -172,6 +173,17 @@ public class AttachmentService {
      */
     public List<AttachmentDTO> getAttachmentsByCaseId(UUID caseId) {
         GroupCondition condition = conditionByField("caseId", caseId.toString());
+        return entityService.search(MODEL_SPEC, condition, AttachmentDTO.class).data()
+                .stream()
+                .map(this::withId)
+                .toList();
+    }
+
+    /**
+     * Retrieves all attachments for a specific defect.
+     */
+    public List<AttachmentDTO> getAttachmentsByDefectId(UUID defectId) {
+        GroupCondition condition = conditionByField("defectId", defectId.toString());
         return entityService.search(MODEL_SPEC, condition, AttachmentDTO.class).data()
                 .stream()
                 .map(this::withId)

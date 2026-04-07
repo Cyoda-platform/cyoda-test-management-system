@@ -187,12 +187,13 @@ const Defects = () => {
       // Use async mutation to wait for success before uploading files
       await new Promise<void>((resolve, reject) => {
         createDefect.mutate(defectPayload, {
-          onSuccess: async () => {
+          onSuccess: async (createdDefect: any) => {
             try {
               // Upload files after defect is created
               if (formFiles && formFiles.length > 0) {
+                const defectId = createdDefect?.id;
                 for (const file of formFiles) {
-                  await attachmentsApi.upload(projectId!, file);
+                  await attachmentsApi.upload(projectId!, file, undefined, defectId);
                 }
                 toast.success(`Defect created with ${formFiles.length} file(s)`);
               } else {
