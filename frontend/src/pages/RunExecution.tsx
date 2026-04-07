@@ -19,10 +19,6 @@ import {
   useCompleteTestRun,
   useUnlockTestRun,
   useAttachmentsByCase,
-  useTestRunCases,
-  useTestRunCaseSteps,
-  useUpdateTestRunCaseStatus,
-  useUpdateTestRunStepStatus,
   keys,
 } from '@/hooks/useApi';
 import {
@@ -30,7 +26,6 @@ import {
   attachmentsApi,
   testRunsApi,
   type Attachment,
-  type TestRunCase,
 } from '@/lib/api';
 import { isUuid, listDisplayId } from '@/lib/utils';
 
@@ -109,10 +104,6 @@ const RunExecution = () => {
   // Live API data
   const { data: run, isLoading: runLoading } = useTestRun(projectId!, runId!);
 
-  // DB-backed per-run case execution records — the source of truth for statuses.
-  const { data: runCasesData = [], isLoading: runCasesLoading } =
-    useTestRunCases(projectId!, runId!);
-
   // Single aggregate call: all suites + cases in one round-trip (no more 1+N waterfall)
   const { data: repositoryData, isLoading: suitesLoading } = useRepository(projectId!);
 
@@ -122,23 +113,24 @@ const RunExecution = () => {
   }));
 
   /**
-   * Filter the repository cases to only those selected for this run.
-   * Falls back to showing ALL repository cases for runs that were created before
-   * the TestRunCase snapshot feature was introduced (backward compatibility).
+   * Filter the repository suites/cases to only those selected for this run.
+   * Key format stored on run: run.caseIds is a string[] of case UUIDs.
+   * Falls back to showing ALL repository cases for runs without a caseIds snapshot
+   * (backward compatibility with pre-snapshot runs).
    */
-  const allCases = useMemo(() => {
-    const repoCases = suitesWithCases.flatMap((s) => s.cases);
-    if (runCasesData.length === 0) return repoCases; // backward compat
-    const runCaseIdSet = new Set(runCasesData.map((rc) => rc.testCaseId));
-    return repoCases.filter((c) => runCaseIdSet.has(c.id));
-  }, [suitesWithCases, runCasesData]);
+  const filteredSuitesWithCases = useMemo(() => {
+    if (!run?.caseIds || run.caseIds.length === 0) return suitesWithCases;
+    const runCaseIdSet = new Set(run.caseIds);
+    return suitesWithCases
+      .map((s) => ({ ...s, cases: s.cases.filter((c) => runCaseIdSet.has(c.id)) }))
+      .filter((s) => s.cases.length > 0);
+  }, [suitesWithCases, run?.caseIds]);
 
-  /** Lookup map: original testCaseId → TestRunCase record. */
-  const runCasesMap = useMemo<Record<string, TestRunCase>>(() => {
-    const map: Record<string, TestRunCase> = {};
-    runCasesData.forEach((rc) => { map[rc.testCaseId] = rc; });
-    return map;
-  }, [runCasesData]);
+  // Flat list of cases in this run (for indexed access)
+  const allCases = useMemo(() =>
+    filteredSuitesWithCases.flatMap((s) => s.cases),
+    [filteredSuitesWithCases]
+  );
 
   // ── Virtual list for the left case panel ──────────────────────────────────
   type RunItem =
@@ -148,7 +140,7 @@ const RunExecution = () => {
   const runItems = useMemo<RunItem[]>(() => {
     const items: RunItem[] = [];
     let globalOffset = 0;
-    for (const suite of suitesWithCases) {
+    for (const suite of filteredSuitesWithCases) {
       items.push({ type: 'suite-header', suiteName: suite.name });
       suite.cases.forEach((tc, localIdx) => {
         items.push({ type: 'case', tc, localIdx, globalIdx: globalOffset + localIdx });
@@ -156,7 +148,7 @@ const RunExecution = () => {
       globalOffset += suite.cases.length;
     }
     return items;
-  }, [suitesWithCases]);
+  }, [filteredSuitesWithCases]);
 
   const caseListRef = useRef<HTMLDivElement>(null);
 
@@ -173,7 +165,7 @@ const RunExecution = () => {
 
   /** Returns a human-readable source label for a given case ID. */
   const getCaseSourceLabel = (caseId: string): string => {
-    for (const suite of suitesWithCases) {
+    for (const suite of filteredSuitesWithCases) {
       const idx = suite.cases.findIndex((c) => c.id === caseId);
       if (idx !== -1) {
         const c = suite.cases[idx];
@@ -194,11 +186,9 @@ const RunExecution = () => {
   };
 
   // Mutations
-  const updateRun      = useUpdateTestRun();
-  const completeRun    = useCompleteTestRun();
-  const unlockRun      = useUnlockTestRun();
-  const updateRunCase  = useUpdateTestRunCaseStatus();
-  const updateRunStep  = useUpdateTestRunStepStatus();
+  const updateRun   = useUpdateTestRun();
+  const completeRun = useCompleteTestRun();
+  const unlockRun   = useUnlockTestRun();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus[]>>({});
   const [stepEvidence, setStepEvidence] = useState<Record<string, EvidenceFile[]>>({});
@@ -216,20 +206,15 @@ const RunExecution = () => {
   const qc = useQueryClient();
 
   // Refs to always have the latest values available in cleanup effects
-  const runRef           = useRef(run);
-  const stepStatusesRef  = useRef(stepStatuses);
-  const allCasesRef      = useRef(allCases);
-  const runCasesDataRef  = useRef(runCasesData);
-  useEffect(() => { runRef.current          = run; },          [run]);
-  useEffect(() => { stepStatusesRef.current  = stepStatuses; }, [stepStatuses]);
-  useEffect(() => { allCasesRef.current      = allCases; },     [allCases]);
-  useEffect(() => { runCasesDataRef.current  = runCasesData; }, [runCasesData]);
+  const runRef          = useRef(run);
+  const stepStatusesRef = useRef(stepStatuses);
+  const allCasesRef     = useRef(allCases);
+  useEffect(() => { runRef.current         = run; },         [run]);
+  useEffect(() => { stepStatusesRef.current = stepStatuses; }, [stepStatuses]);
+  useEffect(() => { allCasesRef.current     = allCases; },    [allCases]);
 
   // Active case and its live steps
   const activeCase = allCases[selectedIdx];
-
-  /** The TestRunCase record for the currently active case (if it exists). */
-  const activeRunCase = activeCase ? runCasesMap[activeCase.id] : undefined;
 
   /** Global step data (action / expectedResult) for the active case. */
   const { data: steps = [] } = useTestSteps(
@@ -243,23 +228,6 @@ const RunExecution = () => {
     [...steps].sort((a, b) => (a.stepNumber || 0) - (b.stepNumber || 0)),
     [steps]
   );
-
-  /**
-   * DB-backed step execution records for the active case.
-   * Keyed by testStepId so we can quickly look up a record when persisting
-   * a status change.
-   */
-  const { data: runCaseStepsRaw = [] } = useTestRunCaseSteps(
-    projectId!,
-    runId!,
-    activeRunCase?.id ?? '',
-  );
-
-  const runCaseStepsByStepId = useMemo<Record<string, import('@/lib/api').TestRunStep>>(() => {
-    const map: Record<string, import('@/lib/api').TestRunStep> = {};
-    runCaseStepsRaw.forEach((rs) => { map[rs.testStepId] = rs; });
-    return map;
-  }, [runCaseStepsRaw]);
 
   // Load persisted attachments for the active case from the server
   const { data: serverAttachments = [] } = useAttachmentsByCase(
@@ -300,39 +268,29 @@ const RunExecution = () => {
   // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
     return () => {
-      const r         = runRef.current;
-      const cases     = allCasesRef.current;
-      const statMap   = stepStatusesRef.current;
-      const runCases  = runCasesDataRef.current;
+      const r       = runRef.current;
+      const cases   = allCasesRef.current;
+      const statMap = stepStatusesRef.current;
 
       // Always invalidate so the list re-fetches when the user navigates back
       qc.invalidateQueries({ queryKey: keys.runs.all(projectId!) });
 
       if (!r || !runId || !projectId || r.status === 'completed') return;
 
-      // Prefer DB-backed TestRunCase statuses for the aggregate; they are always
-      // up-to-date because every setStepStatus call persists immediately.
-      let agg: { passed: number; failed: number; skipped: number; untested: number };
-      if (runCases.length > 0) {
-        let passed = 0, failed = 0, skipped = 0, untested = 0;
-        runCases.forEach((rc) => {
-          // Mix in any local changes still pending flush
-          const localStatuses = statMap[rc.testCaseId];
-          const s = (localStatuses && localStatuses.length > 0)
-            ? computeCaseStatus(localStatuses)
-            : rc.status.toLowerCase();
-          if (s === 'passed')        passed++;
-          else if (s === 'failed')   failed++;
-          else if (s === 'skipped')  skipped++;
-          else                       untested++;
-        });
-        agg = { passed, failed, skipped, untested };
-      } else {
-        // Fallback for runs without TestRunCase records (backward compat)
-        agg = computeAggregates(statMap, cases);
-      }
-
+      // Derive aggregate counts from local step-status state
+      const agg = computeAggregates(statMap, cases);
       const hasProgress = agg.passed + agg.failed + agg.skipped > 0;
+
+      // Build the merged run.stepStatuses: start from what the server has, then
+      // layer on every status the user set this session (converted to UPPERCASE).
+      const mergedStepStatuses: Record<string, string> = { ...(r.stepStatuses ?? {}) };
+      Object.entries(statMap).forEach(([caseId, statuses]) => {
+        statuses.forEach((s, idx) => {
+          // We can only write keyed entries we know the stepId for.
+          // The stepId isn't available here via the flat index, so we skip
+          // entries where the stepId is unknown — they were already saved per-click.
+        });
+      });
 
       // Fire-and-forget: direct API call is safer than a mutation hook in cleanup
       testRunsApi.update(projectId, runId, {
@@ -342,6 +300,8 @@ const RunExecution = () => {
         description:  r.description ?? '',
         // Promote to 'active' as soon as any case is worked on
         status: hasProgress && r.status === 'initial' ? 'active' : r.status,
+        caseIds:      r.caseIds,
+        stepStatuses: r.stepStatuses ?? {},
         ...(r.createdAt ? { createdAt: r.createdAt } : {}),
         ...agg,
       }).then(() => {

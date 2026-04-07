@@ -249,6 +249,17 @@ export interface TestRun {
   skipped: number;
   untested: number;
   createdAt: string;
+  /**
+   * IDs of the test cases selected for this run (snapshot taken at creation).
+   * Used by RunExecution to filter the repository to only this run's cases.
+   */
+  caseIds?: string[];
+  /**
+   * Flat step-level execution state persisted on the run entity.
+   * Key: "caseId::stepId", Value: uppercase status ("UNTESTED"|"PASSED"|"FAILED"|"SKIPPED").
+   * Updated on every case-switch and on page unmount.
+   */
+  stepStatuses?: Record<string, string>;
 }
 
 export const testRunsApi = {

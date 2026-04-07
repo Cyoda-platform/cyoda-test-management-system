@@ -12,6 +12,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -55,6 +59,21 @@ public class TestRunDTO implements CyodaEntity {
     private int failed;
     private int skipped;
     private int untested;
+
+    /**
+     * IDs of the test cases selected for this run, captured at creation time.
+     * Stored directly on the run to avoid creating separate TestRunCase entities
+     * (whose Cyoda entity model may not be registered).
+     */
+    private List<String> caseIds = new ArrayList<>();
+
+    /**
+     * Flat step-level execution state, stored on the run entity to avoid
+     * creating per-run TestRunStep entities.
+     * Key format: "caseId::stepId"  →  uppercase status
+     * ("UNTESTED" | "PASSED" | "FAILED" | "SKIPPED").
+     */
+    private Map<String, String> stepStatuses = new LinkedHashMap<>();
 
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;
