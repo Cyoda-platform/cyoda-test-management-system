@@ -416,3 +416,85 @@ export const repositoryApi = {
   get: (projectId: string) =>
     api.get<Repository>(`/projects/${projectId}/repository`),
 };
+
+// ── Test Run Cases (run-scoped, DB-backed execution state) ────────────────────
+
+/**
+ * A TestRunCase is a per-run snapshot record that tracks the execution status
+ * of a specific test case within a specific test run. Created during run
+ * creation, it persists across page refreshes.
+ */
+export interface TestRunCase {
+  id: string;
+  testRunId: string;
+  /** References the original TestCase.id */
+  testCaseId: string;
+  /** Uppercase: 'UNTESTED' | 'PASSED' | 'FAILED' | 'SKIPPED' */
+  status: string;
+  bugUrl?: string;
+}
+
+export const testRunCasesApi = {
+  list: (projectId: string, runId: string, page = 0, size = 500) =>
+    api.get<{ data: TestRunCase[] }>(
+      `/projects/${projectId}/runs/${runId}/cases?page=${page}&size=${size}`,
+    ),
+  create: (projectId: string, runId: string, testCaseId: string) =>
+    api.post<TestRunCase>(`/projects/${projectId}/runs/${runId}/cases`, {
+      testCaseId,
+    }),
+  update: (projectId: string, runId: string, id: string, body: Partial<TestRunCase>) =>
+    api.put<TestRunCase>(`/projects/${projectId}/runs/${runId}/cases/${id}`, body),
+};
+
+// ── Test Run Steps (run-scoped, DB-backed step status) ────────────────────────
+
+/**
+ * A TestRunStep is a per-run snapshot record that tracks the execution status
+ * of a specific step within a TestRunCase. The URL's {caseId} segment is the
+ * TestRunCase.id (NOT the original TestCase.id).
+ */
+export interface TestRunStep {
+  id: string;
+  /** References the TestRunCase.id (NOT the original TestCase.id) */
+  testRunCaseId: string;
+  /** References the original TestStep.id */
+  testStepId: string;
+  /** Uppercase: 'UNTESTED' | 'PASSED' | 'FAILED' | 'SKIPPED' */
+  status: string;
+  actualResult?: string;
+}
+
+export const testRunStepsRunApi = {
+  /**
+   * @param runCaseId – the TestRunCase.id (NOT the original TestCase.id)
+   */
+  list: (projectId: string, runId: string, runCaseId: string, page = 0, size = 500) =>
+    api.get<{ data: TestRunStep[] }>(
+      `/projects/${projectId}/runs/${runId}/cases/${runCaseId}/steps?page=${page}&size=${size}`,
+    ),
+  /**
+   * Creates a TestRunStep that links a TestRunCase to an original TestStep.
+   * @param runCaseId – the TestRunCase.id
+   * @param testStepId – the original TestStep.id
+   */
+  create: (projectId: string, runId: string, runCaseId: string, testStepId: string) =>
+    api.post<TestRunStep>(
+      `/projects/${projectId}/runs/${runId}/cases/${runCaseId}/steps`,
+      { testStepId },
+    ),
+  /**
+   * @param runCaseId – the TestRunCase.id
+   */
+  update: (
+    projectId: string,
+    runId: string,
+    runCaseId: string,
+    id: string,
+    body: Partial<TestRunStep>,
+  ) =>
+    api.put<TestRunStep>(
+      `/projects/${projectId}/runs/${runId}/cases/${runCaseId}/steps/${id}`,
+      body,
+    ),
+};

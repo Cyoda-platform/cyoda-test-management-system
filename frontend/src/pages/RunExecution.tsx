@@ -15,14 +15,23 @@ import {
   useTestRun,
   useRepository,
   useTestSteps,
-  useUpdateTestStep,
   useUpdateTestRun,
   useCompleteTestRun,
   useUnlockTestRun,
   useAttachmentsByCase,
+  useTestRunCases,
+  useTestRunCaseSteps,
+  useUpdateTestRunCaseStatus,
+  useUpdateTestRunStepStatus,
   keys,
 } from '@/hooks/useApi';
-import { testCasesApi, defectsApi, attachmentsApi, testRunsApi, type Attachment } from '@/lib/api';
+import {
+  defectsApi,
+  attachmentsApi,
+  testRunsApi,
+  type Attachment,
+  type TestRunCase,
+} from '@/lib/api';
 import { isUuid, listDisplayId } from '@/lib/utils';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
@@ -100,6 +109,10 @@ const RunExecution = () => {
   // Live API data
   const { data: run, isLoading: runLoading } = useTestRun(projectId!, runId!);
 
+  // DB-backed per-run case execution records — the source of truth for statuses.
+  const { data: runCasesData = [], isLoading: runCasesLoading } =
+    useTestRunCases(projectId!, runId!);
+
   // Single aggregate call: all suites + cases in one round-trip (no more 1+N waterfall)
   const { data: repositoryData, isLoading: suitesLoading } = useRepository(projectId!);
 
@@ -108,7 +121,24 @@ const RunExecution = () => {
     cases: suite.cases,
   }));
 
-  const allCases = suitesWithCases.flatMap((s) => s.cases);
+  /**
+   * Filter the repository cases to only those selected for this run.
+   * Falls back to showing ALL repository cases for runs that were created before
+   * the TestRunCase snapshot feature was introduced (backward compatibility).
+   */
+  const allCases = useMemo(() => {
+    const repoCases = suitesWithCases.flatMap((s) => s.cases);
+    if (runCasesData.length === 0) return repoCases; // backward compat
+    const runCaseIdSet = new Set(runCasesData.map((rc) => rc.testCaseId));
+    return repoCases.filter((c) => runCaseIdSet.has(c.id));
+  }, [suitesWithCases, runCasesData]);
+
+  /** Lookup map: original testCaseId → TestRunCase record. */
+  const runCasesMap = useMemo<Record<string, TestRunCase>>(() => {
+    const map: Record<string, TestRunCase> = {};
+    runCasesData.forEach((rc) => { map[rc.testCaseId] = rc; });
+    return map;
+  }, [runCasesData]);
 
   // ── Virtual list for the left case panel ──────────────────────────────────
   type RunItem =
@@ -164,10 +194,11 @@ const RunExecution = () => {
   };
 
   // Mutations
-  const updateStep     = useUpdateTestStep();
   const updateRun      = useUpdateTestRun();
   const completeRun    = useCompleteTestRun();
   const unlockRun      = useUnlockTestRun();
+  const updateRunCase  = useUpdateTestRunCaseStatus();
+  const updateRunStep  = useUpdateTestRunStepStatus();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus[]>>({});
   const [stepEvidence, setStepEvidence] = useState<Record<string, EvidenceFile[]>>({});
@@ -185,15 +216,22 @@ const RunExecution = () => {
   const qc = useQueryClient();
 
   // Refs to always have the latest values available in cleanup effects
-  const runRef          = useRef(run);
-  const stepStatusesRef = useRef(stepStatuses);
-  const allCasesRef     = useRef(allCases);
-  useEffect(() => { runRef.current = run; }, [run]);
-  useEffect(() => { stepStatusesRef.current = stepStatuses; }, [stepStatuses]);
-  useEffect(() => { allCasesRef.current = allCases; }, [allCases]);
+  const runRef           = useRef(run);
+  const stepStatusesRef  = useRef(stepStatuses);
+  const allCasesRef      = useRef(allCases);
+  const runCasesDataRef  = useRef(runCasesData);
+  useEffect(() => { runRef.current          = run; },          [run]);
+  useEffect(() => { stepStatusesRef.current  = stepStatuses; }, [stepStatuses]);
+  useEffect(() => { allCasesRef.current      = allCases; },     [allCases]);
+  useEffect(() => { runCasesDataRef.current  = runCasesData; }, [runCasesData]);
 
   // Active case and its live steps
   const activeCase = allCases[selectedIdx];
+
+  /** The TestRunCase record for the currently active case (if it exists). */
+  const activeRunCase = activeCase ? runCasesMap[activeCase.id] : undefined;
+
+  /** Global step data (action / expectedResult) for the active case. */
   const { data: steps = [] } = useTestSteps(
     projectId!,
     activeCase?.suiteId ?? '',
@@ -205,6 +243,23 @@ const RunExecution = () => {
     [...steps].sort((a, b) => (a.stepNumber || 0) - (b.stepNumber || 0)),
     [steps]
   );
+
+  /**
+   * DB-backed step execution records for the active case.
+   * Keyed by testStepId so we can quickly look up a record when persisting
+   * a status change.
+   */
+  const { data: runCaseStepsRaw = [] } = useTestRunCaseSteps(
+    projectId!,
+    runId!,
+    activeRunCase?.id ?? '',
+  );
+
+  const runCaseStepsByStepId = useMemo<Record<string, import('@/lib/api').TestRunStep>>(() => {
+    const map: Record<string, import('@/lib/api').TestRunStep> = {};
+    runCaseStepsRaw.forEach((rs) => { map[rs.testStepId] = rs; });
+    return map;
+  }, [runCaseStepsRaw]);
 
   // Load persisted attachments for the active case from the server
   const { data: serverAttachments = [] } = useAttachmentsByCase(
@@ -245,16 +300,38 @@ const RunExecution = () => {
   // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
     return () => {
-      const r       = runRef.current;
-      const cases   = allCasesRef.current;
-      const statMap = stepStatusesRef.current;
+      const r         = runRef.current;
+      const cases     = allCasesRef.current;
+      const statMap   = stepStatusesRef.current;
+      const runCases  = runCasesDataRef.current;
 
       // Always invalidate so the list re-fetches when the user navigates back
       qc.invalidateQueries({ queryKey: keys.runs.all(projectId!) });
 
       if (!r || !runId || !projectId || r.status === 'completed') return;
 
-      const agg = computeAggregates(statMap, cases);
+      // Prefer DB-backed TestRunCase statuses for the aggregate; they are always
+      // up-to-date because every setStepStatus call persists immediately.
+      let agg: { passed: number; failed: number; skipped: number; untested: number };
+      if (runCases.length > 0) {
+        let passed = 0, failed = 0, skipped = 0, untested = 0;
+        runCases.forEach((rc) => {
+          // Mix in any local changes still pending flush
+          const localStatuses = statMap[rc.testCaseId];
+          const s = (localStatuses && localStatuses.length > 0)
+            ? computeCaseStatus(localStatuses)
+            : rc.status.toLowerCase();
+          if (s === 'passed')        passed++;
+          else if (s === 'failed')   failed++;
+          else if (s === 'skipped')  skipped++;
+          else                       untested++;
+        });
+        agg = { passed, failed, skipped, untested };
+      } else {
+        // Fallback for runs without TestRunCase records (backward compat)
+        agg = computeAggregates(statMap, cases);
+      }
+
       const hasProgress = agg.passed + agg.failed + agg.skipped > 0;
 
       // Fire-and-forget: direct API call is safer than a mutation hook in cleanup
@@ -276,56 +353,80 @@ const RunExecution = () => {
 
   // ── Initialise step-status state when a new case is loaded ───────────────────
   useEffect(() => {
-    if (sortedSteps.length > 0 && activeCase && run) {
-      setStepStatuses((prev) => {
-        if (prev[activeCase.id]) return prev; // already initialised — keep user changes
+    if (!activeCase || sortedSteps.length === 0) return;
 
-        // For fresh runs (no progress saved yet) always start as untested,
-        // preventing step-status bleed-over from previous runs that share
-        // the same test cases (steps are stored globally per-case, not per-run).
-        const isFreshRun = (run.passed ?? 0) + (run.failed ?? 0) + (run.skipped ?? 0) === 0;
+    setStepStatuses((prev) => {
+      // Don't overwrite state the user has already changed in this session.
+      if (prev[activeCase.id] !== undefined) return prev;
 
+      if (runCaseStepsRaw.length > 0) {
+        // ── Primary path: read from DB-backed TestRunStep records ─────────────
+        // These are created during run creation and updated on every status
+        // change, so they survive page refreshes perfectly.
         const initial: StepStatus[] = sortedSteps.map((s) => {
-          if (isFreshRun) return 'untested';
-          const v = s.status as StepStatus;
-          return ['passed', 'failed', 'skipped'].includes(v) ? v : 'untested';
+          const runStep = runCaseStepsByStepId[s.id];
+          if (!runStep) return 'untested';
+          const v = runStep.status.toLowerCase() as StepStatus;
+          return (['passed', 'failed', 'skipped'] as StepStatus[]).includes(v)
+            ? v
+            : 'untested';
         });
         return { ...prev, [activeCase.id]: initial };
-      });
-    }
-  }, [sortedSteps, activeCase?.id, run?.passed, run?.failed, run?.skipped]);
+      }
+
+      // ── Fallback: backward-compat for pre-snapshot runs ────────────────────
+      // Runs created before the TestRunCase/Step feature will not have run-step
+      // records.  We initialise everything as 'untested' to avoid bleed-over
+      // from global step statuses that might belong to a different run.
+      const initial: StepStatus[] = sortedSteps.map(() => 'untested');
+      return { ...prev, [activeCase.id]: initial };
+    });
+  // Re-run whenever the active case changes OR the DB step records arrive.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCase?.id, runCaseStepsRaw.length, sortedSteps.length]);
 
   const getStepStatuses = (caseId: string): StepStatus[] => {
     return stepStatuses[caseId] || [];
   };
 
-  const setStepStatus = (caseId: string, stepNumber: number, stepId: string, status: StepStatus) => {
+  const setStepStatus = (caseId: string, stepNumber: number, globalStepId: string, status: StepStatus) => {
     if (isReadOnly) return;
+
+    // ── 1. Update local state immediately for instant UI feedback ────────────
     const current = stepStatuses[caseId] || Array(sortedSteps.length).fill('untested');
     const updated = [...current];
     updated[stepNumber - 1] = status; // stepNumber is 1-based, array is 0-based
-    setStepStatuses({ ...stepStatuses, [caseId]: updated });
+    setStepStatuses((prev) => ({ ...prev, [caseId]: updated }));
 
-    // Persist to API — send full step payload so a PUT doesn't wipe action/expectedResult
-    if (stepId && activeCase) {
-      const stepData = sortedSteps.find(s => s.id === stepId);
-      updateStep.mutate({
-        projectId: projectId!,
-        suiteId:   activeCase.suiteId,
-        caseId,
-        id:        stepId,
-        body: {
-          ...(stepData ? {
-            action:         stepData.action,
-            expectedResult: stepData.expectedResult,
-            stepNumber:     stepData.stepNumber,
-          } : {}),
-          status,
-        },
-      });
+    // ── 2. Persist step status to the DB-backed TestRunStep record ───────────
+    const runCase = runCasesMap[caseId];
+    if (runCase) {
+      const runStep = runCaseStepsByStepId[globalStepId];
+      if (runStep) {
+        updateRunStep.mutate({
+          projectId: projectId!,
+          runId:      runId!,
+          runCaseId:  runCase.id,
+          id:         runStep.id,
+          // Backend expects uppercase status values
+          status:     status.toUpperCase(),
+        });
+      }
+
+      // ── 3. Derive and persist the new case-level status ───────────────────
+      const newCaseStatus = computeCaseStatus(updated);
+      const currentDbCaseStatus = runCase.status.toLowerCase();
+      if (newCaseStatus !== currentDbCaseStatus) {
+        updateRunCase.mutate({
+          projectId: projectId!,
+          runId:      runId!,
+          id:         runCase.id,
+          status:     newCaseStatus.toUpperCase(),
+        });
+      }
     }
 
-    // Auto-trigger defect modal on 'failed'
+    // ── 4. Auto-trigger defect modal on 'failed' ──────────────────────────
     if (status === 'failed') {
       setDefectContext({ caseId, stepIdx: stepNumber - 1, source: getCaseSourceLabel(caseId) });
       setDefectModalOpen(true);
@@ -333,11 +434,16 @@ const RunExecution = () => {
   };
 
   const getCaseStatus = (caseId: string): string => {
+    // Prefer local step-status state (shows real-time changes before DB round-trip).
     const statuses = stepStatuses[caseId];
-    if (!statuses || statuses.length === 0) return 'untested';
-    if (statuses.some((s) => s === 'failed')) return 'failed';
-    if (statuses.every((s) => s === 'passed')) return 'passed';
-    if (statuses.some((s) => s === 'skipped') && !statuses.some((s) => s === 'untested')) return 'skipped';
+    if (statuses && statuses.length > 0) {
+      if (statuses.some((s) => s === 'failed')) return 'failed';
+      if (statuses.every((s) => s === 'passed')) return 'passed';
+      if (statuses.some((s) => s === 'skipped') && !statuses.some((s) => s === 'untested')) return 'skipped';
+    }
+    // Fall back to DB-backed TestRunCase status (survives refresh).
+    const runCase = runCasesMap[caseId];
+    if (runCase) return runCase.status.toLowerCase();
     return 'untested';
   };
 
@@ -441,20 +547,43 @@ const RunExecution = () => {
 
   const progressStats = useMemo(() => {
     let passed = 0, failed = 0, skipped = 0, untested = 0;
-    allCases.forEach((tc) => {
-      const cStatus = getCaseStatus(tc.id);
-      if (cStatus === 'passed') passed++;
-      else if (cStatus === 'failed') failed++;
-      else if (cStatus === 'skipped') skipped++;
-      else untested++;
-    });
-    const total = allCases.length;
+
+    if (runCasesData.length > 0) {
+      // ── Primary: aggregate from DB-backed TestRunCase statuses ─────────────
+      // Mix in any local changes that haven't been flushed to DB yet.
+      runCasesData.forEach((rc) => {
+        // If local state is available for this case, prefer it (optimistic).
+        const localStatuses = stepStatuses[rc.testCaseId];
+        let s: string;
+        if (localStatuses && localStatuses.length > 0) {
+          s = computeCaseStatus(localStatuses);
+        } else {
+          s = rc.status.toLowerCase();
+        }
+        if (s === 'passed')        passed++;
+        else if (s === 'failed')   failed++;
+        else if (s === 'skipped')  skipped++;
+        else                       untested++;
+      });
+    } else {
+      // ── Fallback: derive from local state (backward compat) ─────────────
+      allCases.forEach((tc) => {
+        const s = getCaseStatus(tc.id);
+        if (s === 'passed')        passed++;
+        else if (s === 'failed')   failed++;
+        else if (s === 'skipped')  skipped++;
+        else                       untested++;
+      });
+    }
+
+    const total = Math.max(allCases.length, runCasesData.length);
     const completed = passed + failed + skipped;
     return { passed, failed, skipped, untested, total, completed };
-  }, [stepStatuses, allCases]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runCasesData, stepStatuses, allCases]);
 
   // Loading / empty guard
-  if (runLoading || suitesLoading) {
+  if (runLoading || suitesLoading || runCasesLoading) {
     return (
       <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />

@@ -18,6 +18,8 @@ import {
   testCasesApi,
   testStepsApi,
   testRunsApi,
+  testRunCasesApi,
+  testRunStepsRunApi,
   defectsApi,
   reportsApi,
   attachmentsApi,
@@ -27,6 +29,8 @@ import {
   type TestCase,
   type TestStep,
   type TestRun,
+  type TestRunCase,
+  type TestRunStep,
   type Defect,
   type Report,
 } from '@/lib/api';
@@ -72,6 +76,14 @@ export const keys = {
   },
   repository: {
     all: (projectId: string) => ['repository', projectId] as const,
+  },
+  runCases: {
+    all: (projectId: string, runId: string) =>
+      ['runCases', projectId, runId] as const,
+  },
+  runSteps: {
+    all: (projectId: string, runId: string, runCaseId: string) =>
+      ['runSteps', projectId, runId, runCaseId] as const,
   },
 };
 
@@ -412,10 +424,10 @@ export function useTestRun(projectId: string, runId: string) {
     queryKey: keys.runs.detail(projectId, runId),
     queryFn:  () => testRunsApi.get(projectId, runId),
     enabled:  !!projectId && !!runId,
-    // 30-second freshness window. The run detail is invalidated explicitly by
-    // useCompleteTestRun, useUpdateTestRun, and useUnlockTestRun mutations,
-    // so a staleTime of 0 is unnecessary and causes redundant fetches.
-    staleTime: 30_000,
+    // Always fetch fresh execution state when the component mounts so that
+    // aggregate counters saved on the previous session are immediately visible.
+    staleTime: 0,
+    refetchOnMount: true,
   });
 }
 
@@ -680,6 +692,106 @@ export function useDeleteReport() {
       reportsApi.delete(projectId, id),
     onSuccess: (_data, { projectId }) =>
       qc.invalidateQueries({ queryKey: keys.reports.all(projectId) }),
+  });
+}
+
+// ── Test Run Cases (run-scoped, DB-backed) ────────────────────────────────────
+
+/**
+ * Fetches all TestRunCase records for a run.  Each record links the run to an
+ * original TestCase and carries a DB-persisted execution status so that progress
+ * survives page refreshes.
+ */
+export function useTestRunCases(projectId: string, runId: string) {
+  return useQuery({
+    queryKey: keys.runCases.all(projectId, runId),
+    queryFn:  () => testRunCasesApi.list(projectId, runId),
+    enabled:  !!projectId && !!runId,
+    select:   (res) => res.data,
+    // Always fresh — execution state changes with every step click.
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+}
+
+export function useUpdateTestRunCaseStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      runId,
+      id,
+      status,
+    }: {
+      projectId: string;
+      runId: string;
+      id: string;
+      status: string;
+    }) => testRunCasesApi.update(projectId, runId, id, { status }),
+    onSuccess: (_data, { projectId, runId }) => {
+      qc.invalidateQueries({ queryKey: keys.runCases.all(projectId, runId) });
+    },
+  });
+}
+
+export function useCreateTestRunCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      runId,
+      testCaseId,
+    }: {
+      projectId: string;
+      runId: string;
+      testCaseId: string;
+    }) => testRunCasesApi.create(projectId, runId, testCaseId),
+    onSuccess: (_data, { projectId, runId }) => {
+      qc.invalidateQueries({ queryKey: keys.runCases.all(projectId, runId) });
+    },
+  });
+}
+
+// ── Test Run Steps (run-scoped, DB-backed) ────────────────────────────────────
+
+/**
+ * Fetches all TestRunStep records for a TestRunCase.
+ * @param runCaseId – the TestRunCase.id (NOT the original TestCase.id)
+ */
+export function useTestRunCaseSteps(
+  projectId: string,
+  runId: string,
+  runCaseId: string,
+) {
+  return useQuery({
+    queryKey: keys.runSteps.all(projectId, runId, runCaseId),
+    queryFn:  () => testRunStepsRunApi.list(projectId, runId, runCaseId),
+    enabled:  !!projectId && !!runId && !!runCaseId,
+    select:   (res) => res.data,
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+}
+
+export function useUpdateTestRunStepStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      runId,
+      runCaseId,
+      id,
+      status,
+    }: {
+      projectId: string;
+      runId: string;
+      runCaseId: string;
+      id: string;
+      status: string;
+    }) => testRunStepsRunApi.update(projectId, runId, runCaseId, id, { status }),
+    onSuccess: (_data, { projectId, runId, runCaseId }) => {
+      qc.invalidateQueries({ queryKey: keys.runSteps.all(projectId, runId, runCaseId) });
+    },
   });
 }
 

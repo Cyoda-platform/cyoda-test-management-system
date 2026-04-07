@@ -494,7 +494,9 @@ export interface PerformImportResult {
  *  1. If the file contains suite info (Suite_ID / Suite_Name / JSON suiteId / XML Suite element)
  *     → map to an existing suite by ID, then by name, otherwise queue a new suite creation.
  *  2. If targetSuiteId is a real suite → use it as fallback for cases without suite info.
- *  3. If targetSuiteId is '__new__' → create a single "Imported" suite for cases without suite info.
+ *  3. If targetSuiteId is '__new__' → create suite(s) named after the import file for cases without suite info.
+ *     E.g. "CYODA_Export_Project_20240407.csv" → fallback suite "CYODA Export Project 20240407".
+ *     This avoids collisions with any pre-existing "Imported" suite from older code.
  *
  * @param file          The uploaded file (CSV | JSON | XML).
  * @param targetSuiteId The user-selected fallback suite, or '__new__' to auto-create.
@@ -511,6 +513,14 @@ export async function performImport(
 ): Promise<PerformImportResult> {
   const text = await file.text();
   const ext  = file.name.split('.').pop()?.toLowerCase();
+
+  // Derive a readable fallback suite name from the filename so auto-created suites
+  // are traceable and don't collide with the legacy "Imported" name from old code.
+  // "CYODA_Export_Project_20240407.csv" → "CYODA Export Project 20240407"
+  const fileSuiteName = file.name
+    .replace(/\.[^.]+$/, '')   // strip extension
+    .replace(/[_-]+/g, ' ')    // underscores/hyphens → spaces
+    .trim() || 'Imported';
 
   let parsed: ParsedCase[];
   if (ext === 'json')      parsed = parseJSONImport(text);
@@ -609,8 +619,11 @@ export async function performImport(
     if (resolvedSuite) {
       getGroup(resolvedSuite.id, resolvedSuite.name, false).cases.push(newCase);
     } else {
-      // No existing suite resolved → queue new suite creation
-      const newSuiteName = pc.sourceSuiteName || 'Imported';
+      // No existing suite resolved → queue a new suite.
+      // Prefer the source suite name from the file; fall back to the filename-derived
+      // name so the auto-created suite is identifiable and doesn't clash with any
+      // pre-existing "Imported" suite left over from older code.
+      const newSuiteName = pc.sourceSuiteName || fileSuiteName;
       getGroup(undefined, newSuiteName, true).cases.push(newCase);
     }
     result.imported++;

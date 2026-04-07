@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject, useSuites, useTestRuns, useCreateTestRun, keys } from '@/hooks/useApi';
-import { testCasesApi } from '@/lib/api';
+import { testCasesApi, testRunCasesApi, testRunStepsRunApi, testStepsApi } from '@/lib/api';
 import { nextListDisplayId } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
@@ -125,7 +125,17 @@ const CreateTestRun = () => {
     setSelectedCases(next);
   };
 
-  const handleCreate = () => {
+  const [isCreating, setIsCreating] = useState(false);
+
+  /**
+   * Creates a run in three steps so all execution state survives page refreshes:
+   * 1. Create the TestRun record.
+   * 2. For every selected case, create a TestRunCase record (DB-backed status).
+   * 3. For every step inside each case, create a TestRunStep record (DB-backed
+   *    step status).  Steps are fetched from the global repository using each
+   *    case's suiteId.
+   */
+  const handleCreate = async () => {
     if (!runName.trim()) {
       toast.error('Run name is required');
       return;
@@ -135,8 +145,10 @@ const CreateTestRun = () => {
       return;
     }
 
-    createTestRun.mutate(
-      {
+    setIsCreating(true);
+    try {
+      // ── Step 1: create the run ─────────────────────────────────────────────
+      const newRun = await createTestRun.mutateAsync({
         projectId: projectId!,
         body: {
           name: runName,
@@ -150,15 +162,62 @@ const CreateTestRun = () => {
           skipped: 0,
           untested: selectedCases.size,
         },
-      },
-      {
-        onSuccess: (newRun) => {
-          toast.success(`Test run "${runName}" created with ${selectedCases.size} cases`);
-          navigate(`/projects/${projectId}/runs/${newRun.id}`);
-        },
-        onError: (e) => toast.error(e.message),
+      });
+
+      // ── Step 2: create a TestRunCase for every selected case ───────────────
+      // Build a lookup so we know each case's suiteId for the step fetch.
+      const caseToSuiteMap: Record<string, string> = {};
+      for (const suite of suitesWithCases) {
+        for (const c of suite.cases) {
+          if (selectedCases.has(c.id)) {
+            caseToSuiteMap[c.id] = suite.id;
+          }
+        }
       }
-    );
+
+      const selectedCaseIds = Array.from(selectedCases);
+      const runCases = await Promise.all(
+        selectedCaseIds.map((caseId) =>
+          testRunCasesApi.create(projectId!, newRun.id, caseId),
+        ),
+      );
+
+      // ── Step 3: deep-copy steps → create TestRunStep records ──────────────
+      // Fetch global steps for all selected cases in parallel, then create
+      // TestRunStep records in parallel per case.
+      await Promise.all(
+        runCases.map(async (runCase) => {
+          const suiteId = caseToSuiteMap[runCase.testCaseId];
+          if (!suiteId) return; // safety guard
+
+          let steps: import('@/lib/api').TestStep[] = [];
+          try {
+            steps = await testStepsApi.list(projectId!, suiteId, runCase.testCaseId);
+          } catch {
+            // Case has no steps — perfectly valid, skip silently.
+            return;
+          }
+
+          if (!steps || steps.length === 0) return;
+
+          await Promise.all(
+            steps.map((step) =>
+              testRunStepsRunApi.create(projectId!, newRun.id, runCase.id, step.id),
+            ),
+          );
+        }),
+      );
+
+      toast.success(
+        `Test run "${runName}" created with ${selectedCases.size} case(s)`,
+      );
+      navigate(`/projects/${projectId}/runs/${newRun.id}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to create test run';
+      toast.error(msg);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -351,10 +410,10 @@ const CreateTestRun = () => {
         <Button
           size="sm"
           className="bg-primary text-primary-foreground hover:bg-primary/90 border-0 px-6"
-          disabled={!runName.trim() || selectedCases.size === 0 || createTestRun.isPending}
+          disabled={!runName.trim() || selectedCases.size === 0 || isCreating}
           onClick={handleCreate}
         >
-          {createTestRun.isPending
+          {isCreating
             ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Creating…</>
             : `Create Run (${selectedCases.size} cases)`}
         </Button>
