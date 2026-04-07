@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Plus, Eye, Pencil, Trash2, ExternalLink, Search, Lock, Upload, FileText, Image, File, X, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,47 @@ const statusBadge: Record<string, string> = {
   'In Progress': 'text-warning',
   Fixed: 'text-success',
   Closed: 'text-muted-foreground',
+};
+
+interface DefectAttachmentsListProps {
+  projectId: string;
+  defectId: string;
+}
+
+const DefectAttachmentsList = ({ projectId, defectId }: DefectAttachmentsListProps) => {
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    attachmentsApi.listByDefect(projectId, defectId)
+      .then(atts => setAttachments(atts || []))
+      .catch(() => setAttachments([]))
+      .finally(() => setIsLoading(false));
+  }, [projectId, defectId]);
+
+  if (isLoading) {
+    return <div className="text-sm text-muted-foreground">Loading...</div>;
+  }
+
+  if (!attachments || attachments.length === 0) {
+    return <p className="text-sm text-muted-foreground mt-1.5">No attachments</p>;
+  }
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {attachments.map((att) => {
+        const IconComp = getFileIcon(att.fileType || att.type || '');
+        return (
+          <div key={att.id} className="flex items-center gap-2.5 px-3 py-2 bg-secondary rounded-md">
+            <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+            <span className="text-sm text-foreground truncate flex-1">{att.fileName || att.name}</span>
+            <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(att.fileSize || att.size || 0)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 };
 
 const Defects = () => {
@@ -580,6 +621,10 @@ const Defects = () => {
                 <label className={labelCls}>External Link</label>
                 <Input value={editTarget.link} onChange={(e) => setEditTarget({ ...editTarget, link: e.target.value })} className="mt-0 h-9 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
               </div>
+              <div>
+                <label className={labelCls}>Attachments</label>
+                <DefectAttachmentsList projectId={projectId!} defectId={editTarget.id} />
+              </div>
             </div>
           )}
           <DialogFooter className="mt-4">
@@ -631,7 +676,7 @@ const Defects = () => {
               )}
               <div>
                 <label className={labelCls}>Attachments</label>
-                <p className="text-sm text-muted-foreground mt-1.5">Attachments are managed on the Attachments page.</p>
+                <DefectAttachmentsList projectId={projectId!} defectId={viewTarget.id} />
               </div>
             </div>
           )}
