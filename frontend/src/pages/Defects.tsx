@@ -113,7 +113,7 @@ const Defects = () => {
 
   // Delete modal
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; displayId: string } | null>(null);
 
   // Build a full PUT body from an existing defect, overriding specific fields.
   // The backend uses full-replacement PUT semantics — partial bodies cause HTTP 400.
@@ -287,7 +287,7 @@ const Defects = () => {
   const handleDelete = () => {
     if (!deleteTarget) return;
     deleteDefect.mutate(
-      { projectId: projectId!, id: deleteTarget },
+      { projectId: projectId!, id: deleteTarget.id },
       {
         onSuccess: () => {
           toast.success('Defect deleted');
@@ -455,7 +455,7 @@ const Defects = () => {
                             <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                           </button>
                           <button
-                            onClick={() => { setDeleteTarget(d.id); setDeleteOpen(true); }}
+                            onClick={() => { setDeleteTarget({ id: d.id, displayId: defectDisplayIdMap[d.id] ?? d.id }); setDeleteOpen(true); }}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
                           >
                             <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -692,7 +692,7 @@ const Defects = () => {
               Remove Defect
             </DialogTitle>
             <DialogDescription className="text-sm text-foreground mt-3">
-              Are you sure you want to delete <span className="font-bold">{deleteTarget}</span>? This action cannot be undone.
+              Are you sure you want to delete <span className="font-bold font-mono text-purple-600 dark:text-purple-400">{deleteTarget?.displayId}</span>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-6">
