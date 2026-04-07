@@ -21,7 +21,7 @@ const navItems = [
 ];
 
 const bottomItems = [
-  { label: 'Back to Projects', icon: ArrowLeft, action: 'back' },
+  { label: 'Back to Projects', icon: ArrowLeft, path: '/projects' },
 ];
 
 const AppSidebar = ({ projectName, projectId, projectInitials, collapsed = false, onToggleCollapse }: AppSidebarProps) => {
@@ -30,10 +30,6 @@ const AppSidebar = ({ projectName, projectId, projectInitials, collapsed = false
   
 
   const basePath = `/projects/${projectId}`;
-
-  const handleBottomAction = (action: string) => {
-    if (action === 'back') navigate('/projects');
-  };
 
   const NavButton = ({
     icon: Icon,
@@ -148,10 +144,10 @@ const AppSidebar = ({ projectName, projectId, projectInitials, collapsed = false
         <div className={`space-y-0.5 ${collapsed ? 'p-1' : 'p-3'}`}>
           {bottomItems.map((item) => (
             <NavButton
-              key={item.action}
+              key={item.path}
               icon={item.icon}
               label={item.label}
-              onClick={() => handleBottomAction(item.action)}
+              href={item.path}
             />
           ))}
 
