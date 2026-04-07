@@ -1,8 +1,10 @@
 package com.java_template.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.java_template.application.dto.BatchImportCaseDTO;
 import com.java_template.application.dto.ReorderItemDTO;
 import com.java_template.application.dto.TestCaseDTO;
+import com.java_template.application.dto.TestStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
@@ -29,13 +31,16 @@ public class TestCaseService {
 
     private final EntityService entityService;
     private final ProjectCounterService projectCounterService;
+    private final TestStepService testStepService;
     private final ObjectMapper objectMapper;
 
     public TestCaseService(EntityService entityService,
                            ProjectCounterService projectCounterService,
+                           TestStepService testStepService,
                            ObjectMapper objectMapper) {
         this.entityService = entityService;
         this.projectCounterService = projectCounterService;
+        this.testStepService = testStepService;
         this.objectMapper = objectMapper;
     }
 
@@ -199,5 +204,61 @@ public class TestCaseService {
             tc.setSortOrder(sortOrder);
             return updateTestCase(id, tc);
         }).orElseThrow(() -> new IllegalArgumentException("Test case not found: " + id));
+    }
+
+    /**
+     * Batch-creates multiple test cases (with optional steps) in a single suite.
+     *
+     * Performance: all display IDs are reserved with ONE counter round-trip via
+     * {@link ProjectCounterService#nextDisplayIdBatch}, eliminating the N individual
+     * counter reads that made per-row import slow.
+     *
+     * @param projectId project UUID (path param)
+     * @param suiteId   suite UUID  (path param)
+     * @param items     ordered list of cases to import; each may carry embedded steps
+     * @return the list of created test cases (without their steps)
+     */
+    public List<TestCaseDTO> batchCreateTestCases(UUID projectId, UUID suiteId,
+                                                  List<BatchImportCaseDTO> items) {
+        if (items == null || items.isEmpty()) return java.util.Collections.emptyList();
+
+        // Pre-allocate ALL display IDs in one counter update
+        List<String> displayIds = projectCounterService.nextDisplayIdBatch(projectId, items.size());
+
+        List<TestCaseDTO> created = new java.util.ArrayList<>(items.size());
+        for (int i = 0; i < items.size(); i++) {
+            BatchImportCaseDTO item = items.get(i);
+
+            TestCaseDTO tc = new TestCaseDTO();
+            tc.setProjectId(projectId);
+            tc.setSuiteId(suiteId);
+            tc.setTitle(item.getTitle());
+            tc.setDescription(item.getDescription() != null ? item.getDescription() : "");
+            tc.setPreconditions(item.getPreconditions() != null ? item.getPreconditions() : "");
+            tc.setPriority(item.getPriority() != null ? item.getPriority()
+                    : com.java_template.application.dto.Priority.MEDIUM);
+            tc.setStatus("ACTIVE");
+            tc.setDeleted(false);
+            tc.setDisplayId(displayIds.get(i));
+
+            TestCaseDTO saved = withId(entityService.create(tc));
+
+            // Create steps inline if provided
+            if (item.getSteps() != null && !item.getSteps().isEmpty()) {
+                int stepNum = 1;
+                for (BatchImportCaseDTO.StepDTO s : item.getSteps()) {
+                    TestStepDTO step = new TestStepDTO();
+                    step.setTestCaseId(saved.getId());
+                    step.setStepNumber(s.getStepNumber() != null ? s.getStepNumber() : stepNum);
+                    step.setAction(s.getAction() != null ? s.getAction() : "");
+                    step.setExpectedResult(s.getExpectedResult() != null ? s.getExpectedResult() : "");
+                    step.setStatus("untested");
+                    testStepService.createTestStep(step);
+                    stepNum++;
+                }
+            }
+            created.add(saved);
+        }
+        return created;
     }
 }

@@ -5,6 +5,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Plus, Pencil, Copy, Trash2, MoreHorizontal, Download, Upload, X, AlertTriangle, FileText, Image, Paperclip, Loader2, File, Search, Play, GripVertical } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { performExport, performImport, downloadCSVTemplate } from '@/lib/exportImport';
+import type { ImportSuiteGroup, ImportOverwrite } from '@/lib/exportImport';
 import { toast } from 'sonner';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -348,6 +349,7 @@ const Repository = () => {
     try {
       await suitesApi.reorder(projectId!, reordered.map((s, i) => ({ id: s.id, sortOrder: i })));
       queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId!) });
+      queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId!) });
     } catch {
       setLocalSuites(snapshot);
       toast.error('Failed to save suite order');
@@ -449,6 +451,9 @@ const Repository = () => {
           targetSuiteAfter.cases.map((c, i) => ({ id: c.id, sortOrder: i })));
         queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId!, targetSuiteId) });
       }
+      // Always invalidate the repository aggregate after any case move or reorder so
+      // the UI stays consistent with the server without a manual page reload.
+      queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId!) });
     } catch {
       setLocalSuites(snapshot);
       toast.error('Failed to save order. Your changes have been reverted.');
@@ -602,8 +607,10 @@ const Repository = () => {
         if (!suite) return Promise.resolve();
         return testCasesApi.delete(projectId, suite.id, caseId);
       }));
-      // Invalidate all case queries
+      // Invalidate all case queries and the repository aggregate so the list
+      // refreshes immediately without a manual page reload.
       localSuites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
+      queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
       if (selectedCase && selectedCases.has(selectedCase.id)) setSelectedCase(null);
       setSelectedCases(new Set());
       setBulkDeleteOpen(false);
@@ -638,6 +645,7 @@ const Repository = () => {
         }
       }
       localSuites.forEach(s => queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, s.id) }));
+      queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
       toast.success(`Duplicated ${selectedCases.size} case(s)`);
       clearSelection();
     } catch (e) {
@@ -687,6 +695,7 @@ const Repository = () => {
   const [importConflict, setImportConflict] = useState<'skip' | 'overwrite' | 'create_new'>('skip');
   const [importDragOver, setImportDragOver] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
 
   const toggleExportSuite = (id: string) => {
     const suite = localSuites.find(s => s.id === id);
@@ -792,58 +801,128 @@ const Repository = () => {
   const handleImport = async () => {
     if (!importFile || !projectId) return;
     setImporting(true);
+    setImportProgress(null);
     try {
       const targetId = importSuiteTarget === 'root' ? '__new__' : importSuiteTarget;
-      const { updatedSuites, result } = await performImport(importFile, targetId, importConflict, localSuites, projectId);
+      const { toCreate, toOverwrite, result } = await performImport(
+        importFile, targetId, importConflict, localSuites, projectId,
+      );
+
       const affectedSuiteIds = new Set<string>();
 
-      // Persist parsed cases to the backend
-      for (const suite of updatedSuites) {
-        const existing = localSuites.find(s => s.id === suite.id);
-        const newCases = existing
-          ? suite.cases.filter(c => !existing.cases.some(ec => ec.id === c.id))
-          : suite.cases;
-        if (newCases.length === 0) continue;
-        let suiteId = suite.id;
-        if (!existing) {
-          const created = await suitesApi.create(projectId, { name: suite.name });
+      // ── Total work units for progress indicator ──
+      const totalWork = toCreate.reduce((n, g) => n + g.cases.length, 0) + toOverwrite.length;
+      let doneWork = 0;
+      const tick = (n = 1) => { doneWork += n; setImportProgress({ done: doneWork, total: totalWork }); };
+      if (totalWork > 0) setImportProgress({ done: 0, total: totalWork });
+
+      // ── Helper: run up to CONCURRENCY promises at a time ──
+      const CONCURRENCY = 6;
+      async function pooledRun<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
+        const results: T[] = [];
+        let idx = 0;
+        async function worker() {
+          while (idx < tasks.length) {
+            const i = idx++;
+            results[i] = await tasks[i]();
+          }
+        }
+        const workers = Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker);
+        await Promise.all(workers);
+        return results;
+      }
+
+      // ── 1. Persist NEW cases (suite-aware) ──
+      for (const group of toCreate as ImportSuiteGroup[]) {
+        if (group.cases.length === 0) continue;
+
+        // Create the suite first if it doesn't exist yet
+        let suiteId = group.suiteId ?? '';
+        if (group.isNewSuite || !suiteId) {
+          const created = await suitesApi.create(projectId, { name: group.suiteName });
           suiteId = created.id;
         }
         affectedSuiteIds.add(suiteId);
-        for (const tc of newCases) {
-          const created = await testCasesApi.create(projectId, suiteId, {
-            title: tc.title, priority: tc.priority,
-            description: tc.description, preconditions: tc.preconditions,
-          });
-          // Create steps for the case
-          for (const step of tc.steps || []) {
-            await testStepsApi.create(projectId, suiteId, created.id, {
-              stepNumber: step.order || 1,
-              action: step.action,
-              expectedResult: step.expectedResult,
-            });
-          }
-        }
+
+        // ── Batch-create all cases in this group in ONE HTTP call ──
+        // The backend reserves all display IDs in a single counter round-trip,
+        // then creates each case + its steps before returning.
+        const batchPayload = group.cases.map(tc => ({
+          title:         tc.title,
+          priority:      tc.priority,
+          description:   tc.description,
+          preconditions: tc.preconditions,
+          steps: (tc.steps || []).map(s => ({
+            stepNumber:     s.order || 1,
+            action:         s.action,
+            expectedResult: s.expectedResult,
+          })),
+        }));
+        await testCasesApi.batchCreate(projectId, suiteId, batchPayload);
+        tick(group.cases.length);
       }
-      // Refetch suites and affected case lists so imported cases become visible immediately
-      await queryClient.refetchQueries({ queryKey: keys.suites.all(projectId) });
+
+      // ── 2. Persist OVERWRITE cases ──
+      // Each overwrite: PUT the case fields + replace its steps
+      if (toOverwrite.length > 0) {
+        await pooledRun((toOverwrite as ImportOverwrite[]).map(ow => async () => {
+          // Update the test case fields
+          await testCasesApi.update(projectId, ow.existingSuiteId, ow.existingCaseId, {
+            title:        ow.data.title,
+            priority:     ow.data.priority,
+            description:  ow.data.description,
+            preconditions: ow.data.preconditions,
+          });
+          affectedSuiteIds.add(ow.existingSuiteId);
+
+          // Replace steps: delete existing then recreate
+          // (Fetch existing steps first so we know their IDs)
+          if (ow.data.steps && ow.data.steps.length > 0) {
+            const existingSteps = await testStepsApi.list(projectId, ow.existingSuiteId, ow.existingCaseId);
+            await Promise.all(
+              existingSteps.map(s =>
+                testStepsApi.delete(projectId, ow.existingSuiteId, ow.existingCaseId, s.id),
+              ),
+            );
+            for (const step of ow.data.steps) {
+              await testStepsApi.create(projectId, ow.existingSuiteId, ow.existingCaseId, {
+                stepNumber: step.order || 1,
+                action: step.action,
+                expectedResult: step.expectedResult,
+              });
+            }
+          }
+          tick();
+        }));
+      }
+
+      // ── 3. Invalidate cache — repository key drives the main list view ──
+      // Invalidate the aggregate repository query so the UI auto-refreshes without
+      // the user needing to reload the page.
+      await queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+      await queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
+      // Also invalidate per-suite case lists for any suites we touched
       await Promise.all(
-        [...affectedSuiteIds].map((suiteId) =>
-          queryClient.refetchQueries({ queryKey: keys.cases.all(projectId, suiteId) })
-        )
+        [...affectedSuiteIds].map(sid =>
+          queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, sid) }),
+        ),
       );
+      // Trigger an immediate background refetch so the UI updates right away
+      void queryClient.refetchQueries({ queryKey: keys.repository.all(projectId) });
+
       const parts: string[] = [];
-      if (result.imported > 0) parts.push(`${result.imported} imported`);
+      if (result.imported   > 0) parts.push(`${result.imported} imported`);
       if (result.overwritten > 0) parts.push(`${result.overwritten} overwritten`);
-      if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
+      if (result.skipped    > 0) parts.push(`${result.skipped} skipped`);
       toast.success(`Import complete: ${parts.join(', ')}`);
-      setExpandedSuites((prev) => new Set([...prev, ...affectedSuiteIds]));
+      setExpandedSuites(prev => new Set([...prev, ...affectedSuiteIds]));
     } catch (err) {
       toast.error('Import failed: ' + (err instanceof Error ? err.message : 'Invalid file format'));
     } finally {
       setImporting(false);
       setImportOpen(false);
       setImportFile(null);
+      setImportProgress(null);
     }
   };
 
@@ -883,10 +962,20 @@ const Repository = () => {
         }
       );
     } else {
+      const trimmedName = newSuiteName.trim();
       updateSuiteMut.mutate(
-        { projectId, id: editingSuiteId, body: { name: newSuiteName.trim() } },
+        { projectId, id: editingSuiteId, body: { name: trimmedName } },
         {
-          onSuccess: () => { setSuiteModalOpen(false); toast.success('Suite updated'); },
+          onSuccess: () => {
+            // The localSuites sync guard only reacts to structural ID changes, so a
+            // rename never propagates from the refetched repositoryData on its own.
+            // We apply an optimistic update here to keep the name in sync immediately.
+            setLocalSuites(prev =>
+              prev.map(s => s.id === editingSuiteId ? { ...s, name: trimmedName } : s)
+            );
+            setSuiteModalOpen(false);
+            toast.success('Suite updated');
+          },
           onError: (e) => toast.error(e.message),
         }
       );
@@ -921,6 +1010,7 @@ const Repository = () => {
         }
       }
       queryClient.invalidateQueries({ queryKey: keys.suites.all(projectId) });
+      queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
       setExpandedSuites((prev) => new Set([...prev, newSuite.id]));
       toast.success(`Suite "${suite.name}" duplicated`);
     } catch (e) {
@@ -970,7 +1060,10 @@ const Repository = () => {
           await attachmentsApi.upload(projectId, file, newCase.id);
         }
         queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, targetSuiteId) });
-        queryClient.invalidateQueries({ queryKey: ['attachments', projectId, newCase.id] });
+        queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+        // Use the root attachments key so both the global Attachments page and the
+        // per-case attachment panel refresh without needing separate targeted invalidations.
+        queryClient.invalidateQueries({ queryKey: keys.attachments.all(projectId) });
         toast.success('Test case created');
       } else {
         await testCasesApi.update(projectId, caseSuiteId, editingCaseId, {
@@ -993,8 +1086,12 @@ const Repository = () => {
           await attachmentsApi.upload(projectId, file, editingCaseId);
         }
         queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, caseSuiteId) });
+        queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
         queryClient.invalidateQueries({ queryKey: keys.steps.all(projectId, caseSuiteId, editingCaseId) });
-        queryClient.invalidateQueries({ queryKey: ['attachments', projectId, editingCaseId] });
+        // Use the root attachments key so the Attachments page AND the per-case
+        // panel both refresh (covers keys used by useAttachmentsByCase and the
+        // local ['attachments', projectId, caseId] key used inline in Repository).
+        queryClient.invalidateQueries({ queryKey: keys.attachments.all(projectId) });
         // Optimistically update localSuites so the list title refreshes immediately
         // without waiting for the query-invalidation round-trip.
         setLocalSuites(prev => prev.map(s => ({
@@ -1035,6 +1132,7 @@ const Repository = () => {
         await attachmentsApi.copy(projectId, att.id, newCase.id);
       }
       queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, tc.suiteId) });
+      queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
       toast.success('Test case duplicated');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to duplicate test case');
@@ -1893,13 +1991,16 @@ const Repository = () => {
 
             {/* Suite Target */}
             <div>
-              <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Destination Suite</label>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Fallback Destination Suite</label>
+              <p className="text-xs text-muted-foreground mb-1.5">
+                Used only for cases without suite info in the file. CYODA exports preserve original suite structure automatically.
+              </p>
               <Select value={importSuiteTarget} onValueChange={setImportSuiteTarget}>
                 <SelectTrigger className="bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="root">Root (No Suite)</SelectItem>
+                  <SelectItem value="root">Auto-create suite(s) from file</SelectItem>
                   {localSuites.map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
@@ -1913,28 +2014,49 @@ const Repository = () => {
               <RadioGroup value={importConflict} onValueChange={(v) => setImportConflict(v as 'skip' | 'overwrite' | 'create_new')} className="gap-2">
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="skip" id="conflict-skip" />
-                  <Label htmlFor="conflict-skip" className="text-sm text-foreground cursor-pointer">Skip</Label>
+                  <Label htmlFor="conflict-skip" className="text-sm text-foreground cursor-pointer font-medium">Skip</Label>
+                  <span className="text-xs text-muted-foreground">— do not create a new entry</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="overwrite" id="conflict-overwrite" />
-                  <Label htmlFor="conflict-overwrite" className="text-sm text-foreground cursor-pointer">Overwrite</Label>
+                  <Label htmlFor="conflict-overwrite" className="text-sm text-foreground cursor-pointer font-medium">Overwrite</Label>
+                  <span className="text-xs text-muted-foreground">— update title, steps, and fields</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <RadioGroupItem value="create_new" id="conflict-new" />
-                  <Label htmlFor="conflict-new" className="text-sm text-foreground cursor-pointer">Create New</Label>
+                  <Label htmlFor="conflict-new" className="text-sm text-foreground cursor-pointer font-medium">Create New</Label>
+                  <span className="text-xs text-muted-foreground">— ignore existing IDs, generate fresh</span>
                 </div>
               </RadioGroup>
             </div>
+
+            {/* Progress bar shown during import */}
+            {importing && importProgress && importProgress.total > 0 && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Importing…</span>
+                  <span>{importProgress.done} / {importProgress.total}</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all duration-200"
+                    style={{ width: `${Math.round((importProgress.done / importProgress.total) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="ghost" size="sm" onClick={() => setImportOpen(false)}>Cancel</Button>
+            <Button variant="ghost" size="sm" onClick={() => setImportOpen(false)} disabled={importing}>Cancel</Button>
             <Button
               size="sm"
               className="bg-primary text-primary-foreground hover:bg-primary/90 border-0 gap-1.5"
               onClick={handleImport}
               disabled={!importFile || importing}
             >
-              {importing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Importing...</> : <><Upload className="h-3.5 w-3.5" /> Import Data</>}
+              {importing
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {importProgress ? `${importProgress.done}/${importProgress.total} cases…` : 'Preparing…'}</>
+                : <><Upload className="h-3.5 w-3.5" /> Import Data</>}
             </Button>
           </DialogFooter>
         </DialogContent>

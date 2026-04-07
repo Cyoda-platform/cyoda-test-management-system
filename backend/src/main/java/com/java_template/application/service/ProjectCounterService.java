@@ -79,32 +79,54 @@ public class ProjectCounterService {
      * return the same value for the same project.
      */
     public String nextDisplayId(UUID projectId) {
+        return nextDisplayIdBatch(projectId, 1).get(0);
+    }
+
+    /**
+     * Reserves {@code count} consecutive display IDs for a batch import operation
+     * and returns them as a list (e.g. ["TC-5","TC-6","TC-7"]).
+     *
+     * A single synchronized block advances the counter by {@code count} in one
+     * database round-trip, eliminating the N-calls-per-imported-case N+1 pattern
+     * that made bulk imports extremely slow.
+     *
+     * @param projectId the project whose counter to advance
+     * @param count     how many IDs to reserve (must be &gt; 0)
+     * @return an ordered list of {@code count} unique display IDs
+     */
+    public java.util.List<String> nextDisplayIdBatch(UUID projectId, int count) {
+        if (count <= 0) throw new IllegalArgumentException("count must be > 0");
         Object lock = projectLocks.computeIfAbsent(projectId, k -> new Object());
         synchronized (lock) {
             Optional<ProjectCounterDTO> existing = findCounterForProject(projectId);
 
+            long firstAssigned;
             if (existing.isPresent()) {
                 ProjectCounterDTO counter = existing.get();
-                long assigned = counter.getNextId();
-                counter.setNextId(assigned + 1);
+                firstAssigned = counter.getNextId();
+                counter.setNextId(firstAssigned + count);
                 entityService.update(counter.getId(), counter, null);
-                logger.debug("Assigned TC-{} for project {}", assigned, projectId);
-                return "TC-" + assigned;
+                logger.debug("Assigned TC-{}..TC-{} for project {} (batch={})",
+                        firstAssigned, firstAssigned + count - 1, projectId, count);
             } else {
-                // First time for this project: scan ALL cases (including deleted) to
-                // find the highest number ever used, then start above it.
+                // First use for this project: bootstrap by scanning existing IDs
                 long maxUsed = scanMaxUsedId(projectId);
-                long assigned = maxUsed + 1;
+                firstAssigned = maxUsed + 1;
 
                 ProjectCounterDTO counter = new ProjectCounterDTO();
                 counter.setProjectId(projectId);
-                counter.setNextId(assigned + 1);   // store what comes AFTER the one we're returning
+                counter.setNextId(firstAssigned + count);
                 entityService.create(counter);
 
-                logger.info("Initialized TC counter for project {} — first assigned: TC-{} (prev max: {})",
-                        projectId, assigned, maxUsed);
-                return "TC-" + assigned;
+                logger.info("Initialized TC counter for project {} — first batch: TC-{}..TC-{} (prev max: {})",
+                        projectId, firstAssigned, firstAssigned + count - 1, maxUsed);
             }
+
+            java.util.List<String> ids = new java.util.ArrayList<>(count);
+            for (long i = 0; i < count; i++) {
+                ids.add("TC-" + (firstAssigned + i));
+            }
+            return ids;
         }
     }
 

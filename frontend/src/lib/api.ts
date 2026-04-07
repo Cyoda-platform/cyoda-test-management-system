@@ -171,6 +171,20 @@ export interface TestCase {
   deleted: boolean;
 }
 
+export interface BatchImportStep {
+  stepNumber?: number;
+  action: string;
+  expectedResult: string;
+}
+
+export interface BatchImportCase {
+  title: string;
+  description?: string;
+  preconditions?: string;
+  priority?: 'HIGH' | 'MEDIUM' | 'LOW';
+  steps?: BatchImportStep[];
+}
+
 export const testCasesApi = {
   list:   (projectId: string, suiteId: string) =>
     api.get<{ data: TestCase[] }>(`/projects/${projectId}/suites/${suiteId}/cases`),
@@ -178,6 +192,13 @@ export const testCasesApi = {
     api.get<TestCase>(`/projects/${projectId}/suites/${suiteId}/cases/${id}`),
   create: (projectId: string, suiteId: string, body: Partial<TestCase>) =>
     api.post<TestCase>(`/projects/${projectId}/suites/${suiteId}/cases`, body),
+  /**
+   * Batch-create multiple cases (with optional embedded steps) in a single HTTP call.
+   * The backend pre-allocates all display IDs in one counter round-trip, eliminating
+   * the N+1 counter-table hit pattern that makes row-by-row import slow.
+   */
+  batchCreate: (projectId: string, suiteId: string, items: BatchImportCase[]) =>
+    api.post<TestCase[]>(`/projects/${projectId}/suites/${suiteId}/cases/batch`, items),
   update: (projectId: string, suiteId: string, id: string, body: Partial<TestCase>) =>
     api.put<TestCase>(`/projects/${projectId}/suites/${suiteId}/cases/${id}`, body),
   delete: (projectId: string, suiteId: string, id: string) =>

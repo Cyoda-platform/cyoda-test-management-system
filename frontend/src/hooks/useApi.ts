@@ -446,6 +446,39 @@ export function useUpdateTestRun() {
       id: string;
       body: Partial<TestRun>;
     }) => testRunsApi.update(projectId, id, body),
+    /**
+     * Optimistic update: immediately reflect name/environment/status changes in the
+     * Test Runs table so the user sees the edit take effect without waiting for the
+     * server round-trip. We snapshot and roll back on error.
+     */
+    onMutate: async ({ projectId, id, body }) => {
+      // Cancel any in-flight refetches to prevent race conditions
+      await qc.cancelQueries({ queryKey: keys.runs.all(projectId) });
+      // Snapshot all runs list queries for rollback
+      const previousQueries = qc.getQueriesData<{ data: TestRun[] }>({
+        queryKey: keys.runs.all(projectId),
+      });
+      // Optimistically patch every cached page that contains this run
+      qc.setQueriesData<{ data: TestRun[] }>(
+        { queryKey: keys.runs.all(projectId) },
+        (old) => {
+          if (!old) return old;
+          const typed = old as { data?: TestRun[] };
+          if (!Array.isArray(typed.data)) return old;
+          return {
+            ...typed,
+            data: typed.data.map((r) => (r.id === id ? { ...r, ...body } : r)),
+          };
+        },
+      );
+      return { previousQueries };
+    },
+    onError: (_err, { projectId }, context) => {
+      // Roll back every affected query to its pre-mutation snapshot
+      context?.previousQueries?.forEach(([queryKey, data]) => {
+        qc.setQueryData(queryKey, data);
+      });
+    },
     onSuccess: (_data, { projectId, id }) => {
       qc.invalidateQueries({ queryKey: keys.runs.all(projectId) });
       qc.invalidateQueries({ queryKey: keys.runs.detail(projectId, id) });
@@ -535,6 +568,39 @@ export function useUpdateDefect() {
       id: string;
       body: Partial<Defect>;
     }) => defectsApi.update(projectId, id, body),
+    /**
+     * Optimistic update: immediately reflect the new field values in the cache so
+     * the Defects table shows the changed severity/status without a loading delay.
+     * We snapshot all matching list queries beforehand and roll back on error.
+     */
+    onMutate: async ({ projectId, id, body }) => {
+      // Cancel any in-flight refetches to prevent race conditions
+      await qc.cancelQueries({ queryKey: keys.defects.all(projectId) });
+      // Snapshot all defect list/detail queries for rollback
+      const previousQueries = qc.getQueriesData<{ data: Defect[] }>({
+        queryKey: keys.defects.all(projectId),
+      });
+      // Optimistically patch every cached page that contains this defect
+      qc.setQueriesData<{ data: Defect[] }>(
+        { queryKey: keys.defects.all(projectId) },
+        (old) => {
+          if (!old) return old;
+          const typed = old as { data?: Defect[] };
+          if (!Array.isArray(typed.data)) return old;
+          return {
+            ...typed,
+            data: typed.data.map((d) => (d.id === id ? { ...d, ...body } : d)),
+          };
+        },
+      );
+      return { previousQueries };
+    },
+    onError: (_err, { projectId }, context) => {
+      // Roll back every affected query to its pre-mutation snapshot
+      context?.previousQueries?.forEach(([queryKey, data]) => {
+        qc.setQueryData(queryKey, data);
+      });
+    },
     onSuccess: (_data, { projectId, id }) => {
       qc.invalidateQueries({ queryKey: keys.defects.all(projectId) });
       qc.invalidateQueries({ queryKey: keys.defects.detail(projectId, id) });

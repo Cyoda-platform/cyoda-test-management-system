@@ -172,7 +172,7 @@ function exportExcel(opts: ExportOptions) {
 function exportPDF(opts: ExportOptions) {
   // Generate a printable HTML document and trigger print/save as PDF
   const rows = flattenCases(opts.suites, opts.includeSteps, opts.includePreconditions);
-  
+
   let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Test Cases Export</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #1e293b; }
@@ -239,16 +239,27 @@ export async function performExport(opts: ExportOptions): Promise<void> {
 // ── CSV Template ──
 
 export function downloadCSVTemplate() {
-  const headers = 'Title,Description,Pre_Conditions,Step_Action,Step_Expected_Result';
-  const example = '"Login with valid credentials","Verify user can login","User account exists","Navigate to login page","Login form displayed"';
+  const headers = 'Suite_Name,Title,Description,Pre_Conditions,Step_Action,Step_Expected_Result';
+  const example = '"Login Suite","Login with valid credentials","Verify user can login","User account exists","Navigate to login page","Login form displayed"';
   const blob = new Blob([headers + '\n' + example + '\n'], { type: 'text/csv;charset=utf-8' });
   triggerDownload(blob, 'CYODA_Import_Template.csv');
 }
 
 // ── Import ──
 
+/**
+ * A parsed test case from an import file.
+ * suiteId and suiteName carry the *source* suite information from the file
+ * (e.g. Suite_ID / Suite_Name columns in CSV, suiteId field in JSON, Suite element in XML).
+ * When present, the importer uses them to recreate the original suite structure rather
+ * than dumping everything into the single user-selected target suite.
+ */
 interface ParsedCase {
   id?: string;
+  /** Source suite ID from the export file – used for suite-aware placement. */
+  sourceSuiteId?: string;
+  /** Source suite name from the export file – used to look up or create suites. */
+  sourceSuiteName?: string;
   title: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   description: string;
@@ -280,40 +291,50 @@ function parseCSVImport(text: string): ParsedCase[] {
   const lines = text.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
   const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
-  
-  const titleIdx = headers.findIndex(h => h.includes('title'));
-  const descIdx = headers.findIndex(h => h.includes('description'));
-  const preIdx = headers.findIndex(h => h.includes('pre_condition') || h.includes('precondition'));
-  const prioIdx = headers.findIndex(h => h.includes('priority'));
-  const idIdx = headers.findIndex(h => h === 'case_id' || h === 'id');
-  const stepActionIdx = headers.findIndex(h => h.includes('step_action') || h.includes('action'));
-  const stepExpIdx = headers.findIndex(h => h.includes('step_expected') || h.includes('expected'));
-  const stepOrderIdx = headers.findIndex(h => h.includes('step_order') || h.includes('order'));
+
+  const titleIdx      = headers.findIndex(h => h === 'title');
+  const descIdx       = headers.findIndex(h => h.includes('description'));
+  const preIdx        = headers.findIndex(h => h.includes('pre_condition') || h.includes('precondition'));
+  const prioIdx       = headers.findIndex(h => h.includes('priority'));
+  const idIdx         = headers.findIndex(h => h === 'case_id' || h === 'id');
+  const stepActionIdx = headers.findIndex(h => h.includes('step_action') || (h.includes('action') && !h.includes('step_expected')));
+  const stepExpIdx    = headers.findIndex(h => h.includes('step_expected') || h.includes('expected'));
+  const stepOrderIdx  = headers.findIndex(h => h.includes('step_order') || h === 'order');
+  // Suite columns – populated in full CYODA exports
+  const suiteIdIdx    = headers.findIndex(h => h === 'suite_id');
+  const suiteNameIdx  = headers.findIndex(h => h === 'suite_name');
 
   if (titleIdx === -1) throw new Error('CSV must contain a "Title" column');
 
-  // Group rows by case (rows with same title or case_id belong together for steps)
+  // Group rows by case (rows with same caseId or title belong together for multi-step cases)
   const caseMap = new Map<string, ParsedCase>();
   for (let i = 1; i < lines.length; i++) {
     const vals = parseCSVLine(lines[i]);
     const title = vals[titleIdx]?.trim() || '';
     if (!title) continue;
-    const id = idIdx >= 0 ? vals[idIdx]?.trim() : undefined;
-    const key = id || title;
+    const id           = idIdx >= 0         ? vals[idIdx]?.trim()         : undefined;
+    const sourceSuiteId   = suiteIdIdx >= 0    ? vals[suiteIdIdx]?.trim()   : undefined;
+    const sourceSuiteName = suiteNameIdx >= 0  ? vals[suiteNameIdx]?.trim() : undefined;
+
+    // Key by caseId when available, otherwise by (suiteName + title) to avoid collisions
+    // between same-titled cases in different suites
+    const key = id || `${sourceSuiteName || ''}::${title}`;
 
     if (!caseMap.has(key)) {
       caseMap.set(key, {
         id: id || undefined,
+        sourceSuiteId:   sourceSuiteId   || undefined,
+        sourceSuiteName: sourceSuiteName || undefined,
         title,
-        priority: normalizePriority(prioIdx >= 0 ? vals[prioIdx]?.trim() : ''),
-        description: descIdx >= 0 ? vals[descIdx]?.trim() || '' : '',
-        preconditions: preIdx >= 0 ? vals[preIdx]?.trim() || '' : '',
+        priority:      normalizePriority(prioIdx >= 0 ? vals[prioIdx]?.trim() : ''),
+        description:   descIdx >= 0 ? vals[descIdx]?.trim() || '' : '',
+        preconditions: preIdx >= 0  ? vals[preIdx]?.trim()  || '' : '',
         steps: [],
       });
     }
     const tc = caseMap.get(key)!;
-    const action = stepActionIdx >= 0 ? vals[stepActionIdx]?.trim() : '';
-    const expected = stepExpIdx >= 0 ? vals[stepExpIdx]?.trim() : '';
+    const action   = stepActionIdx >= 0 ? vals[stepActionIdx]?.trim() : '';
+    const expected = stepExpIdx    >= 0 ? vals[stepExpIdx]?.trim()    : '';
     if (action) {
       tc.steps.push({
         order: stepOrderIdx >= 0 && vals[stepOrderIdx] ? parseInt(vals[stepOrderIdx]) || tc.steps.length + 1 : tc.steps.length + 1,
@@ -329,19 +350,29 @@ function parseCSVImport(text: string): ParsedCase[] {
 function parseJSONImport(text: string): ParsedCase[] {
   const data = JSON.parse(text);
   const cases: ParsedCase[] = [];
-  // Support array of suites or flat array of cases
+  // Support array of suites (CYODA native export) or flat array of cases
   const items = Array.isArray(data) ? data : [data];
   for (const item of items) {
     if (item.cases && Array.isArray(item.cases)) {
-      for (const c of item.cases) cases.push(normalizeCase(c));
+      // Suite-wrapped format: { suiteId, suiteName, cases: [...] }
+      const sourceSuiteId   = item.suiteId   ? String(item.suiteId)   : undefined;
+      const sourceSuiteName = item.suiteName ? String(item.suiteName) : undefined;
+      for (const c of item.cases) {
+        cases.push(normalizeCase(c, sourceSuiteId, sourceSuiteName));
+      }
     } else {
+      // Flat case object without suite wrapper
       cases.push(normalizeCase(item));
     }
   }
   return cases;
 }
 
-function normalizeCase(c: Record<string, unknown>): ParsedCase {
+function normalizeCase(
+  c: Record<string, unknown>,
+  sourceSuiteId?: string,
+  sourceSuiteName?: string,
+): ParsedCase {
   const steps = Array.isArray(c.steps) ? c.steps.map((s: Record<string, unknown>, i: number) => ({
     order: (s.order as number) || i + 1,
     action: String(s.action || ''),
@@ -350,9 +381,11 @@ function normalizeCase(c: Record<string, unknown>): ParsedCase {
   })) : [];
   return {
     id: c.id ? String(c.id) : undefined,
-    title: String(c.title || ''),
-    priority: normalizePriority(String(c.priority || '')),
-    description: String(c.description || ''),
+    sourceSuiteId:   sourceSuiteId   || (c.suiteId   ? String(c.suiteId)   : undefined),
+    sourceSuiteName: sourceSuiteName || (c.suiteName ? String(c.suiteName) : undefined),
+    title:        String(c.title || ''),
+    priority:     normalizePriority(String(c.priority || '')),
+    description:  String(c.description || ''),
     preconditions: String(c.preconditions || c.pre_conditions || ''),
     steps,
   };
@@ -362,35 +395,61 @@ function parseXMLImport(text: string): ParsedCase[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, 'application/xml');
   const cases: ParsedCase[] = [];
-  const tcElements = doc.querySelectorAll('TestCase');
-  for (const el of tcElements) {
-    const steps: TestStep[] = [];
-    el.querySelectorAll('Step').forEach((s, i) => {
-      steps.push({
-        order: parseInt(s.getAttribute('order') || '') || i + 1,
-        action: s.querySelector('Action')?.textContent || '',
-        expectedResult: s.querySelector('ExpectedResult')?.textContent || '',
-        status: 'untested',
+
+  // Support both Suite-wrapped structure and flat TestCase list
+  const suiteElements = doc.querySelectorAll('Suite');
+  if (suiteElements.length > 0) {
+    // Structured format: <Suite id="..." name="..."><TestCase .../>...</Suite>
+    suiteElements.forEach(suiteEl => {
+      const sourceSuiteId   = suiteEl.getAttribute('id')   || undefined;
+      const sourceSuiteName = suiteEl.getAttribute('name') || undefined;
+      suiteEl.querySelectorAll(':scope > TestCase').forEach(el => {
+        cases.push(parseXMLTestCase(el, sourceSuiteId, sourceSuiteName));
       });
     });
-    cases.push({
-      id: el.getAttribute('id') || undefined,
-      title: el.querySelector('Title')?.textContent || '',
-      priority: normalizePriority(el.getAttribute('priority') || ''),
-      description: el.querySelector('Description')?.textContent || '',
-      preconditions: el.querySelector('PreConditions')?.textContent || '',
-      steps,
+  } else {
+    // Flat format: <TestCase .../>
+    doc.querySelectorAll('TestCase').forEach(el => {
+      cases.push(parseXMLTestCase(el));
     });
   }
   return cases;
 }
 
+function parseXMLTestCase(
+  el: Element,
+  sourceSuiteId?: string,
+  sourceSuiteName?: string,
+): ParsedCase {
+  const steps: TestStep[] = [];
+  el.querySelectorAll('Step').forEach((s, i) => {
+    steps.push({
+      order: parseInt(s.getAttribute('order') || '') || i + 1,
+      action: s.querySelector('Action')?.textContent || '',
+      expectedResult: s.querySelector('ExpectedResult')?.textContent || '',
+      status: 'untested',
+    });
+  });
+  return {
+    id: el.getAttribute('id') || undefined,
+    sourceSuiteId,
+    sourceSuiteName,
+    title:        el.querySelector('Title')?.textContent        || '',
+    priority:     normalizePriority(el.getAttribute('priority') || ''),
+    description:  el.querySelector('Description')?.textContent  || '',
+    preconditions: el.querySelector('PreConditions')?.textContent || '',
+    steps,
+  };
+}
+
 function normalizePriority(p: string): 'HIGH' | 'MEDIUM' | 'LOW' {
   const u = p.toUpperCase();
   if (u === 'HIGH' || u === 'H') return 'HIGH';
-  if (u === 'LOW' || u === 'L') return 'LOW';
+  if (u === 'LOW'  || u === 'L') return 'LOW';
   return 'MEDIUM';
 }
+
+// ── Import result types ──
 
 export interface ImportResult {
   imported: number;
@@ -398,76 +457,168 @@ export interface ImportResult {
   overwritten: number;
 }
 
+/**
+ * One group of cases that all belong to the same target suite.
+ * isNewSuite = true means the suite does not yet exist on the backend and must be created.
+ */
+export interface ImportSuiteGroup {
+  /** The resolved backend suite ID (undefined when isNewSuite=true until created). */
+  suiteId?: string;
+  /** The name to use when creating a new suite. */
+  suiteName: string;
+  isNewSuite: boolean;
+  cases: TestCase[];
+}
+
+/**
+ * A case that already exists on the backend and whose fields should be overwritten.
+ */
+export interface ImportOverwrite {
+  existingCaseId: string;
+  existingSuiteId: string;
+  data: Omit<TestCase, 'id' | 'suiteId'>;
+}
+
+export interface PerformImportResult {
+  /** New cases grouped by target suite (ready to POST to backend). */
+  toCreate: ImportSuiteGroup[];
+  /** Existing cases that should be PUTted with new data. */
+  toOverwrite: ImportOverwrite[];
+  result: ImportResult;
+}
+
+/**
+ * Parses the import file and resolves each case against the existing suite/case tree.
+ *
+ * Suite placement priority:
+ *  1. If the file contains suite info (Suite_ID / Suite_Name / JSON suiteId / XML Suite element)
+ *     → map to an existing suite by ID, then by name, otherwise queue a new suite creation.
+ *  2. If targetSuiteId is a real suite → use it as fallback for cases without suite info.
+ *  3. If targetSuiteId is '__new__' → create a single "Imported" suite for cases without suite info.
+ *
+ * @param file          The uploaded file (CSV | JSON | XML).
+ * @param targetSuiteId The user-selected fallback suite, or '__new__' to auto-create.
+ * @param conflict      How to handle a case whose ID already exists.
+ * @param suites        Current suite/case tree from the UI.
+ * @param projectId     Current project UUID.
+ */
 export async function performImport(
   file: File,
   targetSuiteId: string,
   conflict: 'skip' | 'overwrite' | 'create_new',
   suites: Suite[],
   projectId: string,
-): Promise<{ updatedSuites: Suite[]; result: ImportResult }> {
+): Promise<PerformImportResult> {
   const text = await file.text();
-  const ext = file.name.split('.').pop()?.toLowerCase();
+  const ext  = file.name.split('.').pop()?.toLowerCase();
 
   let parsed: ParsedCase[];
-  if (ext === 'json') parsed = parseJSONImport(text);
-  else if (ext === 'xml') parsed = parseXMLImport(text);
-  else parsed = parseCSVImport(text);
+  if (ext === 'json')      parsed = parseJSONImport(text);
+  else if (ext === 'xml')  parsed = parseXMLImport(text);
+  else                     parsed = parseCSVImport(text);
 
   if (parsed.length === 0) throw new Error('No valid test cases found in the file.');
 
   const result: ImportResult = { imported: 0, skipped: 0, overwritten: 0 };
-  const updatedSuites = [...suites.map(s => ({ ...s, cases: [...s.cases] }))];
 
-  // Ensure target suite exists — create one if needed
-  let actualTargetId = targetSuiteId;
-  let targetSuite = updatedSuites.find(s => s.id === targetSuiteId);
-  if (!targetSuite) {
-    const newSuiteId = `S-${Date.now()}`;
-    targetSuite = { id: newSuiteId, projectId, name: 'Imported', cases: [] };
-    updatedSuites.push(targetSuite);
-    actualTargetId = newSuiteId;
+  // ── Build lookup maps ──
+  // suiteById: existing suite UUID → Suite
+  const suiteById   = new Map(suites.map(s => [s.id,   s]));
+  // suiteByName: lower-cased suite name → Suite  (for name-based matching)
+  const suiteByName = new Map(suites.map(s => [s.name.toLowerCase().trim(), s]));
+
+  // Flat map of all existing cases indexed by both UUID and displayId
+  const caseByIdOrDisplayId = new Map<string, { suite: Suite; testCase: TestCase }>();
+  for (const s of suites) {
+    for (const tc of s.cases) {
+      caseByIdOrDisplayId.set(tc.id, { suite: s, testCase: tc });
+      if (tc.displayId) caseByIdOrDisplayId.set(tc.displayId, { suite: s, testCase: tc });
+    }
   }
 
-  // Build a map of existing cases indexed by both UUID and displayId so that
-  // re-importing an exported file (which uses displayId as Case_ID) still detects duplicates.
-  const existingMap = new Map<string, { suiteIdx: number; caseIdx: number }>();
-  updatedSuites.forEach((s, si) => s.cases.forEach((c, ci) => {
-    existingMap.set(c.id, { suiteIdx: si, caseIdx: ci });
-    if (c.displayId) existingMap.set(c.displayId, { suiteIdx: si, caseIdx: ci });
-  }));
+  // Groups for new cases keyed by resolvedSuiteKey (id or intended name)
+  const createGroups = new Map<string, ImportSuiteGroup>();
+  const toOverwrite: ImportOverwrite[] = [];
+
+  // Helper: get-or-create a create group
+  const getGroup = (suiteId: string | undefined, suiteName: string, isNewSuite: boolean): ImportSuiteGroup => {
+    const key = suiteId ?? `__new__::${suiteName}`;
+    if (!createGroups.has(key)) {
+      createGroups.set(key, { suiteId, suiteName, isNewSuite, cases: [] });
+    }
+    return createGroups.get(key)!;
+  };
 
   for (const pc of parsed) {
     if (!pc.title) continue;
 
-    const existing = pc.id ? existingMap.get(pc.id) : undefined;
+    // 1. Resolve the target suite for this case
+    let resolvedSuite: Suite | undefined;
+
+    if (pc.sourceSuiteId) {
+      // Try by exact ID first, then by name
+      resolvedSuite = suiteById.get(pc.sourceSuiteId)
+        ?? suiteByName.get((pc.sourceSuiteName ?? pc.sourceSuiteId).toLowerCase().trim());
+    }
+    if (!resolvedSuite && pc.sourceSuiteName) {
+      resolvedSuite = suiteByName.get(pc.sourceSuiteName.toLowerCase().trim());
+    }
+    // Fallback to user-selected target suite
+    if (!resolvedSuite && targetSuiteId !== '__new__') {
+      resolvedSuite = suiteById.get(targetSuiteId);
+    }
+
+    // 2. Check for duplicate
+    const existing = pc.id ? caseByIdOrDisplayId.get(pc.id) : undefined;
 
     if (existing && conflict === 'skip') {
       result.skipped++;
       continue;
     }
 
-    const newCase: TestCase = {
-      id: (conflict === 'create_new' || !pc.id) ? `TC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` : pc.id!,
-      suiteId: actualTargetId,
-      title: pc.title,
-      priority: pc.priority,
-      description: pc.description,
+    // 3. Build the TestCase payload
+    const baseCase: Omit<TestCase, 'id' | 'suiteId'> = {
+      title:        pc.title,
+      priority:     pc.priority,
+      description:  pc.description,
       preconditions: pc.preconditions,
-      steps: pc.steps,
-      deleted: false,
+      steps:         pc.steps,
+      deleted:       false,
     };
 
     if (existing && conflict === 'overwrite') {
-      updatedSuites[existing.suiteIdx].cases[existing.caseIdx] = { ...newCase, id: pc.id!, suiteId: updatedSuites[existing.suiteIdx].id };
+      // Record for backend PUT
+      toOverwrite.push({
+        existingCaseId:  existing.testCase.id,
+        existingSuiteId: existing.suite.id,
+        data:            baseCase,
+      });
       result.overwritten++;
-    } else {
-      const tgtIdx = updatedSuites.findIndex(s => s.id === actualTargetId);
-      if (tgtIdx >= 0) {
-        updatedSuites[tgtIdx].cases.push(newCase);
-      }
-      result.imported++;
+      continue;
     }
+
+    // conflict === 'create_new' or no existing case found → create
+    const newCase: TestCase = {
+      ...baseCase,
+      // For create_new always generate a fresh ID; otherwise keep the source ID so
+      // re-importing the same export doesn't produce orphan duplicates
+      id:      conflict === 'create_new' ? `TC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` : (pc.id ?? `TC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`),
+      suiteId: resolvedSuite?.id ?? '',
+    };
+
+    if (resolvedSuite) {
+      getGroup(resolvedSuite.id, resolvedSuite.name, false).cases.push(newCase);
+    } else {
+      // No existing suite resolved → queue new suite creation
+      const newSuiteName = pc.sourceSuiteName || 'Imported';
+      getGroup(undefined, newSuiteName, true).cases.push(newCase);
+    }
+    result.imported++;
   }
 
-  return { updatedSuites, result };
+  return {
+    toCreate:    Array.from(createGroups.values()),
+    toOverwrite,
+    result,
+  };
 }

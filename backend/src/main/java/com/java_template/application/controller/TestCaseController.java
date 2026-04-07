@@ -1,5 +1,6 @@
 package com.java_template.application.controller;
 
+import com.java_template.application.dto.BatchImportCaseDTO;
 import com.java_template.application.dto.MoveTestCaseDTO;
 import com.java_template.application.dto.ReorderItemDTO;
 import com.java_template.application.dto.TestCaseDTO;
@@ -74,6 +75,28 @@ public class TestCaseController {
             return ResponseEntity.noContent().build();
         }
         return ResponseEntity.notFound().build();
+    }
+
+    /**
+     * Batch-create multiple test cases (with optional steps) in a single HTTP round-trip.
+     *
+     * All display IDs are reserved via a single counter update, so this endpoint is
+     * significantly faster than calling {@code POST /cases} N times during a bulk import.
+     * Steps embedded in each request item are created in the same call.
+     *
+     * @param projectId project UUID from the path
+     * @param suiteId   suite UUID from the path
+     * @param items     ordered list of cases to create (each may include steps)
+     * @return HTTP 201 with the list of created test case DTOs
+     */
+    @PostMapping("/batch")
+    @Operation(summary = "Batch-create multiple test cases with optional steps")
+    public ResponseEntity<List<TestCaseDTO>> batchCreateTestCases(
+            @PathVariable UUID projectId,
+            @PathVariable UUID suiteId,
+            @RequestBody List<BatchImportCaseDTO> items) {
+        List<TestCaseDTO> created = testCaseService.batchCreateTestCases(projectId, suiteId, items);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     /**
