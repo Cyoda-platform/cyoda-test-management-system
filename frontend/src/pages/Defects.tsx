@@ -10,12 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { useProject, useDefects, useCreateDefect, useUpdateDefect, useDeleteDefect } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
+import { attachmentsApi } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 import { listDisplayId, nextListDisplayId, formatDate, isUuid } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
-
-interface AttachFile { name: string; size: number; type: string; }
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -63,7 +62,7 @@ const Defects = () => {
   const [formStatus, setFormStatus] = useState<'Open' | 'In Progress' | 'Fixed' | 'Closed'>('Open');
   const [formLink, setFormLink] = useState('');
   const [formSource, setFormSource] = useState('');
-  const [formFiles, setFormFiles] = useState<AttachFile[]>([]);
+  const [formFiles, setFormFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Edit modal
@@ -156,17 +155,19 @@ const Defects = () => {
 
   const handleFileUpload = (fileList: FileList | null) => {
     if (!fileList) return;
-    const newFiles: AttachFile[] = Array.from(fileList).map((f) => ({ name: f.name, size: f.size, type: f.type }));
+    const newFiles: File[] = Array.from(fileList);
     setFormFiles((prev) => [...prev, ...newFiles]);
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!formTitle.trim()) {
       toast.error('Title is required');
       return;
     }
-    createDefect.mutate(
-      {
+
+    try {
+      // Create defect
+      const defectPayload = {
         projectId: projectId!,
         body: {
           title:       formTitle,
@@ -177,16 +178,38 @@ const Defects = () => {
           source:      formSource,
           displayId:   nextListDisplayId('DEF', defects),
         },
-      },
-      {
-        onSuccess: () => {
-          toast.success('Defect created');
-          resetForm();
-          setCreateOpen(false);
-        },
-        onError: (e) => toast.error(e.message),
-      }
-    );
+      };
+
+      // Use async mutation to wait for success before uploading files
+      await new Promise<void>((resolve, reject) => {
+        createDefect.mutate(defectPayload, {
+          onSuccess: async () => {
+            // Upload files after defect is created
+            if (formFiles && formFiles.length > 0) {
+              try {
+                for (const file of formFiles) {
+                  await attachmentsApi.upload(projectId!, file);
+                }
+                toast.success(`Defect created with ${formFiles.length} file(s)`);
+              } catch (error) {
+                toast.warning('Defect created, but some files failed to upload');
+              }
+            } else {
+              toast.success('Defect created');
+            }
+            resetForm();
+            setCreateOpen(false);
+            resolve();
+          },
+          onError: (error) => {
+            toast.error(error.message);
+            reject(error);
+          },
+        });
+      });
+    } catch (error) {
+      // Error already handled by toast in onError
+    }
   };
 
   const openEdit = (d: Defect) => {
