@@ -35,20 +35,60 @@ const AppSidebar = ({ projectName, projectId, projectInitials, collapsed = false
     if (action === 'back') navigate('/projects');
   };
 
-  const NavButton = ({ icon: Icon, label, isActive, onClick }: { icon: typeof FolderOpen; label: string; isActive?: boolean; onClick: () => void }) => {
-    const btn = (
-      <button
-        onClick={onClick}
-        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-          collapsed ? 'justify-center' : ''
-        } ${
-          isActive
-            ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-            : 'hover:bg-sidebar-accent/50 text-sidebar-foreground'
-        }`}
-      >
+  const NavButton = ({
+    icon: Icon,
+    label,
+    isActive,
+    href,
+    onClick
+  }: {
+    icon: typeof FolderOpen;
+    label: string;
+    isActive?: boolean;
+    href?: string;
+    onClick?: () => void;
+  }) => {
+    const baseClasses = `w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors cursor-pointer ${
+      collapsed ? 'justify-center' : ''
+    } ${
+      isActive
+        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+        : 'hover:bg-sidebar-accent/50 text-sidebar-foreground'
+    }`;
+
+    const content = (
+      <>
         <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
         {!collapsed && label}
+      </>
+    );
+
+    // Navigation link version
+    const btn = href ? (
+      <a
+        href={href}
+        onClick={(e) => {
+          // Only navigate on left-click (button 0)
+          // Middle-click (button 1) and right-click (button 2) should use default browser behavior
+          if (e.button !== 0) return;
+          e.preventDefault();
+          navigate(href);
+        }}
+        onAuxClick={(e) => {
+          // Allow middle-click (button 1) to open in new tab with default behavior
+          e.preventDefault();
+          window.open(href, '_blank');
+        }}
+        className={baseClasses}
+      >
+        {content}
+      </a>
+    ) : (
+      <button
+        onClick={onClick}
+        className={baseClasses}
+      >
+        {content}
       </button>
     );
 
@@ -98,7 +138,7 @@ const AppSidebar = ({ projectName, projectId, projectInitials, collapsed = false
                 icon={item.icon}
                 label={item.label}
                 isActive={isActive}
-                onClick={() => navigate(fullPath)}
+                href={fullPath}
               />
             );
           })}
