@@ -37,11 +37,18 @@ public class DefectController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all defects for a project")
+    @Operation(summary = "Get defects for a project, optionally scoped to a test run")
     public ResponseEntity<PageResult<DefectDTO>> getDefectsByProject(
             @PathVariable UUID projectId,
+            @RequestParam(required = false) UUID testRunId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "100") int size) {
+        // When testRunId is supplied, return only defects raised during that run.
+        // This allows the Run Execution view to reload its defect table after a page refresh
+        // without pulling the entire project defect list.
+        if (testRunId != null) {
+            return ResponseEntity.ok(defectService.getDefectsByTestRunId(testRunId, page, size));
+        }
         return ResponseEntity.ok(defectService.getDefectsByProjectId(projectId, page, size));
     }
 

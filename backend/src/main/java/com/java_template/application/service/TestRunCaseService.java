@@ -2,6 +2,7 @@ package com.java_template.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestRunCaseDTO;
+import com.java_template.application.dto.TestRunStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
@@ -10,8 +11,11 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.cyoda.cloud.api.event.common.condition.GroupCondition;
 import org.cyoda.cloud.api.event.common.condition.Operation;
 import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,15 +26,21 @@ import java.util.UUID;
 @Service
 public class TestRunCaseService {
 
+    private static final Logger log = LoggerFactory.getLogger(TestRunCaseService.class);
+
     private static final ModelSpec MODEL_SPEC =
             new ModelSpec().withName(TestRunCaseDTO.ENTITY_NAME).withVersion(TestRunCaseDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
     private final ObjectMapper objectMapper;
+    private final TestRunStepService testRunStepService;
 
-    public TestRunCaseService(EntityService entityService, ObjectMapper objectMapper) {
+    public TestRunCaseService(EntityService entityService,
+                              ObjectMapper objectMapper,
+                              TestRunStepService testRunStepService) {
         this.entityService = entityService;
         this.objectMapper = objectMapper;
+        this.testRunStepService = testRunStepService;
     }
 
     private TestRunCaseDTO withId(EntityWithMetadata<TestRunCaseDTO> result) {
@@ -58,6 +68,62 @@ public class TestRunCaseService {
     public TestRunCaseDTO createTestRunCase(TestRunCaseDTO testRunCase) {
         testRunCase.setStatus("UNTESTED");
         return withId(entityService.create(testRunCase));
+    }
+
+    /**
+     * Atomically creates a {@link TestRunCaseDTO} together with all of its
+     * {@link TestRunStepDTO} records in a single logical operation.
+     *
+     * <p>Because CYODA's {@code EntityService} does not expose a cross-entity
+     * transaction boundary, this method implements a <em>compensating-transaction</em>
+     * pattern: if any step creation fails, every successfully created step and the
+     * parent case are deleted before the exception is re-thrown, preventing the
+     * "case-without-steps" partial-write state that caused the 'No steps defined'
+     * symptom.</p>
+     *
+     * @param testRunCase the case to create (status will be overwritten to UNTESTED)
+     * @param testStepIds ordered list of original {@code TestStep.id} values to snapshot
+     * @return the persisted {@link TestRunCaseDTO} with its assigned {@code id}
+     * @throws RuntimeException if step creation fails (case creation is rolled back)
+     */
+    public TestRunCaseDTO createTestRunCaseWithSteps(TestRunCaseDTO testRunCase,
+                                                     List<UUID> testStepIds) {
+        // 1. Persist the case record.
+        TestRunCaseDTO created = createTestRunCase(testRunCase);
+        UUID runCaseId = created.getId();
+
+        // 2. Persist each step. Track created IDs so we can compensate on failure.
+        List<UUID> createdStepIds = new ArrayList<>();
+        try {
+            for (UUID testStepId : testStepIds) {
+                TestRunStepDTO step = new TestRunStepDTO();
+                step.setTestRunCaseId(runCaseId);
+                step.setTestStepId(testStepId);
+                TestRunStepDTO createdStep = testRunStepService.createTestRunStep(step);
+                createdStepIds.add(createdStep.getId());
+            }
+        } catch (Exception stepException) {
+            // Compensating transaction: delete all steps created so far, then the case.
+            log.error("Step creation failed for TestRunCase {}. Rolling back {} step(s) and the case.",
+                    runCaseId, createdStepIds.size(), stepException);
+            createdStepIds.forEach(stepId -> {
+                try {
+                    entityService.deleteById(stepId);
+                } catch (Exception ignored) {
+                    log.warn("Cleanup failed for TestRunStep {}", stepId);
+                }
+            });
+            try {
+                entityService.deleteById(runCaseId);
+            } catch (Exception ignored) {
+                log.warn("Cleanup failed for TestRunCase {}", runCaseId);
+            }
+            throw new RuntimeException(
+                    "Failed to initialise TestRunCase " + runCaseId +
+                    ": step creation failed. The partial write has been rolled back.", stepException);
+        }
+
+        return created;
     }
 
     public Optional<TestRunCaseDTO> getTestRunCaseById(UUID id) {

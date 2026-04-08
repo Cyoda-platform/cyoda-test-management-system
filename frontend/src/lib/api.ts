@@ -292,11 +292,30 @@ export interface Defect {
   status: 'Open' | 'In Progress' | 'Fixed' | 'Closed';
   source: string;
   createdAt: string;
+  /**
+   * ID of the TestRun during which this defect was raised.
+   * Persisted by the backend so the defect table survives page reloads.
+   */
+  testRunId?: string;
+  /**
+   * ID of the TestRunCase (run-scoped snapshot) this defect was raised against.
+   * Used to scope per-case defect counts without an extra query.
+   */
+  testRunCaseId?: string;
 }
 
 export const defectsApi = {
   list:   (projectId: string, page = 0, size = 20) =>
     api.get<{ data: Defect[] }>(`/projects/${projectId}/defects?page=${page}&size=${size}`),
+  /**
+   * Fetches all defects scoped to a specific test run.
+   * Calls GET /projects/{projectId}/defects?testRunId={runId} — the backend
+   * filters by the testRunId field added to DefectDTO.
+   */
+  listByRun: (projectId: string, runId: string, page = 0, size = 200) =>
+    api.get<{ data: Defect[] }>(
+      `/projects/${projectId}/defects?testRunId=${runId}&page=${page}&size=${size}`,
+    ),
   get:    (projectId: string, id: string) =>
     api.get<Defect>(`/projects/${projectId}/defects/${id}`),
   create: (projectId: string, body: Partial<Defect>) =>

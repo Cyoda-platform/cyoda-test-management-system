@@ -56,6 +56,19 @@ public class DefectDTO implements CyodaEntity {
     /** Reference to the source entity ID (test run, test case, test step) */
     private String source;
 
+    /**
+     * ID of the TestRun during which this defect was raised.
+     * Nullable — only set when a defect is created from within the Run Execution view.
+     * Used to scope the defect table to the current run after a page reload.
+     */
+    private UUID testRunId;
+
+    /**
+     * ID of the TestRunCase (run-scoped snapshot record) this defect was raised against.
+     * Nullable — only set when a defect is raised from a specific case within a run.
+     */
+    private UUID testRunCaseId;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

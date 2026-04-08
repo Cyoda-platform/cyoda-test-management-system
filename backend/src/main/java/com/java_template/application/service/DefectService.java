@@ -98,6 +98,29 @@ public class DefectService {
                 .data().stream().map(this::withId).toList();
     }
 
+    /**
+     * Returns all defects raised during a specific test run.
+     * Relies on the {@code testRunId} field added to {@link com.java_template.application.dto.DefectDTO}.
+     *
+     * <p>CYODA's search engine throws a {@link java.util.concurrent.CompletionException} when the
+     * queried JSON path does not exist in <em>any</em> stored document (i.e. all existing defects
+     * pre-date this field). The try/catch converts that into an empty page so the Run Execution
+     * view doesn't crash on runs that have no defects yet.</p>
+     */
+    public PageResult<DefectDTO> getDefectsByTestRunId(UUID testRunId, int page, int size) {
+        try {
+            SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
+                    .pageNumber(page).pageSize(size).build();
+            GroupCondition condition = conditionByField("testRunId", testRunId.toString());
+            PageResult<EntityWithMetadata<DefectDTO>> result =
+                    entityService.search(MODEL_SPEC, condition, DefectDTO.class, params);
+            return toPage(result);
+        } catch (Exception e) {
+            // No defects with testRunId yet — return an empty page rather than propagating a 500.
+            return PageResult.of(null, List.of(), page, size, 0);
+        }
+    }
+
     public DefectDTO updateDefect(UUID id, DefectDTO defect) {
         defect.setUpdatedAt(LocalDateTime.now());
         return withId(entityService.update(id, defect, null));

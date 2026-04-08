@@ -85,6 +85,10 @@ export const keys = {
     all: (projectId: string, runId: string, runCaseId: string) =>
       ['runSteps', projectId, runId, runCaseId] as const,
   },
+  runDefects: {
+    all: (projectId: string, runId: string) =>
+      ['runDefects', projectId, runId] as const,
+  },
 };
 
 // ── Projects ──────────────────────────────────────────────────────────────────
@@ -627,6 +631,24 @@ export function useDeleteDefect() {
       defectsApi.delete(projectId, id),
     onSuccess: (_data, { projectId }) =>
       qc.invalidateQueries({ queryKey: keys.defects.all(projectId) }),
+  });
+}
+
+/**
+ * Fetches all defects that were raised during a specific test run.
+ *
+ * The backend filters by the {@code testRunId} field on DefectDTO, which is now
+ * persisted during defect creation in the Run Execution view. This hook replaces
+ * the in-memory {@code createdDefects} state that previously reset on page reload.
+ */
+export function useDefectsByRun(projectId: string, runId: string) {
+  return useQuery({
+    queryKey: keys.runDefects.all(projectId, runId),
+    queryFn:  () => defectsApi.listByRun(projectId, runId),
+    enabled:  !!projectId && !!runId,
+    select:   (res) => res.data,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 }
 

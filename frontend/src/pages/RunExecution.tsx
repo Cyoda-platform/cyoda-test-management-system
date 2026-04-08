@@ -19,6 +19,11 @@ import {
   useCompleteTestRun,
   useUnlockTestRun,
   useAttachmentsByCase,
+  useTestRunCases,
+  useTestRunCaseSteps,
+  useUpdateTestRunCaseStatus,
+  useUpdateTestRunStepStatus,
+  useDefectsByRun,
   keys,
 } from '@/hooks/useApi';
 import {
@@ -27,7 +32,7 @@ import {
   testRunsApi,
   type Attachment,
 } from '@/lib/api';
-import { isUuid, listDisplayId } from '@/lib/utils';
+import { isUuid, nextListDisplayId } from '@/lib/utils';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -40,6 +45,7 @@ interface EvidenceFile {
 
 interface CreatedDefect {
   id: string;
+  displayId: string;
   caseId: string;
   caseTitle: string;
   stepIdx?: number;
@@ -112,19 +118,53 @@ const RunExecution = () => {
     cases: suite.cases,
   }));
 
+  // ── Run-scoped DB-backed case records ─────────────────────────────────────────
+  // Declared here (before filteredSuitesWithCases) so the filtering memo can use
+  // runCases as a fallback when run.caseIds is absent.
+  const { data: runCases = [], isLoading: runCasesLoading } =
+    useTestRunCases(projectId!, runId!);
+
+  /** testCaseId → TestRunCase.id — used when firing per-step/case DB mutations. */
+  const testCaseToRunCaseId = useMemo(() => {
+    const map = new Map<string, string>();
+    runCases.forEach((rc) => map.set(rc.testCaseId, rc.id));
+    return map;
+  }, [runCases]);
+
   /**
    * Filter the repository suites/cases to only those selected for this run.
-   * Key format stored on run: run.caseIds is a string[] of case UUIDs.
-   * Falls back to showing ALL repository cases for runs without a caseIds snapshot
-   * (backward compatibility with pre-snapshot runs).
+   *
+   * Priority order for determining which cases belong to this run:
+   *   1. `run.caseIds` — the snapshot saved on the run entity at creation time.
+   *   2. `runCases`    — the DB-backed TestRunCase records (fallback when caseIds is absent,
+   *                      e.g. runs created before the caseIds field was introduced).
+   *   3. All repository cases — last resort only when neither source has data yet.
+   *
+   * Using `runCases` as the primary fallback prevents the "all project cases appear"
+   * regression that occurred when a run was created without caseIds being stored.
    */
   const filteredSuitesWithCases = useMemo(() => {
-    if (!run?.caseIds || run.caseIds.length === 0) return suitesWithCases;
-    const runCaseIdSet = new Set(run.caseIds);
-    return suitesWithCases
-      .map((s) => ({ ...s, cases: s.cases.filter((c) => runCaseIdSet.has(c.id)) }))
-      .filter((s) => s.cases.length > 0);
-  }, [suitesWithCases, run?.caseIds]);
+    // Build the authoritative set of case UUIDs for this run.
+    let runCaseIdSet: Set<string> | null = null;
+
+    if (run?.caseIds && run.caseIds.length > 0) {
+      // Preferred: the snapshot on the run entity.
+      runCaseIdSet = new Set(run.caseIds);
+    } else if (runCases.length > 0) {
+      // Fallback: derive from DB-backed TestRunCase records.
+      runCaseIdSet = new Set(runCases.map((rc) => rc.testCaseId));
+    }
+
+    // If we have an authoritative set, filter the repository accordingly.
+    if (runCaseIdSet && runCaseIdSet.size > 0) {
+      return suitesWithCases
+        .map((s) => ({ ...s, cases: s.cases.filter((c) => runCaseIdSet!.has(c.id)) }))
+        .filter((s) => s.cases.length > 0);
+    }
+
+    // Last resort: show everything (backward compatibility / data not yet loaded).
+    return suitesWithCases;
+  }, [suitesWithCases, run?.caseIds, runCases]);
 
   // Flat list of cases in this run (for indexed access)
   const allCases = useMemo(() =>
@@ -185,8 +225,16 @@ const RunExecution = () => {
     return isUuid(caseId) ? caseId.slice(0, 8) : caseId;
   };
 
+  // ── Additional run-scoped query hooks ────────────────────────────────────────
+
+  // ── Server-persisted defects for this run ────────────────────────────────────
+  const { data: serverRunDefects = [] } =
+    useDefectsByRun(projectId!, runId!);
+
   // Mutations
-  const updateRun   = useUpdateTestRun();
+  const updateRun               = useUpdateTestRun();
+  const updateTestRunCaseStatus = useUpdateTestRunCaseStatus();
+  const updateTestRunStepStatus = useUpdateTestRunStepStatus();
   const completeRun = useCompleteTestRun();
   const unlockRun   = useUnlockTestRun();
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -195,7 +243,13 @@ const RunExecution = () => {
   const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
   const [evidenceTarget, setEvidenceTarget] = useState<{ caseId: string; stepIdx: number } | null>(null);
   const [defectModalOpen, setDefectModalOpen] = useState(false);
-  const [defectContext, setDefectContext] = useState<{ caseId: string; stepIdx?: number; source: string } | null>(null);
+  const [defectContext, setDefectContext] = useState<{
+    caseId: string;
+    stepIdx?: number;
+    source: string;
+    /** TestRunCase.id — persisted as testRunCaseId on the Defect record. */
+    runCaseId?: string;
+  } | null>(null);
   const [createdDefects, setCreatedDefects] = useState<CreatedDefect[]>([]);
   const [viewDefectOpen, setViewDefectOpen] = useState(false);
   const [viewDefect, setViewDefect] = useState<CreatedDefect | null>(null);
@@ -213,11 +267,50 @@ const RunExecution = () => {
   useEffect(() => { stepStatusesRef.current = stepStatuses; }, [stepStatuses]);
   useEffect(() => { allCasesRef.current     = allCases; },    [allCases]);
 
+  /**
+   * Accumulated flat step-status map that is kept in sync locally on every click.
+   *
+   * The previous implementation read `r.stepStatuses` from `runRef.current` as the
+   * merge base when building the body for `updateRun.mutate()`. Because the server
+   * response lags behind rapid clicks, a second click would read a stale copy and
+   * silently drop the first click's save (partial-write / progress-reset bug).
+   *
+   * Using a local ref as the accumulator means each click always merges onto the
+   * latest local state, never onto a potentially-stale server snapshot.
+   */
+  const fullStepStatusesRef = useRef<Record<string, string>>({});
+
+  // Seed the accumulated map when the run first loads (or when stepStatuses are
+  // restored from the server after a page refresh).
+  useEffect(() => {
+    if (run?.stepStatuses && Object.keys(fullStepStatusesRef.current).length === 0) {
+      fullStepStatusesRef.current = { ...run.stepStatuses };
+    }
+  }, [run?.stepStatuses]);
+
   // Active case and its live steps
   const activeCase = allCases[selectedIdx];
 
+  // Derived AFTER activeCase so the dependency is always defined.
+  const activeCaseRunCaseId = useMemo(
+    () => testCaseToRunCaseId.get(activeCase?.id ?? '') ?? '',
+    [testCaseToRunCaseId, activeCase?.id],
+  );
+
+  /** Run-step records for the currently visible case. */
+  const { data: activeCaseRunSteps = [] } = useTestRunCaseSteps(
+    projectId!, runId!, activeCaseRunCaseId,
+  );
+
+  /** testStepId → TestRunStep.id — used when firing per-step DB mutations. */
+  const testStepToRunStepId = useMemo(() => {
+    const map = new Map<string, string>();
+    activeCaseRunSteps.forEach((rs) => map.set(rs.testStepId, rs.id));
+    return map;
+  }, [activeCaseRunSteps]);
+
   /** Global step data (action / expectedResult) for the active case. */
-  const { data: steps = [] } = useTestSteps(
+  const { data: steps = [], isLoading: stepsLoading } = useTestSteps(
     projectId!,
     activeCase?.suiteId ?? '',
     activeCase?.id ?? '',
@@ -265,6 +358,34 @@ const RunExecution = () => {
     return { passed, failed, skipped, untested };
   };
 
+  // ── Sync server-fetched run defects into local state ─────────────────────────
+  // `createdDefects` was purely in-memory, so it reset on every page reload.
+  // `serverRunDefects` now fetches from the backend (filtered by testRunId).
+  // This effect seeds createdDefects from the server response so the defect table
+  // survives a page refresh without any changes to the existing modal/action logic.
+  useEffect(() => {
+    if (serverRunDefects.length === 0) return; // nothing to seed yet
+    setCreatedDefects(
+      serverRunDefects.map((d) => ({
+        id:          d.id,
+        displayId:   d.displayId ?? d.id.slice(0, 8).toUpperCase(),
+        caseId:      d.testRunCaseId ?? '',
+        caseTitle:   '',
+        stepIdx:     undefined,
+        title:       d.title,
+        description: d.description,
+        severity:    (d.severity as CreatedDefect['severity']) ?? 'Minor',
+        status:      (d.status  as CreatedDefect['status'])   ?? 'Open',
+        link:        d.link ?? '',
+        files:       [],
+        createdAt:   (d.createdAt ?? '').split('T')[0] || new Date().toISOString().split('T')[0],
+      })),
+    );
+  // Re-run whenever the server data changes (e.g. after a fresh defect is created
+  // and the query is invalidated in handleCreateDefect).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverRunDefects]);
+
   // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
     return () => {
@@ -281,18 +402,9 @@ const RunExecution = () => {
       const agg = computeAggregates(statMap, cases);
       const hasProgress = agg.passed + agg.failed + agg.skipped > 0;
 
-      // Build the merged run.stepStatuses: start from what the server has, then
-      // layer on every status the user set this session (converted to UPPERCASE).
-      const mergedStepStatuses: Record<string, string> = { ...(r.stepStatuses ?? {}) };
-      Object.entries(statMap).forEach(([caseId, statuses]) => {
-        statuses.forEach((s, idx) => {
-          // We can only write keyed entries we know the stepId for.
-          // The stepId isn't available here via the flat index, so we skip
-          // entries where the stepId is unknown — they were already saved per-click.
-        });
-      });
-
-      // Fire-and-forget: direct API call is safer than a mutation hook in cleanup
+      // Fire-and-forget: direct API call is safer than a mutation hook in cleanup.
+      // stepStatuses on the run entity are already up-to-date from per-click saves;
+      // this call just finalises the aggregate counts and status promotion.
       testRunsApi.update(projectId, runId, {
         name:         r.name,
         environment:  r.environment,
@@ -319,31 +431,21 @@ const RunExecution = () => {
       // Don't overwrite state the user has already changed in this session.
       if (prev[activeCase.id] !== undefined) return prev;
 
-      if (runCaseStepsRaw.length > 0) {
-        // ── Primary path: read from DB-backed TestRunStep records ─────────────
-        // These are created during run creation and updated on every status
-        // change, so they survive page refreshes perfectly.
-        const initial: StepStatus[] = sortedSteps.map((s) => {
-          const runStep = runCaseStepsByStepId[s.id];
-          if (!runStep) return 'untested';
-          const v = runStep.status.toLowerCase() as StepStatus;
-          return (['passed', 'failed', 'skipped'] as StepStatus[]).includes(v)
-            ? v
-            : 'untested';
-        });
-        return { ...prev, [activeCase.id]: initial };
-      }
-
-      // ── Fallback: backward-compat for pre-snapshot runs ────────────────────
-      // Runs created before the TestRunCase/Step feature will not have run-step
-      // records.  We initialise everything as 'untested' to avoid bleed-over
-      // from global step statuses that might belong to a different run.
-      const initial: StepStatus[] = sortedSteps.map(() => 'untested');
+      // Read persisted statuses from run.stepStatuses.
+      // Key format: "caseId::stepId" → uppercase status string.
+      const runStepStatuses = runRef.current?.stepStatuses ?? {};
+      const initial: StepStatus[] = sortedSteps.map((s) => {
+        const key = `${activeCase.id}::${s.id}`;
+        const raw = (runStepStatuses[key] ?? 'UNTESTED').toLowerCase();
+        return (['passed', 'failed', 'skipped'] as StepStatus[]).includes(raw as StepStatus)
+          ? (raw as StepStatus)
+          : 'untested';
+      });
       return { ...prev, [activeCase.id]: initial };
     });
-  // Re-run whenever the active case changes OR the DB step records arrive.
+  // Re-run whenever the active case changes or steps arrive.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCase?.id, runCaseStepsRaw.length, sortedSteps.length]);
+  }, [activeCase?.id, sortedSteps.length]);
 
   const getStepStatuses = (caseId: string): StepStatus[] => {
     return stepStatuses[caseId] || [];
@@ -358,52 +460,82 @@ const RunExecution = () => {
     updated[stepNumber - 1] = status; // stepNumber is 1-based, array is 0-based
     setStepStatuses((prev) => ({ ...prev, [caseId]: updated }));
 
-    // ── 2. Persist step status to the DB-backed TestRunStep record ───────────
-    const runCase = runCasesMap[caseId];
-    if (runCase) {
-      const runStep = runCaseStepsByStepId[globalStepId];
-      if (runStep) {
-        updateRunStep.mutate({
-          projectId: projectId!,
-          runId:      runId!,
-          runCaseId:  runCase.id,
-          id:         runStep.id,
-          // Backend expects uppercase status values
-          status:     status.toUpperCase(),
-        });
-      }
+    // ── 2. Accumulate into local ref — prevents stale-server-merge race ──────
+    // Previously we spread `r.stepStatuses` (server state) as the merge base.
+    // Between rapid clicks the server may not have responded yet, so the second
+    // click's body would overwrite the first click's key. fullStepStatusesRef is
+    // always up to date regardless of in-flight requests.
+    const runKey = `${caseId}::${globalStepId}`;
+    fullStepStatusesRef.current = { ...fullStepStatusesRef.current, [runKey]: status.toUpperCase() };
 
-      // ── 3. Derive and persist the new case-level status ───────────────────
-      const newCaseStatus = computeCaseStatus(updated);
-      const currentDbCaseStatus = runCase.status.toLowerCase();
-      if (newCaseStatus !== currentDbCaseStatus) {
-        updateRunCase.mutate({
-          projectId: projectId!,
-          runId:      runId!,
-          id:         runCase.id,
-          status:     newCaseStatus.toUpperCase(),
-        });
-      }
+    // ── 3. Persist aggregates + step map to the run entity ───────────────────
+    const r = runRef.current;
+    if (r) {
+      const newAllStatuses = { ...stepStatusesRef.current, [caseId]: updated };
+      const agg = computeAggregates(newAllStatuses, allCasesRef.current);
+
+      updateRun.mutate({
+        projectId: projectId!,
+        id:        runId!,
+        body: {
+          name:         r.name,
+          environment:  r.environment,
+          buildVersion: r.buildVersion ?? '',
+          description:  r.description ?? '',
+          status:       r.status === 'initial' ? 'active' : r.status,
+          caseIds:      r.caseIds,
+          // Use the local accumulated map — never the potentially-stale server copy.
+          stepStatuses: fullStepStatusesRef.current,
+          ...(r.createdAt ? { createdAt: r.createdAt } : {}),
+          ...agg,
+        },
+      });
     }
 
-    // ── 4. Auto-trigger defect modal on 'failed' ──────────────────────────
+    // ── 4. Also update DB-backed TestRunStep and TestRunCase records ──────────
+    // These are the dedicated per-run execution records (not the flat map on the
+    // Run entity). Keeping both in sync means the /cases and /steps endpoints
+    // always reflect the real execution state for reporting & external consumers.
+    const runCaseId = testCaseToRunCaseId.get(caseId);
+    const runStepId = testStepToRunStepId.get(globalStepId);
+    if (runCaseId && runStepId) {
+      updateTestRunStepStatus.mutate({
+        projectId: projectId!,
+        runId:     runId!,
+        runCaseId,
+        id:        runStepId,
+        status:    status.toUpperCase(),
+      });
+      // Derive case-level status from the already-updated local array.
+      const derivedCaseStatus = computeCaseStatus(updated).toUpperCase();
+      updateTestRunCaseStatus.mutate({
+        projectId: projectId!,
+        runId:     runId!,
+        id:        runCaseId,
+        status:    derivedCaseStatus,
+      });
+    }
+
+    // ── 5. Auto-trigger defect modal on 'failed' ──────────────────────────────
     if (status === 'failed') {
-      setDefectContext({ caseId, stepIdx: stepNumber - 1, source: getCaseSourceLabel(caseId) });
+      setDefectContext({
+        caseId,
+        stepIdx: stepNumber - 1,
+        source:  getCaseSourceLabel(caseId),
+        runCaseId: testCaseToRunCaseId.get(caseId),
+      });
       setDefectModalOpen(true);
     }
   };
 
   const getCaseStatus = (caseId: string): string => {
-    // Prefer local step-status state (shows real-time changes before DB round-trip).
+    // Derive from local step-status state (real-time; restored from run.stepStatuses on load).
     const statuses = stepStatuses[caseId];
     if (statuses && statuses.length > 0) {
       if (statuses.some((s) => s === 'failed')) return 'failed';
       if (statuses.every((s) => s === 'passed')) return 'passed';
       if (statuses.some((s) => s === 'skipped') && !statuses.some((s) => s === 'untested')) return 'skipped';
     }
-    // Fall back to DB-backed TestRunCase status (survives refresh).
-    const runCase = runCasesMap[caseId];
-    if (runCase) return runCase.status.toLowerCase();
     return 'untested';
   };
 
@@ -411,18 +543,6 @@ const RunExecution = () => {
 
   const getEvidenceFiles = (caseId: string, stepIdx: number): EvidenceFile[] => {
     return stepEvidence[getEvidenceKey(caseId, stepIdx)] || [];
-  };
-
-  const getCaseAttachments = (caseId: string): Array<{ file: EvidenceFile; stepIdx: number }> => {
-    const attachments: Array<{ file: EvidenceFile; stepIdx: number }> = [];
-    Object.entries(stepEvidence).forEach(([key, files]) => {
-      const [kcaseId, stepIdxStr] = key.split('::');
-      if (kcaseId === caseId) {
-        const stepIdx = parseInt(stepIdxStr);
-        files.forEach(f => attachments.push({ file: f, stepIdx }));
-      }
-    });
-    return attachments;
   };
 
   const handleEvidenceClick = (caseId: string, stepIdx: number) => {
@@ -433,7 +553,12 @@ const RunExecution = () => {
 
   const handleBugClick = (caseId: string, stepIdx?: number) => {
     if (isReadOnly) return;
-    setDefectContext({ caseId, stepIdx, source: getCaseSourceLabel(caseId) });
+    setDefectContext({
+      caseId,
+      stepIdx,
+      source:    getCaseSourceLabel(caseId),
+      runCaseId: testCaseToRunCaseId.get(caseId),
+    });
     setDefectModalOpen(true);
   };
 
@@ -466,13 +591,16 @@ const RunExecution = () => {
   const handleCreateDefect = async (defect: any) => {
     if (!defectContext) return;
     try {
-      const created = await defectsApi.create(projectId!, {
-        title: defect.title,
+      await defectsApi.create(projectId!, {
+        title:       defect.title,
         description: defect.description,
-        severity: defect.severity,
-        status: defect.status,
-        source: defect.source,
-        link: defect.link,
+        severity:    defect.severity,
+        status:      defect.status,
+        source:      defect.source,
+        link:        defect.link,
+        // ── Persist run / case links so the table survives a page reload ────
+        testRunId:     runId,
+        testRunCaseId: defectContext.runCaseId,
       });
 
       // Upload any attached files, linked to the test case
@@ -484,20 +612,10 @@ const RunExecution = () => {
         );
       }
 
-      const newDefect: CreatedDefect = {
-        id: (created as any).id ?? `DEF-${Date.now()}`,
-        caseId: defect.caseId,
-        caseTitle: activeCase.title,
-        stepIdx: defect.stepIdx,
-        title: defect.title,
-        description: defect.description,
-        severity: defect.severity,
-        status: defect.status,
-        link: defect.link,
-        files: defect.files,
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      setCreatedDefects([...createdDefects, newDefect]);
+      // Invalidate the run-scoped defect query so the table re-fetches from
+      // the server — this replaces the old in-memory createdDefects push that
+      // was lost on every page reload.
+      qc.invalidateQueries({ queryKey: keys.runDefects.all(projectId!, runId!) });
       setDefectModalOpen(false);
       toast.success('Defect created');
     } catch {
@@ -508,41 +626,28 @@ const RunExecution = () => {
   const progressStats = useMemo(() => {
     let passed = 0, failed = 0, skipped = 0, untested = 0;
 
-    if (runCasesData.length > 0) {
-      // ── Primary: aggregate from DB-backed TestRunCase statuses ─────────────
-      // Mix in any local changes that haven't been flushed to DB yet.
-      runCasesData.forEach((rc) => {
-        // If local state is available for this case, prefer it (optimistic).
-        const localStatuses = stepStatuses[rc.testCaseId];
-        let s: string;
-        if (localStatuses && localStatuses.length > 0) {
-          s = computeCaseStatus(localStatuses);
-        } else {
-          s = rc.status.toLowerCase();
-        }
-        if (s === 'passed')        passed++;
-        else if (s === 'failed')   failed++;
-        else if (s === 'skipped')  skipped++;
-        else                       untested++;
-      });
-    } else {
-      // ── Fallback: derive from local state (backward compat) ─────────────
-      allCases.forEach((tc) => {
-        const s = getCaseStatus(tc.id);
-        if (s === 'passed')        passed++;
-        else if (s === 'failed')   failed++;
-        else if (s === 'skipped')  skipped++;
-        else                       untested++;
-      });
-    }
+    // Derive from local step-status state (populated from run.stepStatuses on load
+    // and updated optimistically on every click).
+    allCases.forEach((tc) => {
+      const s = getCaseStatus(tc.id);
+      if (s === 'passed')        passed++;
+      else if (s === 'failed')   failed++;
+      else if (s === 'skipped')  skipped++;
+      else                       untested++;
+    });
 
-    const total = Math.max(allCases.length, runCasesData.length);
+    const total = allCases.length;
     const completed = passed + failed + skipped;
     return { passed, failed, skipped, untested, total, completed };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runCasesData, stepStatuses, allCases]);
+  }, [stepStatuses, allCases]);
 
   // Loading / empty guard
+  // Wait for run, repository (suites+cases), AND run-scoped case records before
+  // rendering. Previously only runLoading+suitesLoading were checked; the missing
+  // runCasesLoading guard meant the component could render with stale/empty data
+  // before the DB-backed TestRunCase records had arrived, causing the progress bar
+  // to show 0/N and mutations to fire with missing IDs.
   if (runLoading || suitesLoading || runCasesLoading) {
     return (
       <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
@@ -553,16 +658,6 @@ const RunExecution = () => {
   }
 
   if (!run) return <div className="p-8 text-muted-foreground">Run not found</div>;
-
-  // While cases are still loading show a minimal placeholder body
-  if (!activeCase && suitesLoading) {
-    return (
-      <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="text-sm">Loading test cases…</span>
-      </div>
-    );
-}
 
   if (!activeCase) return <div className="p-8 text-muted-foreground">No test cases found for this run.</div>;
 
@@ -689,7 +784,7 @@ const RunExecution = () => {
                         <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${caseStatusIcon[getCaseStatus(item.tc.id)]}`} />
                         <div className="flex-1 text-left min-w-0">
                           <span className="text-[10px] text-muted-foreground font-mono tracking-wider" title={item.tc.id}>
-                            {listDisplayId('TC', item.localIdx)}
+                            {getCaseSourceLabel(item.tc.id)}
                           </span>
                           <p className="text-xs font-medium text-foreground truncate">{item.tc.title}</p>
                         </div>
@@ -706,7 +801,7 @@ const RunExecution = () => {
         <div className="flex-1 overflow-auto p-6 bg-card">
           <div className="mb-5 flex items-start justify-between">
             <div>
-              <span className="text-[10px] font-mono text-muted-foreground tracking-wider">{activeCase.id}</span>
+              <span className="text-[10px] font-mono text-muted-foreground tracking-wider">{getCaseSourceLabel(activeCase.id)}</span>
               <div className="flex items-center gap-3 mt-1">
                 <h2 className="text-lg font-bold text-foreground tracking-[-0.02em]">{activeCase.title}</h2>
                 <span className={`inline-block px-2.5 py-0.5 text-[10px] uppercase tracking-widest font-mono ${
@@ -784,7 +879,12 @@ const RunExecution = () => {
             </div>
           )}
 
-          {steps.length > 0 ? (
+          {stepsLoading ? (
+            <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading steps…</span>
+            </div>
+          ) : steps.length > 0 ? (
             <div className="bg-card rounded-lg shadow-soft overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -884,7 +984,7 @@ const RunExecution = () => {
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"
                       onClick={() => { setViewDefect(d); setViewDefectOpen(true); }}
                     >
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider">{d.id}</td>
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider">{d.displayId}</td>
                       <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <Select value={d.severity} onValueChange={(val) => {
@@ -1039,7 +1139,7 @@ const RunExecution = () => {
         <DialogContent className="sm:max-w-lg bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
-              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm">{viewDefect?.id}</span>
+              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm">{viewDefect?.displayId}</span>
               {viewDefect?.title}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">Defect details</DialogDescription>
@@ -1090,10 +1190,19 @@ const RunExecution = () => {
         <DialogContent className="sm:max-w-lg bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground">Edit Defect</DialogTitle>
-            <DialogDescription className="text-muted-foreground">{editDefect?.id}</DialogDescription>
+            <DialogDescription className="text-muted-foreground">{editDefect?.displayId}</DialogDescription>
           </DialogHeader>
           {editDefect && (
             <div className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</label>
+                <input
+                  type="text"
+                  value={editDefect.displayId}
+                  onChange={(e) => setEditDefect({ ...editDefect, displayId: e.target.value })}
+                  className="mt-1.5 w-full h-9 px-3 bg-secondary border-0 rounded-md text-sm text-foreground font-mono"
+                />
+              </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</label>
                 <input
@@ -1147,7 +1256,13 @@ const RunExecution = () => {
               </div>
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="ghost" onClick={() => setEditDefectOpen(false)}>Cancel</Button>
-                <Button onClick={() => { toast.success('Defect updated'); setEditDefectOpen(false); }}>Save Changes</Button>
+                <Button onClick={() => {
+                  setCreatedDefects((prev) =>
+                    prev.map((x) => x.id === editDefect.id ? { ...editDefect } : x)
+                  );
+                  toast.success('Defect updated');
+                  setEditDefectOpen(false);
+                }}>Save Changes</Button>
               </div>
             </div>
           )}
