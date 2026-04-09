@@ -24,6 +24,7 @@ import org.junit.platform.suite.api.SelectClasspathResource;
 import org.junit.platform.suite.api.Suite;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.web.client.RestClient;
@@ -44,12 +45,17 @@ import static org.springframework.http.MediaType.*;
 
 @DirtiesContext
 @CucumberContextConfiguration
-@SpringBootTest(classes = { Application.class, E2eTestConfig.class })
+@SpringBootTest(classes = { Application.class, E2eTestConfig.class },
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Suite
 @IncludeEngines("cucumber")
 @SelectClasspathResource("features")
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "e2e")
 public class GherkinE2eTest {
+
+    /** Exposed so step-definition classes can build http://localhost:{port}/api/... URLs. */
+    @LocalServerPort
+    public int serverPort;
 
     @Autowired
     private EntityService entityService;

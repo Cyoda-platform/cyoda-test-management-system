@@ -134,6 +134,9 @@ dependencies {
     testImplementation("io.cucumber:cucumber-junit-platform-engine:7.18.0")
     testImplementation 'org.instancio:instancio-junit:5.5.1'
     testImplementation("org.junit.platform:junit-platform-suite")
+    // Awaitility is used in GherkinE2eTest for async processor/criterion assertions.
+    // spring-boot-starter-test does NOT guarantee it transitively — declare explicitly.
+    testImplementation 'org.awaitility:awaitility:4.2.2'
 }
 
 test {
