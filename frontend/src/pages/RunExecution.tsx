@@ -12,14 +12,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import CreateDefectModal from '@/components/CreateDefectModal';
 import {
-  useTestRun,
+  useTestRunDetails,
   useRepository,
   useTestSteps,
   useUpdateTestRun,
   useCompleteTestRun,
   useUnlockTestRun,
   useAttachmentsByCase,
-  useTestRunCases,
   useTestRunCaseSteps,
   useUpdateTestRunCaseStatus,
   useUpdateTestRunStepStatus,
@@ -29,8 +28,10 @@ import {
 import {
   defectsApi,
   attachmentsApi,
+  testRunCasesApi,
   testRunsApi,
   type Attachment,
+  type TestRunCase,
 } from '@/lib/api';
 import { isUuid, nextListDisplayId } from '@/lib/utils';
 
@@ -92,6 +93,13 @@ const caseStatusIcon: Record<string, string> = {
   skipped: 'bg-warning',
 };
 
+const normalizeStepStatus = (raw?: string): StepStatus => {
+  const value = (raw ?? 'UNTESTED').toLowerCase();
+  return (['untested', 'passed', 'failed', 'skipped'] as StepStatus[]).includes(value as StepStatus)
+    ? (value as StepStatus)
+    : 'untested';
+};
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -107,8 +115,22 @@ function getFileIcon(type: string) {
 const RunExecution = () => {
   const { projectId, runId } = useParams<{ projectId: string; runId: string }>();
 
-  // Live API data
-  const { data: run, isLoading: runLoading } = useTestRun(projectId!, runId!);
+  // ── Single batch fetch: run + all run-case records in one HTTP request ────────
+  // Replaces the previous two-request waterfall (useTestRun + useTestRunCases) that
+  // was responsible for 10+ pending /cases and /steps requests and >10 s latency.
+  // The backend GET /runs/{id}/details returns both in one payload so the component
+  // renders with complete data immediately on mount.
+  const {
+    data: runDetails,
+    isLoading: runDetailsLoading,
+  } = useTestRunDetails(projectId!, runId!);
+
+  const run      = runDetails?.run;
+  const runCases = runDetails?.runCases ?? [];
+
+  // Aliased loading flags for backward-compat with the loading guard below.
+  const runLoading      = runDetailsLoading;
+  const runCasesLoading = runDetailsLoading;
 
   // Single aggregate call: all suites + cases in one round-trip (no more 1+N waterfall)
   const { data: repositoryData, isLoading: suitesLoading } = useRepository(projectId!);
@@ -118,18 +140,20 @@ const RunExecution = () => {
     cases: suite.cases,
   }));
 
-  // ── Run-scoped DB-backed case records ─────────────────────────────────────────
-  // Declared here (before filteredSuitesWithCases) so the filtering memo can use
-  // runCases as a fallback when run.caseIds is absent.
-  const { data: runCases = [], isLoading: runCasesLoading } =
-    useTestRunCases(projectId!, runId!);
+  const getRunCaseTestCaseId = useCallback((runCase: TestRunCase & { originalTestCaseId?: unknown }) => {
+    if (runCase.testCaseId) return runCase.testCaseId;
+    return typeof runCase.originalTestCaseId === 'string' ? runCase.originalTestCaseId : '';
+  }, []);
 
   /** testCaseId → TestRunCase.id — used when firing per-step/case DB mutations. */
   const testCaseToRunCaseId = useMemo(() => {
     const map = new Map<string, string>();
-    runCases.forEach((rc) => map.set(rc.testCaseId, rc.id));
+    runCases.forEach((rc) => {
+      const testCaseId = getRunCaseTestCaseId(rc);
+      if (testCaseId) map.set(testCaseId, rc.id);
+    });
     return map;
-  }, [runCases]);
+  }, [getRunCaseTestCaseId, runCases]);
 
   /**
    * Filter the repository suites/cases to only those selected for this run.
@@ -152,7 +176,11 @@ const RunExecution = () => {
       runCaseIdSet = new Set(run.caseIds);
     } else if (runCases.length > 0) {
       // Fallback: derive from DB-backed TestRunCase records.
-      runCaseIdSet = new Set(runCases.map((rc) => rc.testCaseId));
+      runCaseIdSet = new Set(
+        runCases
+          .map((rc) => getRunCaseTestCaseId(rc))
+          .filter(Boolean),
+      );
     }
 
     // If we have an authoritative set, filter the repository accordingly.
@@ -164,13 +192,21 @@ const RunExecution = () => {
 
     // Last resort: show everything (backward compatibility / data not yet loaded).
     return suitesWithCases;
-  }, [suitesWithCases, run?.caseIds, runCases]);
+  }, [getRunCaseTestCaseId, suitesWithCases, run?.caseIds, runCases]);
 
   // Flat list of cases in this run (for indexed access)
   const allCases = useMemo(() =>
     filteredSuitesWithCases.flatMap((s) => s.cases),
     [filteredSuitesWithCases]
   );
+
+  /** TestRunCase.id → original case title — used when hydrating run-scoped defects. */
+  const runCaseIdToCaseTitle = useMemo(() => {
+    const titleByCaseId = new Map(allCases.map((tc) => [tc.id, tc.title]));
+    const map = new Map<string, string>();
+    runCases.forEach((rc) => map.set(rc.id, titleByCaseId.get(getRunCaseTestCaseId(rc)) ?? ''));
+    return map;
+  }, [allCases, getRunCaseTestCaseId, runCases]);
 
   // ── Virtual list for the left case panel ──────────────────────────────────
   type RunItem =
@@ -297,6 +333,84 @@ const RunExecution = () => {
     [testCaseToRunCaseId, activeCase?.id],
   );
 
+  /**
+   * In-flight deduplication map: caseId → pending Promise<string>.
+   *
+   * Prevents the "two pending /cases" deadlock: if two concurrent callers
+   * (e.g. auto-trigger on step-fail + handleBugClick background resolution)
+   * both call ensureRunCaseId for the same case, only ONE POST /cases is ever
+   * dispatched.  The second caller receives the same Promise.
+   *
+   * Stored in a ref so it survives re-renders without recreating the callback.
+   */
+  const inFlightRunCaseCreates = useRef<Map<string, Promise<string>>>(new Map());
+
+  const ensureRunCaseId = useCallback(async (caseId: string): Promise<string> => {
+    // 1. Fast-path: already in the local cache.
+    const existingRunCaseId = testCaseToRunCaseId.get(caseId);
+    if (existingRunCaseId) return existingRunCaseId;
+
+    // 2. Deduplication: reuse a pending create if one is already in-flight.
+    const inflight = inFlightRunCaseCreates.current.get(caseId);
+    if (inflight) return inflight;
+
+    // 3. Create with a 12-second timeout so the UI is never blocked indefinitely.
+    //    (Cyoda entity creation can be slow under load but rarely exceeds ~10 s.)
+    const createPromise = (async (): Promise<string> => {
+      const timeoutMs = 12_000;
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`TestRunCase create timed out after ${timeoutMs} ms`)),
+          timeoutMs,
+        );
+      });
+
+      try {
+        const created = await Promise.race([
+          testRunCasesApi.create(projectId!, runId!, caseId),
+          timeoutPromise,
+        ]);
+        clearTimeout(timeoutId);
+
+        // Patch the legacy runCases list cache.
+        qc.setQueryData<{ data: TestRunCase[] }>(
+          keys.runCases.all(projectId!, runId!),
+          (previous) => ({
+            data: [
+              ...(previous?.data ?? []).filter((rc) => rc.id !== created.id),
+              created,
+            ],
+          }),
+        );
+
+        // Patch the batch-details cache so testCaseToRunCaseId picks up the new
+        // record immediately — prevents a second click firing another create.
+        qc.setQueryData<import('@/lib/api').TestRunDetail>(
+          [...keys.runs.detail(projectId!, runId!), 'details'] as const,
+          (prev) => {
+            if (!prev) return prev;
+            const filtered = prev.runCases.filter((rc) => rc.id !== created.id);
+            return { ...prev, runCases: [...filtered, created] };
+          },
+        );
+
+        return created.id;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        console.error('Failed to ensure TestRunCase exists for case', caseId, error);
+        return '';
+      } finally {
+        // Remove from in-flight map once settled (success or failure).
+        inFlightRunCaseCreates.current.delete(caseId);
+      }
+    })();
+
+    inFlightRunCaseCreates.current.set(caseId, createPromise);
+    return createPromise;
+  }, [projectId, qc, runId, testCaseToRunCaseId]);
+
   /** Run-step records for the currently visible case. */
   const { data: activeCaseRunSteps = [] } = useTestRunCaseSteps(
     projectId!, runId!, activeCaseRunCaseId,
@@ -340,6 +454,34 @@ const RunExecution = () => {
   };
 
   /**
+   * Restore case-level status immediately on mount, before a user clicks into each
+   * individual case. Prefer the persisted flat run.stepStatuses map; fall back to
+   * DB-backed TestRunCase.status when no per-step snapshot exists.
+   */
+  const persistedCaseStatusById = useMemo(() => {
+    const statusMap = run?.stepStatuses ?? {};
+    const result: Record<string, StepStatus> = {};
+
+    allCases.forEach((tc) => {
+      const persistedStepStatuses = Object.entries(statusMap)
+        .filter(([key]) => key.startsWith(`${tc.id}::`))
+        .map(([, value]) => normalizeStepStatus(value));
+
+      if (persistedStepStatuses.length > 0) {
+        result[tc.id] = computeCaseStatus(persistedStepStatuses) as StepStatus;
+        return;
+      }
+
+      const runCase = runCases.find((rc) => getRunCaseTestCaseId(rc) === tc.id);
+      if (runCase?.status) {
+        result[tc.id] = normalizeStepStatus(runCase.status);
+      }
+    });
+
+    return result;
+  }, [allCases, getRunCaseTestCaseId, run?.stepStatuses, runCases]);
+
+  /**
    * Compute run-level aggregate counts from a step-status map.
    * Uses the provided cases list so it works inside cleanup refs too.
    */
@@ -365,26 +507,37 @@ const RunExecution = () => {
   // survives a page refresh without any changes to the existing modal/action logic.
   useEffect(() => {
     if (serverRunDefects.length === 0) return; // nothing to seed yet
-    setCreatedDefects(
-      serverRunDefects.map((d) => ({
-        id:          d.id,
-        displayId:   d.displayId ?? d.id.slice(0, 8).toUpperCase(),
-        caseId:      d.testRunCaseId ?? '',
-        caseTitle:   '',
-        stepIdx:     undefined,
-        title:       d.title,
-        description: d.description,
-        severity:    (d.severity as CreatedDefect['severity']) ?? 'Minor',
-        status:      (d.status  as CreatedDefect['status'])   ?? 'Open',
-        link:        d.link ?? '',
-        files:       [],
-        createdAt:   (d.createdAt ?? '').split('T')[0] || new Date().toISOString().split('T')[0],
-      })),
-    );
+    setCreatedDefects((prev) => {
+      const previousById = new Map(prev.map((item) => [item.id, item]));
+      const hydrated = serverRunDefects.map((d) => {
+        const previous = previousById.get(d.id);
+        return {
+          id:          d.id,
+          displayId:   d.displayId ?? previous?.displayId ?? d.id.slice(0, 8).toUpperCase(),
+          caseId:      d.testRunCaseId ?? previous?.caseId ?? '',
+          caseTitle:   previous?.caseTitle ?? (d.testRunCaseId ? runCaseIdToCaseTitle.get(d.testRunCaseId) ?? '' : ''),
+          stepIdx:     previous?.stepIdx,
+          title:       d.title,
+          description: d.description,
+          severity:    (d.severity as CreatedDefect['severity']) ?? previous?.severity ?? 'Minor',
+          status:      (d.status  as CreatedDefect['status'])   ?? previous?.status ?? 'Open',
+          link:        d.link ?? previous?.link ?? '',
+          files:       previous?.files ?? [],
+          createdAt:   (d.createdAt ?? '').split('T')[0] || previous?.createdAt || new Date().toISOString().split('T')[0],
+        };
+      });
+
+      // Preserve freshly-created local defects that the immediate refetch may not
+      // return yet (eventual-consistency / indexing lag on the backend).
+      const hydratedIds = new Set(hydrated.map((item) => item.id));
+      const optimisticOnly = prev.filter((item) => !hydratedIds.has(item.id));
+
+      return [...optimisticOnly, ...hydrated];
+    });
   // Re-run whenever the server data changes (e.g. after a fresh defect is created
   // and the query is invalidated in handleCreateDefect).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverRunDefects]);
+  }, [runCaseIdToCaseTitle, serverRunDefects]);
 
   // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
@@ -403,8 +556,11 @@ const RunExecution = () => {
       const hasProgress = agg.passed + agg.failed + agg.skipped > 0;
 
       // Fire-and-forget: direct API call is safer than a mutation hook in cleanup.
-      // stepStatuses on the run entity are already up-to-date from per-click saves;
-      // this call just finalises the aggregate counts and status promotion.
+      // Use fullStepStatusesRef (the locally accumulated map) rather than
+      // r.stepStatuses (the last server response) so that clicks made since the
+      // most recent server round-trip are not lost.
+      // Guard: skip the call if runId is not a valid UUID to avoid spurious 404s.
+      if (!runId || !isUuid(runId)) return;
       testRunsApi.update(projectId, runId, {
         name:         r.name,
         environment:  r.environment,
@@ -412,8 +568,10 @@ const RunExecution = () => {
         description:  r.description ?? '',
         // Promote to 'active' as soon as any case is worked on
         status: hasProgress && r.status === 'initial' ? 'active' : r.status,
-        caseIds:      r.caseIds,
-        stepStatuses: r.stepStatuses ?? {},
+        // Guard: same as in setStepStatus — never send empty caseIds.
+        // The backend will preserve the existing list if undefined is sent.
+        caseIds: (r.caseIds && r.caseIds.length > 0) ? r.caseIds : undefined,
+        stepStatuses: fullStepStatusesRef.current,
         ...(r.createdAt ? { createdAt: r.createdAt } : {}),
         ...agg,
       }).then(() => {
@@ -436,10 +594,7 @@ const RunExecution = () => {
       const runStepStatuses = runRef.current?.stepStatuses ?? {};
       const initial: StepStatus[] = sortedSteps.map((s) => {
         const key = `${activeCase.id}::${s.id}`;
-        const raw = (runStepStatuses[key] ?? 'UNTESTED').toLowerCase();
-        return (['passed', 'failed', 'skipped'] as StepStatus[]).includes(raw as StepStatus)
-          ? (raw as StepStatus)
-          : 'untested';
+        return normalizeStepStatus(runStepStatuses[key]);
       });
       return { ...prev, [activeCase.id]: initial };
     });
@@ -469,21 +624,29 @@ const RunExecution = () => {
     fullStepStatusesRef.current = { ...fullStepStatusesRef.current, [runKey]: status.toUpperCase() };
 
     // ── 3. Persist aggregates + step map to the run entity ───────────────────
+    //
+    // Guard: only fire if runId is a real UUID (not undefined / a displayId).
+    // A missing or malformed runId would produce a 404 from the backend's
+    // testRunExists(id) check, which is the source of the console error.
     const r = runRef.current;
-    if (r) {
+    if (r && runId && isUuid(runId)) {
       const newAllStatuses = { ...stepStatusesRef.current, [caseId]: updated };
       const agg = computeAggregates(newAllStatuses, allCasesRef.current);
 
       updateRun.mutate({
         projectId: projectId!,
-        id:        runId!,
+        id:        runId,
         body: {
           name:         r.name,
           environment:  r.environment,
           buildVersion: r.buildVersion ?? '',
           description:  r.description ?? '',
           status:       r.status === 'initial' ? 'active' : r.status,
-          caseIds:      r.caseIds,
+          // Guard: never send an empty / undefined caseIds — the backend performs a
+          // full-entity replacement and an empty list would silently erase the run's
+          // case snapshot, causing all cases to vanish on the next page refresh.
+          // The backend also has a matching server-side guard in updateTestRun().
+          caseIds: (r.caseIds && r.caseIds.length > 0) ? r.caseIds : undefined,
           // Use the local accumulated map — never the potentially-stale server copy.
           stepStatuses: fullStepStatusesRef.current,
           ...(r.createdAt ? { createdAt: r.createdAt } : {}),
@@ -498,6 +661,7 @@ const RunExecution = () => {
     // always reflect the real execution state for reporting & external consumers.
     const runCaseId = testCaseToRunCaseId.get(caseId);
     const runStepId = testStepToRunStepId.get(globalStepId);
+    const derivedCaseStatus = computeCaseStatus(updated).toUpperCase();
     if (runCaseId && runStepId) {
       updateTestRunStepStatus.mutate({
         projectId: projectId!,
@@ -506,8 +670,8 @@ const RunExecution = () => {
         id:        runStepId,
         status:    status.toUpperCase(),
       });
-      // Derive case-level status from the already-updated local array.
-      const derivedCaseStatus = computeCaseStatus(updated).toUpperCase();
+    }
+    if (runCaseId) {
       updateTestRunCaseStatus.mutate({
         projectId: projectId!,
         runId:     runId!,
@@ -516,15 +680,30 @@ const RunExecution = () => {
       });
     }
 
-    // ── 5. Auto-trigger defect modal on 'failed' ──────────────────────────────
+    // ── 5. Auto-trigger defect modal on 'failed' — opens synchronously ────────
+    // Previously this awaited ensureRunCaseId() before calling setDefectModalOpen,
+    // adding a full network round-trip delay before the dialog appeared.
+    // Now the modal opens immediately using whatever run-case ID is in the cache;
+    // the async resolution patches the context before the user submits.
     if (status === 'failed') {
+      const knownRunCaseId = testCaseToRunCaseId.get(caseId);
       setDefectContext({
         caseId,
-        stepIdx: stepNumber - 1,
-        source:  getCaseSourceLabel(caseId),
-        runCaseId: testCaseToRunCaseId.get(caseId),
+        stepIdx:   stepNumber - 1,
+        source:    getCaseSourceLabel(caseId),
+        runCaseId: knownRunCaseId,
       });
       setDefectModalOpen(true);
+
+      if (!knownRunCaseId) {
+        void ensureRunCaseId(caseId).then((resolvedId) => {
+          if (resolvedId) {
+            setDefectContext((prev) =>
+              prev ? { ...prev, runCaseId: resolvedId } : prev,
+            );
+          }
+        });
+      }
     }
   };
 
@@ -536,6 +715,9 @@ const RunExecution = () => {
       if (statuses.every((s) => s === 'passed')) return 'passed';
       if (statuses.some((s) => s === 'skipped') && !statuses.some((s) => s === 'untested')) return 'skipped';
     }
+    // Fall back to persisted run data so progress and sidebar icons are restored
+    // immediately on reopen, even before each case is individually selected.
+    if (persistedCaseStatusById[caseId]) return persistedCaseStatusById[caseId];
     return 'untested';
   };
 
@@ -551,15 +733,38 @@ const RunExecution = () => {
     setEvidenceModalOpen(true);
   };
 
+  /**
+   * Opens the "Report Issue" modal **synchronously** on click — no network await
+   * before showing the dialog (Task 3: Instant Modal Opening).
+   *
+   * If a TestRunCase record already exists for this case we use it immediately.
+   * If not, we open the modal anyway and resolve the runCaseId asynchronously,
+   * then patch the context so the submit handler gets the correct ID.
+   */
   const handleBugClick = (caseId: string, stepIdx?: number) => {
     if (isReadOnly) return;
+
+    // Use whatever ID we already have in the cache — open instantly.
+    const knownRunCaseId = testCaseToRunCaseId.get(caseId);
     setDefectContext({
       caseId,
       stepIdx,
       source:    getCaseSourceLabel(caseId),
-      runCaseId: testCaseToRunCaseId.get(caseId),
+      runCaseId: knownRunCaseId,
     });
     setDefectModalOpen(true);
+
+    // If the run-case record doesn't exist yet, create it in the background and
+    // patch the context so the submit handler has the real ID when the user submits.
+    if (!knownRunCaseId) {
+      void ensureRunCaseId(caseId).then((resolvedId) => {
+        if (resolvedId) {
+          setDefectContext((prev) =>
+            prev ? { ...prev, runCaseId: resolvedId } : prev,
+          );
+        }
+      });
+    }
   };
 
   const handleFileUpload = async (files: FileList | null) => {
@@ -590,8 +795,20 @@ const RunExecution = () => {
 
   const handleCreateDefect = async (defect: any) => {
     if (!defectContext) return;
+
+    // ── Resolve runCaseId without blocking defect creation ────────────────────
+    // Previously this called `await ensureRunCaseId(defect.caseId)` and would
+    // hard-block if the POST /cases request was pending (e.g. Cyoda slow under
+    // load).  Now we use whatever ID is already in the context or cache; if
+    // neither is available we proceed anyway — testRunCaseId is optional context
+    // for defect scoping and must never prevent the actual defect from being saved.
+    const runCaseId =
+      defectContext.runCaseId ??
+      testCaseToRunCaseId.get(defectContext.caseId) ??
+      undefined;   // will be omitted from the payload when undefined
+
     try {
-      await defectsApi.create(projectId!, {
+      const created = await defectsApi.create(projectId!, {
         title:       defect.title,
         description: defect.description,
         severity:    defect.severity,
@@ -600,8 +817,30 @@ const RunExecution = () => {
         link:        defect.link,
         // ── Persist run / case links so the table survives a page reload ────
         testRunId:     runId,
-        testRunCaseId: defectContext.runCaseId,
+        // runCaseId may be undefined for cases not yet opened — that is safe;
+        // the defect will still be linked to the run and appear in the run's
+        // defect table.  The testRunCaseId will be enriched on next page load
+        // via the server-side defect list which scopes by testRunId.
+        ...(runCaseId ? { testRunCaseId: runCaseId } : {}),
       });
+
+      setCreatedDefects((prev) => [
+        {
+          id:          created.id,
+          displayId:   created.displayId ?? nextListDisplayId('DEF', prev),
+          caseId:      runCaseId,
+          caseTitle:   allCases.find((item) => item.id === defect.caseId)?.title ?? activeCase.title,
+          stepIdx:     defectContext.stepIdx,
+          title:       created.title,
+          description: created.description ?? '',
+          severity:    (created.severity as CreatedDefect['severity']) ?? defect.severity,
+          status:      (created.status as CreatedDefect['status']) ?? defect.status,
+          link:        created.link ?? defect.link ?? '',
+          files:       defect.files ?? [],
+          createdAt:   (created.createdAt ?? '').split('T')[0] || new Date().toISOString().split('T')[0],
+        },
+        ...prev.filter((item) => item.id !== created.id),
+      ]);
 
       // Upload any attached files, linked to the test case
       if (defect.files && (defect.files as File[]).length > 0) {
@@ -620,8 +859,19 @@ const RunExecution = () => {
       toast.success('Defect created');
     } catch {
       toast.error('Failed to create defect — please try again');
+      throw new Error('Failed to create defect');
     }
   };
+
+  /**
+   * Only show defects that were raised against the currently active test-run case.
+   * `createdDefects[n].caseId` is populated from `Defect.testRunCaseId` (the
+   * TestRunCase.id, NOT the original TestCase.id) — see the seeding effect above.
+   * Filtering here prevents defects created for TC-10 from appearing under TC-11.
+   */
+  const activeCaseDefects = createdDefects.filter(
+    (d) => d.caseId === activeCaseRunCaseId,
+  );
 
   const progressStats = useMemo(() => {
     let passed = 0, failed = 0, skipped = 0, untested = 0;
@@ -640,7 +890,7 @@ const RunExecution = () => {
     const completed = passed + failed + skipped;
     return { passed, failed, skipped, untested, total, completed };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepStatuses, allCases]);
+  }, [stepStatuses, allCases, persistedCaseStatusById]);
 
   // Loading / empty guard
   // Wait for run, repository (suites+cases), AND run-scoped case records before
@@ -963,7 +1213,7 @@ const RunExecution = () => {
           )}
 
           {/* Defects Section - Inside center panel */}
-          {createdDefects.length > 0 && (
+          {activeCaseDefects.length > 0 && (
             <div className="mt-6 bg-card rounded-lg shadow-soft overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -978,7 +1228,7 @@ const RunExecution = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {createdDefects.map((d) => (
+                  {activeCaseDefects.map((d) => (
                     <tr
                       key={d.id}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"

@@ -34,8 +34,6 @@ public class ProjectDTO implements CyodaEntity {
     @Size(max = 1000, message = "Description must not exceed 1000 characters")
     private String description;
 
-    private String status;
-    private boolean deleted;
     private String createdAt;
     private String updatedAt;
 

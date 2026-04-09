@@ -262,11 +262,34 @@ export interface TestRun {
   stepStatuses?: Record<string, string>;
 }
 
+/**
+ * Composite response from `GET /projects/{projectId}/runs/{runId}/details`.
+ *
+ * Bundles the run entity and all DB-backed TestRunCase records in a single
+ * HTTP response — eliminates the two-round-trip waterfall that caused 10+
+ * pending requests and 10 s+ latency in the Run Execution view.
+ */
+export interface TestRunDetail {
+  run: TestRun;
+  /**
+   * All TestRunCase records for this run.
+   * Each carries its own `id` (the snapshot ID used to scope defects/steps)
+   * and `testCaseId` (the original repo case ID).
+   */
+  runCases: TestRunCase[];
+}
+
 export const testRunsApi = {
   list:     (projectId: string, page = 0, size = 20) =>
     api.get<{ data: TestRun[] }>(`/projects/${projectId}/runs?page=${page}&size=${size}`),
   get:      (projectId: string, id: string) =>
     api.get<TestRun>(`/projects/${projectId}/runs/${id}`),
+  /**
+   * Fetches the run + all its DB-backed run-case records in a single round-trip.
+   * Use this instead of separate `get` + `testRunCasesApi.list` calls.
+   */
+  getDetails: (projectId: string, id: string) =>
+    api.get<TestRunDetail>(`/projects/${projectId}/runs/${id}/details`),
   create:   (projectId: string, body: Partial<TestRun>) =>
     api.post<TestRun>(`/projects/${projectId}/runs`, body),
   update:   (projectId: string, id: string, body: Partial<TestRun>) =>

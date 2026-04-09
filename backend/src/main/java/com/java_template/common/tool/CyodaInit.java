@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -55,22 +56,30 @@ public class CyodaInit {
         this.config = config;
     }
 
-    public void initCyoda(CyodaInitConfig config) {
+    public ImportReport initCyoda(CyodaInitConfig config) {
         logger.info("🔄 Starting workflow import into Cyoda...");
         if (config.recreateModels()) {
             logger.info("⚠️  Recreate models flag is enabled - existing models will be deleted and recreated");
         }
 
         String token = authentication.getAccessToken().getTokenValue();
-        initEntitiesSchemaFromEntities(token, config);
-        logger.info("✅ Workflow import process completed.");
+        ImportReport report = initEntitiesSchemaFromEntities(token, config);
+
+        if (report.success()) {
+            logger.info("✅ Workflow import process completed. Imported {} entities successfully.", report.succeededEntities());
+        } else {
+            logger.warn("⚠️ Workflow import completed with failures. Succeeded: {}, Failed: {}.",
+                    report.succeededEntities(), report.failedEntities());
+        }
+
+        return report;
     }
 
 
     /**
      * Initialize entities schema from discovered entities using their getModelKey() method
      */
-    private void initEntitiesSchemaFromEntities(String token, CyodaInitConfig config) {
+    private ImportReport initEntitiesSchemaFromEntities(String token, CyodaInitConfig config) {
         logger.info("🔍 Discovering entities dynamically...");
 
         List<ModelSpec> modelSpecs = discoverEntities();
@@ -80,28 +89,42 @@ public class CyodaInit {
         // Process workflows in parallel for better performance
         ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
         try {
-            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            List<CompletableFuture<EntityImportResult>> futures = new ArrayList<>();
 
             for (ModelSpec modelSpec : modelSpecs) {
                 Path workflowFile = findWorkflowFile(WORKFLOW_DTO_DIR, modelSpec.getName(), modelSpec.getVersion());
                 if (workflowFile != null) {
                     logger.info("✅ Found workflow file for {}: {}", modelSpec.getName(), workflowFile);
 
-                    CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                    CompletableFuture<EntityImportResult> future = CompletableFuture.supplyAsync(() -> {
                         try {
-                            importWorkflowForEntity(workflowFile, modelSpec.getName(), modelSpec.getVersion(), token, config);
+                            return importWorkflowForEntity(workflowFile, modelSpec.getName(), modelSpec.getVersion(), token, config);
                         } catch (Exception e) {
                             logger.error("❌ Error importing workflow for entity {}: {}", modelSpec.getName(), e.getMessage(), e);
+                            return EntityImportResult.failure(
+                                    modelSpec.getName(),
+                                    modelSpec.getVersion(),
+                                    workflowFile.toString(),
+                                    e.getMessage()
+                            );
                         }
                     }, executor);
                     futures.add(future);
                 } else {
                     logger.warn("⚠️ No workflow file found for entity: {} (version: {})", modelSpec.getName(), modelSpec.getVersion());
+                    futures.add(CompletableFuture.completedFuture(EntityImportResult.failure(
+                            modelSpec.getName(),
+                            modelSpec.getVersion(),
+                            null,
+                            "No workflow file found for discovered entity"
+                    )));
                 }
             }
 
-            // Wait for all imports to complete
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            List<EntityImportResult> results = futures.stream()
+                    .map(CompletableFuture::join)
+                    .toList();
+            return ImportReport.fromResults(config.recreateModels(), results);
         } finally {
             executor.shutdown();
         }
@@ -215,7 +238,7 @@ public class CyodaInit {
      * Import workflow for a specific entity.
      * Supports workflow files containing either a single workflow object or an array of workflows.
      */
-    private void importWorkflowForEntity(Path workflowFile, String entityName, Integer version, String token, CyodaInitConfig initConfig) {
+    private EntityImportResult importWorkflowForEntity(Path workflowFile, String entityName, Integer version, String token, CyodaInitConfig initConfig) {
         logger.info("📄 Processing workflow file for entity: {}, version: {}", entityName, version);
 
 
@@ -269,14 +292,16 @@ public class CyodaInit {
         }
 
         // Check and create entity model if needed
-        checkAndCreateEntityModel(token, entityName, version, initConfig);
+        String modelMessage = checkAndCreateEntityModel(token, entityName, version, initConfig);
+
+        return EntityImportResult.success(entityName, version, workflowFile.toString(), modelMessage);
 
     }
 
     /**
      * Checks if entity model exists and creates it if needed
      */
-    private void checkAndCreateEntityModel(String token, String entityName, Integer version, CyodaInitConfig config) {
+    private String checkAndCreateEntityModel(String token, String entityName, Integer version, CyodaInitConfig config) {
         String exportPath = String.format("model/export/SIMPLE_VIEW/%s/%s", entityName, version);
         logger.debug("🔍 Checking if entity model exists: {}", exportPath);
 
@@ -290,40 +315,31 @@ public class CyodaInit {
                     deleteEntityModel(token, entityName, version);
                     logger.info("📝 Creating entity model for: {} (version: {})", entityName, version);
                     createEntityModel(token, entityName, version);
+                    return "Workflow imported; entity model recreated successfully";
                 } else {
                     logger.info("✅ Entity model already exists for: {} (version: {})", entityName, version);
+                    return "Workflow imported; entity model already existed";
                 }
             } else if (statusCode == 404) {
                 logger.info("📝 Entity model not found, creating for: {} (version: {})", entityName, version);
                 createEntityModel(token, entityName, version);
+                return "Workflow imported; entity model created successfully";
             } else {
                 String body = response.path("json").toString();
                 String errorMsg = String.format("Failed to check entity model for %s (version %s). Status code: %d, body: %s",
                         entityName, version, statusCode, body);
-                logger.warn("⚠️  {}", errorMsg);
-                logger.info("📝 Attempting to create entity model for: {} (version: {})", entityName, version);
-                try {
-                    createEntityModel(token, entityName, version);
-                } catch (Exception createEx) {
-                    logger.error("❌ Failed to create entity model for {} (version {}): {}", entityName, version, createEx.getMessage(), createEx);
-                }
+                throw new IllegalStateException(errorMsg);
             }
         } catch (Exception ex) {
             if (ex.getMessage() != null && ex.getMessage().contains("404")) {
                 logger.info("📝 Entity model not found (404), creating for: {} (version: {})", entityName, version);
-                try {
-                    createEntityModel(token, entityName, version);
-                } catch (Exception createEx) {
-                    logger.error("❌ Failed to create entity model for {} (version {}): {}", entityName, version, createEx.getMessage(), createEx);
-                }
+                createEntityModel(token, entityName, version);
+                return "Workflow imported; entity model created successfully after 404 check";
             } else {
-                logger.warn("⚠️  Could not check entity model for {} (version {}): {}", entityName, version, ex.getMessage(), ex);
-                logger.info("📝 Attempting to create entity model for: {} (version: {})", entityName, version);
-                try {
-                    createEntityModel(token, entityName, version);
-                } catch (Exception createEx) {
-                    logger.error("❌ Failed to create entity model for {} (version {}): {}", entityName, version, createEx.getMessage(), createEx);
-                }
+                throw new IllegalStateException(
+                        String.format("Failed to ensure entity model for %s (version %s): %s", entityName, version, ex.getMessage()),
+                        ex
+                );
             }
         }
     }
@@ -541,6 +557,57 @@ public class CyodaInit {
                     entityName, version, statusCode, body);
             logger.error("❌ {}", errorMsg);
             throw new RuntimeException(errorMsg);
+        }
+    }
+
+    public record ImportReport(
+            boolean success,
+            String message,
+            boolean recreateModels,
+            int totalEntities,
+            int succeededEntities,
+            int failedEntities,
+            List<EntityImportResult> results
+    ) {
+        public static ImportReport fromResults(boolean recreateModels, List<EntityImportResult> results) {
+            List<EntityImportResult> immutableResults = Collections.unmodifiableList(new ArrayList<>(results));
+            int failed = (int) immutableResults.stream().filter(result -> !result.success()).count();
+            int succeeded = immutableResults.size() - failed;
+            String message = failed == 0
+                    ? (recreateModels
+                    ? "Workflows imported and managed entity models recreated successfully"
+                    : "Workflows imported successfully")
+                    : String.format("Workflow import completed with failures for %d of %d managed entities", failed, immutableResults.size());
+
+            return new ImportReport(
+                    failed == 0,
+                    message,
+                    recreateModels,
+                    immutableResults.size(),
+                    succeeded,
+                    failed,
+                    immutableResults
+            );
+        }
+
+        public static ImportReport fatal(boolean recreateModels, String message) {
+            return new ImportReport(false, message, recreateModels, 0, 0, 0, List.of());
+        }
+    }
+
+    public record EntityImportResult(
+            String entityName,
+            Integer version,
+            String workflowFile,
+            boolean success,
+            String message
+    ) {
+        public static EntityImportResult success(String entityName, Integer version, String workflowFile, String message) {
+            return new EntityImportResult(entityName, version, workflowFile, true, message);
+        }
+
+        public static EntityImportResult failure(String entityName, Integer version, String workflowFile, String message) {
+            return new EntityImportResult(entityName, version, workflowFile, false, message);
         }
     }
 }

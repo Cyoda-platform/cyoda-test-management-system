@@ -58,10 +58,18 @@ public class SuiteService {
     }
 
     /**
-     * Creates a new suite with ACTIVE status
+     * Creates a new suite.
+     * Auto-assigns a sortOrder equal to the current suite count so that new
+     * suites always have a non-null position. This prevents the Cyoda platform's
+     * default updated_at ordering from leaking through the stable Java sort when
+     * all sortOrder values are null — which would cause suites to jump whenever a
+     * child test-case is created and the suite's updated_at timestamp changes.
      */
     public SuiteDTO createSuite(SuiteDTO suite) {
-        suite.setStatus("ACTIVE");
+        if (suite.getSortOrder() == null) {
+            int count = getSuitesByProjectId(suite.getProjectId(), 0, 1000).data().size();
+            suite.setSortOrder(count);
+        }
         return withId(entityService.create(suite));
     }
 
@@ -88,7 +96,11 @@ public class SuiteService {
         List<SuiteDTO> sorted = result.data().stream()
                 .map(this::withId)
                 .sorted(Comparator.comparing(SuiteDTO::getSortOrder,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        // Secondary stable sort by id string so that suites with the
+                        // same (or null) sortOrder always arrive in a deterministic order
+                        // regardless of how Cyoda orders them internally (e.g. updated_at).
+                        .thenComparing(s -> s.getId() != null ? s.getId().toString() : ""))
                 .toList();
         return PageResult.of(result.searchId(), sorted, page, size, result.totalElements());
     }

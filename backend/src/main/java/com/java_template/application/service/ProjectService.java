@@ -88,8 +88,6 @@ public class ProjectService {
     }
 
     public ProjectDTO createProject(ProjectDTO project) {
-        project.setStatus("ACTIVE");
-
         // Set timestamps as ISO-8601 UTC strings BEFORE saving to Cyoda
         String now = Instant.now().toString();
         project.setCreatedAt(now);

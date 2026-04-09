@@ -28,7 +28,6 @@ public record RepositoryDTO(List<SuiteView> suites) {
             String description,
             String preconditions,
             Priority priority,
-            String status,
             Integer sortOrder,
             boolean deleted
     ) {}

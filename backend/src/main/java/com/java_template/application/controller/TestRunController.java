@@ -1,6 +1,8 @@
 package com.java_template.application.controller;
 
 import com.java_template.application.dto.TestRunDTO;
+import com.java_template.application.dto.TestRunDetailDTO;
+import com.java_template.application.service.TestRunCaseService;
 import com.java_template.application.service.TestRunService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,9 +22,11 @@ import java.util.UUID;
 @Tag(name = "Test Runs", description = "Test run management endpoints")
 public class TestRunController {
     private final TestRunService testRunService;
+    private final TestRunCaseService testRunCaseService;
 
-    public TestRunController(TestRunService testRunService) {
+    public TestRunController(TestRunService testRunService, TestRunCaseService testRunCaseService) {
         this.testRunService = testRunService;
+        this.testRunCaseService = testRunCaseService;
     }
 
     @PostMapping
@@ -48,6 +52,35 @@ public class TestRunController {
         return testRunService.getTestRunById(id)
                 .filter(tr -> tr.getProjectId().equals(projectId))
                 .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Batch endpoint that returns the test run together with all of its DB-backed
+     * {@code TestRunCase} records in a single HTTP round-trip.
+     *
+     * <p>This eliminates the two-request waterfall ({@code GET /runs/{id}} followed
+     * by {@code GET /runs/{id}/cases}) that was responsible for the 10+ pending
+     * network requests and &gt;10 s latency observed in the Run Execution view.</p>
+     *
+     * <p>The frontend {@code RunExecution} component should call this endpoint on
+     * mount instead of separate {@code useTestRun} and {@code useTestRunCases} hooks.</p>
+     */
+    @GetMapping("/{id}/details")
+    @Operation(summary = "Get full run structure (run + all run-cases) in one round-trip")
+    public ResponseEntity<TestRunDetailDTO> getTestRunDetails(
+            @PathVariable UUID projectId,
+            @PathVariable UUID id) {
+        return testRunService.getTestRunById(id)
+                .filter(tr -> tr.getProjectId().equals(projectId))
+                .map(run -> {
+                    // Fetch up to 500 run-case records — well above any realistic run size.
+                    // Using a large page prevents silent truncation to the default page size of 20.
+                    var runCases = testRunCaseService
+                            .getTestRunCasesByTestRunId(run.getId(), 0, 500)
+                            .data();
+                    return ResponseEntity.ok(new TestRunDetailDTO(run, runCases));
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 

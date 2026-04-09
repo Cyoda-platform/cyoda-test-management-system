@@ -43,9 +43,6 @@ public class TestStepRepository {
             if (testStep.getExpectedResult() != null) {
                 existing.setExpectedResult(testStep.getExpectedResult());
             }
-            if (testStep.getStatus() != null) {
-                existing.setStatus(testStep.getStatus());
-            }
             if (testStep.getStepNumber() != null) {
                 existing.setStepNumber(testStep.getStepNumber());
             }

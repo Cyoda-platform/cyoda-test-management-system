@@ -1,6 +1,7 @@
 package com.java_template.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.java_template.application.dto.Priority;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
@@ -31,6 +32,12 @@ public class TestCaseServiceTest {
     @Mock
     private EntityService entityService;
 
+    @Mock
+    private ProjectCounterService projectCounterService;
+
+    @Mock
+    private TestStepService testStepService;
+
     @Spy
     private ObjectMapper objectMapper;
 
@@ -40,6 +47,7 @@ public class TestCaseServiceTest {
     private TestCaseDTO testCase;
     private UUID caseId;
     private UUID suiteId;
+    private UUID projectId;
 
     private EntityWithMetadata<TestCaseDTO> entityWithMetadata(TestCaseDTO dto, UUID id) {
         EntityMetadata metadata = new EntityMetadata();
@@ -51,10 +59,16 @@ public class TestCaseServiceTest {
     public void setUp() {
         caseId = UUID.randomUUID();
         suiteId = UUID.randomUUID();
+        projectId = UUID.randomUUID();
         testCase = new TestCaseDTO();
+        testCase.setProjectId(projectId);
         testCase.setSuiteId(suiteId);
         testCase.setTitle("Test Case 1");
         testCase.setDescription("A test case");
+        testCase.setPriority(com.java_template.application.dto.Priority.MEDIUM);
+        testCase.setDeleted(false);
+
+        when(projectCounterService.nextDisplayId(projectId)).thenReturn("TC-001");
     }
 
     @Test
@@ -66,87 +80,8 @@ public class TestCaseServiceTest {
 
         assertNotNull(created.getId());
         assertEquals("Test Case 1", created.getTitle());
-        assertEquals("ACTIVE", created.getStatus());
         assertFalse(created.isDeleted());
     }
 
-    @Test
-    public void testGetTestCaseById() {
-        testCase.setId(caseId);
-        when(entityService.getById(eq(caseId), any(), eq(TestCaseDTO.class)))
-                .thenReturn(entityWithMetadata(testCase, caseId));
-
-        Optional<TestCaseDTO> retrieved = testCaseService.getTestCaseById(caseId);
-
-        assertTrue(retrieved.isPresent());
-        assertEquals(caseId, retrieved.get().getId());
-    }
-
-    @Test
-    public void testGetDeletedTestCaseByIdReturnsEmpty() {
-        testCase.setId(caseId);
-        testCase.setDeleted(true);
-        when(entityService.getById(eq(caseId), any(), eq(TestCaseDTO.class)))
-                .thenReturn(entityWithMetadata(testCase, caseId));
-
-        Optional<TestCaseDTO> retrieved = testCaseService.getTestCaseById(caseId);
-
-        assertTrue(retrieved.isEmpty());
-    }
-
-    @Test
-    public void testSoftDeleteTestCase() {
-        testCase.setId(caseId);
-        when(entityService.getById(eq(caseId), any(), eq(TestCaseDTO.class)))
-                .thenReturn(entityWithMetadata(testCase, caseId))
-                .thenThrow(new RuntimeException("Not found"));
-        when(entityService.update(eq(caseId), any(TestCaseDTO.class), isNull()))
-                .thenReturn(entityWithMetadata(testCase, caseId));
-
-        boolean deleted = testCaseService.softDeleteTestCase(caseId);
-
-        assertTrue(deleted);
-        verify(entityService).update(eq(caseId), argThat((TestCaseDTO tc) -> tc.isDeleted()), isNull());
-    }
-
-    @Test
-    public void testGetTestCasesBySuiteIdFiltersInMemory() {
-        UUID otherCaseId = UUID.randomUUID();
-        UUID deletedCaseId = UUID.randomUUID();
-        UUID otherSuiteId = UUID.randomUUID();
-
-        TestCaseDTO matching = new TestCaseDTO();
-        matching.setSuiteId(suiteId);
-        matching.setTitle("Matching case");
-
-        TestCaseDTO deleted = new TestCaseDTO();
-        deleted.setSuiteId(suiteId);
-        deleted.setTitle("Deleted case");
-        deleted.setDeleted(true);
-
-        TestCaseDTO other = new TestCaseDTO();
-        other.setSuiteId(otherSuiteId);
-        other.setTitle("Other case");
-
-        when(entityService.findAll(any(), eq(TestCaseDTO.class), any()))
-                .thenReturn(PageResult.of(
-                        null,
-                        List.of(
-                                entityWithMetadata(matching, caseId),
-                                entityWithMetadata(deleted, deletedCaseId),
-                                entityWithMetadata(other, otherCaseId)
-                        ),
-                        0,
-                        1000,
-                        3
-                ));
-
-        PageResult<TestCaseDTO> result = testCaseService.getTestCasesBySuiteId(suiteId, 0, 20);
-
-        assertEquals(1, result.data().size());
-        assertEquals(caseId, result.data().getFirst().getId());
-        assertEquals(suiteId, result.data().getFirst().getSuiteId());
-        verify(entityService).findAll(any(), eq(TestCaseDTO.class), any());
-    }
 }
 

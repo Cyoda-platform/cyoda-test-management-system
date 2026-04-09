@@ -50,7 +50,8 @@ public class RepositoryService {
                             .getOrDefault(suite.getId(), List.of())
                             .stream()
                             .sorted(Comparator.comparing(TestCaseDTO::getSortOrder,
-                                    Comparator.nullsLast(Comparator.naturalOrder())))
+                                            Comparator.nullsLast(Comparator.naturalOrder()))
+                                    .thenComparing(c -> c.getId() != null ? c.getId().toString() : ""))
                             .map(c -> new RepositoryDTO.CaseView(
                                     c.getId(),
                                     c.getDisplayId(),
@@ -60,7 +61,6 @@ public class RepositoryService {
                                     c.getDescription(),
                                     c.getPreconditions(),
                                     c.getPriority(),
-                                    c.getStatus(),
                                     c.getSortOrder(),
                                     c.isDeleted()))
                             .toList();

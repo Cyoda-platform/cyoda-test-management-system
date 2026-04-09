@@ -28,7 +28,7 @@ interface CreateDefectModalProps {
   caseTitle: string;
   stepIdx?: number;
   sourceInitial?: string;
-  onCreateDefect: (defect: DefectData) => void;
+  onCreateDefect: (defect: DefectData) => Promise<void> | void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -51,6 +51,7 @@ const CreateDefectModal = ({ open, onOpenChange, caseId, caseTitle, stepIdx, sou
   const [source, setSource] = useState(sourceInitial || '');
   const [link, setLink] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -72,13 +73,7 @@ const CreateDefectModal = ({ open, onOpenChange, caseId, caseTitle, stepIdx, sou
     setFiles((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = () => {
-    if (!title.trim()) {
-      toast.error('Defect title is required');
-      return;
-    }
-    onCreateDefect({ title, description, severity, status, source, link, files, caseId, stepIdx });
-    toast.success('Defect created successfully');
+  const resetForm = () => {
     setTitle('');
     setDescription('');
     setSeverity('Major');
@@ -86,18 +81,29 @@ const CreateDefectModal = ({ open, onOpenChange, caseId, caseTitle, stepIdx, sou
     setSource('');
     setLink('');
     setFiles([]);
-    onOpenChange(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim()) {
+      toast.error('Defect title is required');
+      return;
+    }
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await onCreateDefect({ title, description, severity, status, source, link, files, caseId, stepIdx });
+      resetForm();
+      onOpenChange(false);
+    } catch {
+      // Error toast is shown by the caller; keep the modal open so the user can retry.
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = (val: boolean) => {
     if (!val) {
-      setTitle('');
-      setDescription('');
-      setSeverity('Major');
-      setStatus('Open');
-      setSource('');
-      setLink('');
-      setFiles([]);
+      resetForm();
     }
     onOpenChange(val);
   };

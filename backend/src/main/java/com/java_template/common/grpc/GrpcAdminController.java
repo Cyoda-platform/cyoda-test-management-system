@@ -5,6 +5,7 @@ import com.java_template.common.grpc.client.monitoring.GrpcConnectionMonitor;
 import com.java_template.common.tool.CyodaInit;
 import com.java_template.common.tool.CyodaInitConfig;
 import io.grpc.ConnectivityState;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -46,18 +47,20 @@ public class GrpcAdminController {
     }
 
     @PostMapping("/import-workflows")
-    public ResponseEntity<String> importWorkflows(
+    public ResponseEntity<CyodaInit.ImportReport> importWorkflows(
             @RequestParam(name = "recreateModels", defaultValue = "false") boolean recreateModels
     ) {
         try {
             CyodaInitConfig config = CyodaInitConfig.withRecreateModels(recreateModels);
-            cyodaInit.initCyoda(config);
-            String msg = recreateModels
-                    ? "Workflows imported and all entity models deleted + recreated successfully"
-                    : "Workflows and entities import initiated successfully";
-            return ResponseEntity.ok(msg);
+            CyodaInit.ImportReport report = cyodaInit.initCyoda(config);
+            HttpStatus status = report.success() ? HttpStatus.OK : HttpStatus.MULTI_STATUS;
+            return ResponseEntity.status(status).body(report);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Failed to import workflows: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(CyodaInit.ImportReport.fatal(
+                            recreateModels,
+                            "Failed to import workflows: " + e.getMessage()
+                    ));
         }
     }
 

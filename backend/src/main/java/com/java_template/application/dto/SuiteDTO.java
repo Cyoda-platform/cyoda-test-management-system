@@ -38,7 +38,6 @@ public class SuiteDTO implements CyodaEntity {
     @Size(max = 1000, message = "Description must not exceed 1000 characters")
     private String description;
 
-    private String status;
     private Integer sortOrder;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

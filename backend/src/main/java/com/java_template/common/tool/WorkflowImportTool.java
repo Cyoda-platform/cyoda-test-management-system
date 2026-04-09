@@ -45,9 +45,23 @@ public class WorkflowImportTool {
         Config config = context.getBean(Config.class);
 
         CyodaInit init = new CyodaInit(httpUtils, auth, objectMapper,config);
-        init.initCyoda(initConfig);
+        int exitCode = 0;
+        try {
+            CyodaInit.ImportReport report = init.initCyoda(initConfig);
+            if (!report.success()) {
+                System.err.println(report.message());
+                report.results().stream()
+                        .filter(result -> !result.success())
+                        .forEach(result -> System.err.printf(" - %s.%d: %s%n", result.entityName(), result.version(), result.message()));
+                exitCode = 2;
+            }
+        } finally {
+            context.close();
+        }
 
-        context.close();
+        if (exitCode != 0) {
+            System.exit(exitCode);
+        }
     }
 }
 

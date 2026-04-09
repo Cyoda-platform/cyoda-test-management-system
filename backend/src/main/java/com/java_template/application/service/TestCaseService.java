@@ -67,12 +67,11 @@ public class TestCaseService {
     }
 
     /**
-     * Creates a new test case with ACTIVE status.
+     * Creates a new test case.
      * Always generates a server-side display ID using the project counter so IDs
      * are unique across the project, independent of suite names, and never reused.
      */
     public TestCaseDTO createTestCase(TestCaseDTO testCase) {
-        testCase.setStatus("ACTIVE");
         testCase.setDeleted(false);
         // Always override any client-supplied displayId with a server-generated one
         testCase.setDisplayId(projectCounterService.nextDisplayId(testCase.getProjectId()));
@@ -237,7 +236,6 @@ public class TestCaseService {
             tc.setPreconditions(item.getPreconditions() != null ? item.getPreconditions() : "");
             tc.setPriority(item.getPriority() != null ? item.getPriority()
                     : com.java_template.application.dto.Priority.MEDIUM);
-            tc.setStatus("ACTIVE");
             tc.setDeleted(false);
             tc.setDisplayId(displayIds.get(i));
 
@@ -252,7 +250,6 @@ public class TestCaseService {
                     step.setStepNumber(s.getStepNumber() != null ? s.getStepNumber() : stepNum);
                     step.setAction(s.getAction() != null ? s.getAction() : "");
                     step.setExpectedResult(s.getExpectedResult() != null ? s.getExpectedResult() : "");
-                    step.setStatus("untested");
                     testStepService.createTestStep(step);
                     stepNum++;
                 }

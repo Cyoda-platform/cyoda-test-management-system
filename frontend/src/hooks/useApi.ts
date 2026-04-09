@@ -30,6 +30,7 @@ import {
   type TestStep,
   type TestRun,
   type TestRunCase,
+  type TestRunDetail,
   type TestRunStep,
   type Defect,
   type Report,
@@ -435,6 +436,41 @@ export function useTestRun(projectId: string, runId: string) {
   });
 }
 
+/**
+ * Fetches the run AND all its DB-backed TestRunCase records in a single HTTP
+ * request (`GET /runs/{id}/details`), eliminating the two-request waterfall
+ * that caused 10+ pending requests and >10 s latency in the Run Execution view.
+ *
+ * Returns `{ run, runCases, isLoading, isError }` so callers can destructure
+ * what they need without fetching the same data twice.
+ */
+export function useTestRunDetails(projectId: string, runId: string) {
+  return useQuery({
+    queryKey: [...keys.runs.detail(projectId, runId), 'details'] as const,
+    queryFn:  () => testRunsApi.getDetails(projectId, runId),
+    enabled:  !!projectId && !!runId,
+    // ── staleTime rationale ───────────────────────────────────────────────────
+    // 10 s gives us a fresh fetch on mount (first open / page refresh) while
+    // preventing the re-fetch cascade that caused the infinite-loop:
+    //
+    //   click step → updateRun.onSuccess → invalidateQueries(details)
+    //   → staleTime:0 triggers immediate refetch
+    //   → runDetails changes → component re-renders
+    //   → next click invalidates again → loop
+    //
+    // Step-status display is driven entirely by local `stepStatuses` state, so
+    // a short cache window is perfectly safe.  Full-structure refetches only
+    // happen on meaningful state transitions (complete / unlock) which
+    // explicitly invalidate this key.
+    staleTime: 10_000,
+    // Only auto-refetch when the component actually mounts (first open / tab
+    // switch back to the page), not on every query invalidation.
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    select: (data: TestRunDetail) => data,
+  });
+}
+
 export function useCreateTestRun() {
   const qc = useQueryClient();
   return useMutation({
@@ -496,8 +532,18 @@ export function useUpdateTestRun() {
       });
     },
     onSuccess: (_data, { projectId, id }) => {
+      // Invalidate the list so the TestRuns table reflects updated counters.
       qc.invalidateQueries({ queryKey: keys.runs.all(projectId) });
+      // Invalidate the scalar detail (used by useTestRun callers outside RunExecution).
       qc.invalidateQueries({ queryKey: keys.runs.detail(projectId, id) });
+      // ── DO NOT invalidate the batch-details key here ──────────────────────
+      // updateTestRun fires on every single step-status click. Invalidating the
+      // details query at staleTime:0 would trigger an immediate network refetch
+      // after every click, creating an O(n-clicks) request flood (the infinite
+      // loop visible in the Network tab).  Step-status changes are reflected in
+      // local React state immediately; the details query is only needed for the
+      // initial mount and for structural transitions (complete / unlock) which
+      // explicitly invalidate it below.
     },
   });
 }
@@ -510,6 +556,7 @@ export function useCompleteTestRun() {
     onSuccess: (_data, { projectId, id }) => {
       qc.invalidateQueries({ queryKey: keys.runs.all(projectId) });
       qc.invalidateQueries({ queryKey: keys.runs.detail(projectId, id) });
+      qc.invalidateQueries({ queryKey: [...keys.runs.detail(projectId, id), 'details'] });
     },
   });
 }
@@ -522,6 +569,7 @@ export function useUnlockTestRun() {
     onSuccess: (_data, { projectId, id }) => {
       qc.invalidateQueries({ queryKey: keys.runs.all(projectId) });
       qc.invalidateQueries({ queryKey: keys.runs.detail(projectId, id) });
+      qc.invalidateQueries({ queryKey: [...keys.runs.detail(projectId, id), 'details'] });
     },
   });
 }
@@ -752,6 +800,11 @@ export function useUpdateTestRunCaseStatus() {
     }) => testRunCasesApi.update(projectId, runId, id, { status }),
     onSuccess: (_data, { projectId, runId }) => {
       qc.invalidateQueries({ queryKey: keys.runCases.all(projectId, runId) });
+      // ── DO NOT invalidate batch-details here ──────────────────────────────
+      // updateTestRunCaseStatus fires on every step click alongside updateTestRun.
+      // Two simultaneous details invalidations would double the refetch rate and
+      // recreate the infinite-loop.  The details cache is updated directly via
+      // setQueryData inside ensureRunCaseId when a new record is lazily created.
     },
   });
 }

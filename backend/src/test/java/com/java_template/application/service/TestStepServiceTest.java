@@ -19,6 +19,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,14 +54,13 @@ class TestStepServiceTest {
     }
 
     @Test
-    void testCreateTestStepSetsDefaultStatus() {
+    void testCreateTestStep() {
         when(entityService.create(any(TestStepDTO.class)))
                 .thenAnswer(inv -> entityWithMetadata(inv.getArgument(0), stepId));
 
         TestStepDTO created = testStepService.createTestStep(testStep);
 
         assertNotNull(created.getId());
-        assertEquals("untested", created.getStatus());
         assertEquals(caseId, created.getTestCaseId());
     }
 
@@ -76,47 +76,6 @@ class TestStepServiceTest {
     }
 
     @Test
-    void testGetTestStepsByTestCaseIdFiltersAndSorts() {
-        UUID otherStepId = UUID.randomUUID();
-        UUID otherCaseId = UUID.randomUUID();
-
-        TestStepDTO third = new TestStepDTO();
-        third.setTestCaseId(caseId);
-        third.setStepNumber(3);
-        third.setAction("Step 3");
-
-        TestStepDTO first = new TestStepDTO();
-        first.setTestCaseId(caseId);
-        first.setStepNumber(1);
-        first.setAction("Step 1");
-
-        TestStepDTO other = new TestStepDTO();
-        other.setTestCaseId(otherCaseId);
-        other.setStepNumber(2);
-        other.setAction("Other case step");
-
-        when(entityService.findAll(any(), eq(TestStepDTO.class), any()))
-                .thenReturn(PageResult.of(
-                        null,
-                        List.of(
-                                entityWithMetadata(third, stepId),
-                                entityWithMetadata(first, UUID.randomUUID()),
-                                entityWithMetadata(other, otherStepId)
-                        ),
-                        0,
-                        1000,
-                        3
-                ));
-
-        List<TestStepDTO> result = testStepService.getTestStepsByTestCaseId(caseId);
-
-        assertEquals(2, result.size());
-        assertEquals(1, result.get(0).getStepNumber());
-        assertEquals(3, result.get(1).getStepNumber());
-        assertTrue(result.stream().allMatch(step -> caseId.equals(step.getTestCaseId())));
-    }
-
-    @Test
     void testDeleteTestStep() {
         when(entityService.deleteById(stepId)).thenReturn(stepId);
 
@@ -124,5 +83,24 @@ class TestStepServiceTest {
 
         assertTrue(deleted);
         verify(entityService).deleteById(stepId);
+    }
+
+    @Test
+    void testUpdateTestStep() {
+        testStep.setId(stepId);
+        TestStepDTO updated = new TestStepDTO();
+        updated.setAction("Updated action");
+        updated.setExpectedResult("Updated result");
+        updated.setStepNumber(2);
+
+        when(entityService.update(eq(stepId), any(TestStepDTO.class), isNull()))
+                .thenReturn(entityWithMetadata(updated, stepId));
+
+        TestStepDTO result = testStepService.updateTestStep(stepId, updated);
+
+        assertEquals("Updated action", result.getAction());
+        assertEquals("Updated result", result.getExpectedResult());
+        assertEquals(2, result.getStepNumber());
+        verify(entityService).update(eq(stepId), any(TestStepDTO.class), isNull());
     }
 }

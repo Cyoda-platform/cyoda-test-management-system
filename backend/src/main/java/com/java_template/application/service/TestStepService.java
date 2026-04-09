@@ -51,9 +51,6 @@ public class TestStepService {
      * Creates a new test step
      */
     public TestStepDTO createTestStep(TestStepDTO testStep) {
-        if (testStep.getStatus() == null || testStep.getStatus().isBlank()) {
-            testStep.setStatus("untested");
-        }
         return withId(entityService.create(testStep));
     }
 

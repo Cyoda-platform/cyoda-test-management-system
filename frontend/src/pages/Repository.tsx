@@ -153,13 +153,15 @@ const Repository = () => {
     }
   }, [repositoryData]);
 
-  // Auto-select first case only once when data is fully loaded
+  // Auto-select first case only once when data is fully loaded.
+  // Mark autoSelectedRef as done even when the repo is empty so this
+  // effect does not keep running on every suite/re-render cycle.
   const autoSelectedRef = useRef(false);
   useEffect(() => {
     if (!autoSelectedRef.current && !isLoadingRepo) {
+      autoSelectedRef.current = true;
       const firstCase = suites.flatMap(s => s.cases).find(c => !c.deleted);
       if (firstCase) {
-        autoSelectedRef.current = true;
         setSelectedCase(firstCase);
       }
     }
@@ -669,6 +671,7 @@ const Repository = () => {
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [quickCreateSuiteId, setQuickCreateSuiteId] = useState<string>('');
   const [quickCreateTitle, setQuickCreateTitle] = useState('');
+  const [quickCreateLoading, setQuickCreateLoading] = useState(false);
 
   // Delete confirmation
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -1335,6 +1338,11 @@ const Repository = () => {
                 </Button>
               </div>
               <div className="px-2 pb-2">
+                {!isLoadingRepo && localSuites.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground px-2 py-1">
+                    No suites yet. Click&nbsp;<span className="font-semibold">+</span>&nbsp;to create one.
+                  </p>
+                )}
                 {localSuites.map((suite) => {
                   const isSuiteTarget = dropTarget?.type === 'suite' && dropTarget.id === suite.id;
                   return (
@@ -1394,6 +1402,20 @@ const Repository = () => {
           {/* Case List — virtualised: only visible rows are in the DOM */}
           <ResizablePanel id="middle" order={2} defaultSize={selectedCase ? panelSizes.middle : 100 - panelSizes.left} minSize={30}>
             <div ref={casePanelRef} className="h-full min-w-0 overflow-auto bg-card">
+              {/* Empty-state: shown when the project has no suites/cases yet */}
+              {!isLoadingRepo && localSuites.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8 select-none">
+                  <FileText className="h-10 w-10 text-muted-foreground/30" strokeWidth={1} />
+                  <p className="text-sm font-medium text-foreground">No test cases yet</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Create your first suite to get started, then add test cases to it.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={openCreateSuite} className="mt-1">
+                    <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                    Create your first suite
+                  </Button>
+                </div>
+              )}
               <div style={{ height: caseTotalSize, position: 'relative' }}>
                 {caseVirtualItems.map(vi => {
                   const row = flatRows[vi.index];
@@ -1723,7 +1745,7 @@ const Repository = () => {
       </Dialog>
 
       {/* Quick Create Modal */}
-      <Dialog open={quickCreateOpen} onOpenChange={setQuickCreateOpen}>
+      <Dialog open={quickCreateOpen} onOpenChange={(open) => { if (!quickCreateLoading) setQuickCreateOpen(open); }}>
         <DialogContent className="sm:max-w-md glass-surface">
           <DialogHeader>
             <DialogTitle className="text-foreground">Quick Create Test Case</DialogTitle>
@@ -1734,7 +1756,7 @@ const Repository = () => {
           <div className="space-y-3 py-2">
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Suite</label>
-              <Select value={quickCreateSuiteId} onValueChange={setQuickCreateSuiteId}>
+              <Select value={quickCreateSuiteId} onValueChange={setQuickCreateSuiteId} disabled={quickCreateLoading}>
                 <SelectTrigger className="h-9 bg-white border border-input">
                   <SelectValue />
                 </SelectTrigger>
@@ -1751,16 +1773,26 @@ const Repository = () => {
                 placeholder="e.g. Verify login with valid credentials"
                 value={quickCreateTitle}
                 onChange={(e) => setQuickCreateTitle(e.target.value)}
+                disabled={quickCreateLoading}
                 onKeyDown={async (e) => {
-                  if (e.key === 'Enter' && quickCreateTitle.trim() && projectId) {
+                  if (e.key === 'Enter' && quickCreateTitle.trim() && projectId && !quickCreateLoading) {
+                    setQuickCreateLoading(true);
                     try {
                       await testCasesApi.create(projectId, quickCreateSuiteId, {
                         title: quickCreateTitle.trim(), priority: 'MEDIUM',
                         description: '', preconditions: '',
                       });
+                      // Invalidate both the suite-specific cache and the repository
+                      // aggregate so the new case appears immediately in the list.
                       queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, quickCreateSuiteId) });
+                      queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+                      setQuickCreateTitle('');
                       setQuickCreateOpen(false);
-                    } catch (e2) { toast.error(e2 instanceof Error ? e2.message : 'Failed'); }
+                    } catch (e2) {
+                      toast.error(e2 instanceof Error ? e2.message : 'Failed to create test case');
+                    } finally {
+                      setQuickCreateLoading(false);
+                    }
                   }
                 }}
                 autoFocus
@@ -1769,24 +1801,33 @@ const Repository = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" size="sm" onClick={() => setQuickCreateOpen(false)}>Cancel</Button>
+            <Button variant="ghost" size="sm" disabled={quickCreateLoading} onClick={() => setQuickCreateOpen(false)}>Cancel</Button>
             <Button
               size="sm"
               className="bg-primary text-primary-foreground hover:bg-primary/90 border-0"
-              disabled={!quickCreateTitle.trim()}
+              disabled={!quickCreateTitle.trim() || quickCreateLoading}
               onClick={async () => {
-                if (!projectId) return;
+                if (!projectId || quickCreateLoading) return;
+                setQuickCreateLoading(true);
                 try {
                   await testCasesApi.create(projectId, quickCreateSuiteId, {
                     title: quickCreateTitle.trim(), priority: 'MEDIUM',
                     description: '', preconditions: '',
                   });
+                  // Invalidate both the suite-specific cache and the repository
+                  // aggregate so the new case appears immediately in the list.
                   queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, quickCreateSuiteId) });
+                  queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+                  setQuickCreateTitle('');
                   setQuickCreateOpen(false);
-                } catch (e2) { toast.error(e2 instanceof Error ? e2.message : 'Failed'); }
+                } catch (e2) {
+                  toast.error(e2 instanceof Error ? e2.message : 'Failed to create test case');
+                } finally {
+                  setQuickCreateLoading(false);
+                }
               }}
             >
-              Create Case
+              {quickCreateLoading ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" strokeWidth={1.5} />Creating…</> : 'Create Case'}
             </Button>
           </DialogFooter>
         </DialogContent>

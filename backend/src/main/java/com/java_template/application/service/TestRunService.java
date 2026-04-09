@@ -100,7 +100,45 @@ public class TestRunService {
                 .stream().map(this::withId).toList();
     }
 
+    /**
+     * Updates a test run, guarding against accidental caseIds / stepStatuses erasure.
+     *
+     * <p>The frontend sends a full-entity replacement body on every step-status click.
+     * If the incoming payload omits {@code caseIds} (e.g. due to a stale ref during a
+     * rapid update sequence), the stored snapshot would be wiped, causing all run cases
+     * to vanish on the next page refresh. This guard fetches the existing record and
+     * re-applies its {@code caseIds} whenever the caller sends none.</p>
+     *
+     * <p>Similarly, {@code stepStatuses} is never allowed to shrink — the server merges
+     * the incoming map on top of the stored one so that a concurrent update from another
+     * tab cannot silently discard progress already saved by the first tab.</p>
+     */
     public TestRunDTO updateTestRun(UUID id, TestRunDTO testRun) {
+        boolean needsCaseIdsMerge   = testRun.getCaseIds() == null || testRun.getCaseIds().isEmpty();
+        boolean needsStatusMerge    = testRun.getStepStatuses() == null;
+
+        if (needsCaseIdsMerge || needsStatusMerge) {
+            getTestRunById(id).ifPresent(existing -> {
+                if (needsCaseIdsMerge
+                        && existing.getCaseIds() != null
+                        && !existing.getCaseIds().isEmpty()) {
+                    testRun.setCaseIds(existing.getCaseIds());
+                }
+                if (needsStatusMerge && existing.getStepStatuses() != null) {
+                    testRun.setStepStatuses(existing.getStepStatuses());
+                } else if (!needsStatusMerge
+                        && existing.getStepStatuses() != null
+                        && !existing.getStepStatuses().isEmpty()) {
+                    // Merge: keep any keys from the stored map that the caller did not send.
+                    // This prevents a concurrent save from the second browser tab from wiping
+                    // step progress saved by the first tab.
+                    java.util.Map<String, String> merged = new java.util.LinkedHashMap<>(existing.getStepStatuses());
+                    merged.putAll(testRun.getStepStatuses());
+                    testRun.setStepStatuses(merged);
+                }
+            });
+        }
+
         return withId(entityService.update(id, testRun, null));
     }
 

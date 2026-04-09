@@ -56,9 +56,6 @@ public class TestCaseRepository {
             if (testCase.getDescription() != null) {
                 existing.setDescription(testCase.getDescription());
             }
-            if (testCase.getStatus() != null) {
-                existing.setStatus(testCase.getStatus());
-            }
             if (testCase.getProjectId() != null) {
                 existing.setProjectId(testCase.getProjectId());
             }

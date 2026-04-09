@@ -65,9 +65,66 @@ public class TestRunCaseService {
                 .withConditions(List.of(condition));
     }
 
+    /**
+     * Creates a {@link TestRunCaseDTO} with upsert semantics.
+     *
+     * <p>If a {@code TestRunCase} record already exists for the given
+     * {@code (testRunId, testCaseId)} pair, the existing record is returned
+     * immediately without creating a duplicate. This prevents the "two pending
+     * /cases" deadlock that occurred when the frontend fired concurrent
+     * {@code POST /cases} requests for the same case (e.g. from the auto-fail
+     * modal trigger and the background resolution of {@code handleBugClick}
+     * running in parallel).</p>
+     *
+     * <p>Without this guard the Cyoda entity service received two simultaneous
+     * create requests for the same logical record. Because each create requires
+     * a workflow lock, the second request blocked indefinitely waiting for the
+     * first — keeping {@code /cases} in {@code (pending)} state in the Network
+     * tab and causing the defect-creation modal to hang.</p>
+     */
     public TestRunCaseDTO createTestRunCase(TestRunCaseDTO testRunCase) {
+        // Upsert guard: check for an existing record with the same run+case pair.
+        if (testRunCase.getTestRunId() != null && testRunCase.getTestCaseId() != null) {
+            try {
+                List<TestRunCaseDTO> existing = getTestRunCasesByTestRunIdAndTestCaseId(
+                        testRunCase.getTestRunId(), testRunCase.getTestCaseId());
+                if (!existing.isEmpty()) {
+                    log.debug("TestRunCase already exists for run={} case={} — returning existing id={}",
+                            testRunCase.getTestRunId(), testRunCase.getTestCaseId(), existing.get(0).getId());
+                    return existing.get(0);
+                }
+            } catch (Exception e) {
+                // If the existence check itself fails (e.g. CYODA search error), proceed
+                // with creation — a duplicate is safer than a missing record.
+                log.warn("Upsert existence check failed for TestRunCase run={} case={}: {}",
+                        testRunCase.getTestRunId(), testRunCase.getTestCaseId(), e.getMessage());
+            }
+        }
+
         testRunCase.setStatus("UNTESTED");
         return withId(entityService.create(testRunCase));
+    }
+
+    /**
+     * Finds existing {@link TestRunCaseDTO} records for a specific run+case combination.
+     * Used by the upsert guard in {@link #createTestRunCase}.
+     */
+    private List<TestRunCaseDTO> getTestRunCasesByTestRunIdAndTestCaseId(UUID testRunId, UUID testCaseId) {
+        SimpleCondition runCondition = new SimpleCondition()
+                .withJsonPath("$.testRunId")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(testRunId.toString()));
+        SimpleCondition caseCondition = new SimpleCondition()
+                .withJsonPath("$.testCaseId")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(testCaseId.toString()));
+        GroupCondition condition = new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(runCondition, caseCondition));
+        return entityService.search(MODEL_SPEC, condition, TestRunCaseDTO.class)
+                .data().stream()
+                .map(this::withId)
+                .toList();
     }
 
     /**

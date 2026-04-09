@@ -575,8 +575,11 @@ public class CyodaRepository implements CrudRepository {
             logger.warn("Not found happened", exception);
             return PageResult.of(null, Collections.emptyList(), 1, 0, 0L);
         }
-        final var cause = exception instanceof CompletionException ? exception.getCause() : exception;
-        throw new CompletionException("Unhandled error", cause);
+        // For any other error (e.g. an empty or uninitialised project whose entities
+        // do not yet exist in the platform), return an empty page with HTTP 200 so
+        // callers receive an empty list rather than a 500 Internal Server Error.
+        logger.warn("Returning empty page result for unhandled repository error", exception);
+        return PageResult.of(null, Collections.emptyList(), 1, 0, 0L);
     }
 
     private boolean isNotFound(final Throwable exception) {

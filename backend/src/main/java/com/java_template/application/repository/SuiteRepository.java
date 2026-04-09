@@ -46,9 +46,6 @@ public class SuiteRepository {
             if (suite.getDescription() != null) {
                 existing.setDescription(suite.getDescription());
             }
-            if (suite.getStatus() != null) {
-                existing.setStatus(suite.getStatus());
-            }
             if (suite.getProjectId() != null) {
                 existing.setProjectId(suite.getProjectId());
             }

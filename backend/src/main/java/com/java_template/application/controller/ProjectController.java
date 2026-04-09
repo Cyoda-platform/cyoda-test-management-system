@@ -29,7 +29,11 @@ public class ProjectController {
 
     @PostMapping
     @Operation(summary = "Create a new project")
-    public ResponseEntity<ProjectDTO> createProject(@Valid @RequestBody ProjectDTO project) {
+    public ResponseEntity<ProjectDTO> createProject(@Valid @RequestBody ProjectDTO project, HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         ProjectDTO created = projectService.createProject(project);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
@@ -52,7 +56,11 @@ public class ProjectController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Update a project")
-    public ResponseEntity<ProjectDTO> updateProject(@PathVariable UUID id, @Valid @RequestBody ProjectDTO project) {
+    public ResponseEntity<ProjectDTO> updateProject(@PathVariable UUID id, @Valid @RequestBody ProjectDTO project, HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (!projectService.projectExists(id)) {
             return ResponseEntity.notFound().build();
         }

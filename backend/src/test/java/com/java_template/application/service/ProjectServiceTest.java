@@ -64,7 +64,6 @@ public class ProjectServiceTest {
         assertNotNull(created.getId());
         assertEquals(projectId, created.getId());
         assertEquals("Test Project", created.getName());
-        assertEquals("ACTIVE", created.getStatus());
     }
 
     @Test

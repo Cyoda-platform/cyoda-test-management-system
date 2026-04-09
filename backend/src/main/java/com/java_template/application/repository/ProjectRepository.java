@@ -46,9 +46,6 @@ public class ProjectRepository {
             if (project.getDescription() != null) {
                 existing.setDescription(project.getDescription());
             }
-            if (project.getStatus() != null) {
-                existing.setStatus(project.getStatus());
-            }
             existing.setUpdatedAt(java.time.LocalDateTime.now().toString() + "Z");
             return existing;
         });
