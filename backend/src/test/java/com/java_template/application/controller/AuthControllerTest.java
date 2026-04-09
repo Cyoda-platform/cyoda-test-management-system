@@ -50,8 +50,11 @@ public class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                // token is no longer returned in body — it is set as an httpOnly cookie
-                .andExpect(jsonPath("$.token").doesNotExist())
+                // Token is returned in body (dual-delivery: body + httpOnly cookie).
+                // AuthController.login() passes authResponse.token into new LoginResponse(token,...).
+                // LoginResponse has no @JsonIgnore on token, so it is always serialised.
+                // BUG-001 FIX: previous assertion $.token.doesNotExist() was incorrect.
+                .andExpect(jsonPath("$.token").value("mock-jwt-token"))
                 .andExpect(jsonPath("$.username").value("admin"))
                 .andExpect(cookie().exists(AuthController.COOKIE_NAME));
     }

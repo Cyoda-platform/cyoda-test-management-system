@@ -148,7 +148,15 @@ public class ProjectService {
     }
 
     public boolean deleteProject(UUID id) {
+        // BUG-002 FIX: check existence before calling deleteById so the controller
+        // can return 404 for unknown IDs.  Previously this method always returned
+        // true, making ProjectController's notFound() branch unreachable dead code.
+        if (!projectExists(id)) {
+            logger.warn("[Project] Delete requested for non-existent project: {}", id);
+            return false;
+        }
         entityService.deleteById(id);
+        logger.info("[Project] Deleted project: {}", id);
         return true;
     }
 

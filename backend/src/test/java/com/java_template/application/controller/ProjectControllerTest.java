@@ -121,6 +121,18 @@ public class ProjectControllerTest {
     }
 
     @Test
+    @DisplayName("BUG-002 fix: Delete non-existent project returns 404 Not Found")
+    public void testDeleteProjectNotFound() throws Exception {
+        UUID missingId = UUID.randomUUID();
+        // Service returns false when entity does not exist (BUG-002 fix)
+        when(projectService.deleteProject(missingId)).thenReturn(false);
+
+        mockMvc.perform(delete("/projects/" + missingId)
+                .requestAttr("role", "ADMIN"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("FR 1.5: Tester should not be able to delete project")
     public void testDeleteProjectForbiddenForTester() throws Exception {
         UUID projectId = UUID.randomUUID();
