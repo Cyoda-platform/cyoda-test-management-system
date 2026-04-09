@@ -2,11 +2,13 @@ package com.java_template.common.tool;
 
 import com.beust.jcommander.JCommander;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.java_template.Application;
 import com.java_template.common.auth.Authentication;
 import com.java_template.common.config.Config;
 import com.java_template.common.util.HttpUtils;
 import com.java_template.common.util.JsonUtils;
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.boot.SpringApplication;
+import org.springframework.context.ApplicationContext;
 
 /**
  * ABOUTME: Command-line tool for importing workflow definitions into Cyoda platform
@@ -34,17 +36,15 @@ public class WorkflowImportTool {
             System.exit(0);
         }
 
-        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
-        context.register(Authentication.class, HttpUtils.class, JsonUtils.class);
-        context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
-        context.refresh();
+        // Use Spring Boot to create ApplicationContext with proper configuration
+        ApplicationContext context = SpringApplication.run(Application.class, args);
 
         Authentication auth = context.getBean(Authentication.class);
         HttpUtils httpUtils = context.getBean(HttpUtils.class);
         ObjectMapper objectMapper = context.getBean(ObjectMapper.class);
         Config config = context.getBean(Config.class);
 
-        CyodaInit init = new CyodaInit(httpUtils, auth, objectMapper,config);
+        CyodaInit init = new CyodaInit(httpUtils, auth, objectMapper, config);
         int exitCode = 0;
         try {
             CyodaInit.ImportReport report = init.initCyoda(initConfig);
@@ -56,7 +56,7 @@ public class WorkflowImportTool {
                 exitCode = 2;
             }
         } finally {
-            context.close();
+            // Spring Boot will handle context closure via shutdown hook
         }
 
         if (exitCode != 0) {

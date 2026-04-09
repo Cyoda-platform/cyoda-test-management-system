@@ -311,8 +311,22 @@ public class CyodaInit {
 
             if (statusCode >= 200 && statusCode < 300) {
                 if (config.recreateModels()) {
+                    // Known issue: Defect and TestRunCase cannot be deleted in Cyoda (protected models)
+                    // Skip recreation for these models
+                    if ("Defect".equals(entityName) || "TestRunCase".equals(entityName)) {
+                        logger.warn("⚠️  Skipping recreation for protected model: {} (version: {}). "
+                                + "This model exists in Cyoda and cannot be deleted.", entityName, version);
+                        logger.info("ℹ️  Entity model already exists for: {} (version: {})", entityName, version);
+                        return "Workflow imported; entity model already existed (skipped recreation for protected model)";
+                    }
+
                     logger.info("🗑️  Entity model exists for: {} (version: {}), deleting due to --recreate-models flag", entityName, version);
-                    deleteEntityModel(token, entityName, version);
+                    try {
+                        deleteEntityModel(token, entityName, version);
+                    } catch (Exception e) {
+                        logger.error("❌ Failed to delete entity model for: {} (version: {}), but continuing with creation: {}",
+                                entityName, version, e.getMessage());
+                    }
                     logger.info("📝 Creating entity model for: {} (version: {})", entityName, version);
                     createEntityModel(token, entityName, version);
                     return "Workflow imported; entity model recreated successfully";
