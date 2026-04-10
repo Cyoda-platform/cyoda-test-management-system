@@ -1,9 +1,11 @@
+# copy this into profile specific yaml file, for example application-local.yml
+# Fill in all the values in <>
 logging:
   level:
-    root: ${LOG_LEVEL:INFO}
+    root: INFO
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: 9090
   forward-headers-strategy: framework
   servlet:
     context-path: /api
@@ -43,15 +45,15 @@ app:
     # Comma-separated list of allowed origins (no wildcards when credentials enabled)
     # Dev: http://localhost:3000,http://localhost:5173
     # Prod: https://app.yourdomain.com
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+    allowed-origins: http://localhost:8080,http://localhost:8081,http://localhost:8082,http://localhost:8083,http://localhost:3000,http://localhost:5173
     # Allowed HTTP methods
     allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
     # Allowed request headers
     allowed-headers: Authorization,Content-Type,Accept,Origin,X-Requested-With,Cache-Control
     # Headers exposed to the client (empty by default for security)
     exposed-headers:
-    # Allow credentials (cookies, auth headers) - required for httpOnly cookie auth
-    allow-credentials: true
+    # Allow credentials (cookies, auth headers) - false is more secure
+    allow-credentials: false
     # Preflight cache duration in seconds (3600 = 1 hour)
     max-age-seconds: 3600
     # URL pattern to apply CORS to
@@ -63,14 +65,11 @@ app:
     # Encryption key for OBO signing key at rest. Resolved in order:
     # 1. encryption-key env var / property (if non-blank)
     # 2. encryption-key-file (read from file path; generated at Docker build time)
-    # When neither source provides a key, OBO is disabled and user-triggered Cyoda
-    # calls will throw OboTokenException (fail-fast).
-    # caas-org-id is fetched dynamically from Cyoda /account at startup.
+    # When neither source provides a key, OBO is disabled.
     encryption-key: ${APP_OBO_ENCRYPTION_KEY:}
     encryption-key-file: ${APP_OBO_ENCRYPTION_KEY_FILE:/app/obo-encryption-key.txt}
-    # These should be admin accounts, but for the moment they are the regular service account has ADMIN rights.
-    admin-client-id: ${CYODA_CLIENT_ID:}
-    admin-client-secret: ${CYODA_CLIENT_SECRET:}
+    admin-client-id: ${CYODA_CLIENT_ID}
+    admin-client-secret: ${CYODA_CLIENT_SECRET}
     key-id: cyoda-tms-key-001
     issuer: cyoda-tms-local
     subject-token-ttl-seconds: 300
@@ -102,27 +101,26 @@ app:
     ssl-key-store-password:
   config:
     # Cyoda Platform Connection
-    # Set CYODA_HOST, CYODA_CLIENT_ID, CYODA_CLIENT_SECRET in your .env file or environment variables
-    # Get credentials from Cyoda AI Studio
-    cyoda-host: ${CYODA_HOST}
-    cyoda-client-id: ${CYODA_CLIENT_ID}
-    cyoda-client-secret: ${CYODA_CLIENT_SECRET}
+    # Override these via environment variables or profile-specific YAML files
+    # MUST SET cyoda-host, cyoda-client-id, cyoda-client-secret. Get them from Cyoda AI Studio, for example
+    cyoda-host: <CYODA_HOST>
+    cyoda-client-id: <CYODA_CLIENT_ID>
+    cyoda-client-secret: <CYODA_CLIENT_SECRET>
     cyoda-api-url: https://${app.config.cyoda-host}/api
 
     # gRPC Configuration
     grpc-address: grpc-${app.config.cyoda-host}
-    grpc-server-port: ${GRPC_PORT:443}
+    grpc-server-port: 443
     grpc-processor-tag: cyoda_application
     grpc-communication-data-format: JSON
 
     # gRPC Channel Configuration
-    # Increased for large file operations (PNG, PDF uploads)
-    grpc-max-inbound-message-size: 67108864        # 64MB (was 16MB)
+    grpc-max-inbound-message-size: 16777216
     grpc-max-inbound-metadata-size: 16384
-    grpc-flow-control-window: 134217728             # 128MB (was 64MB)
-    grpc-keep-alive-time-seconds: 15                # More frequent keep-alives (was 30s)
-    grpc-keep-alive-timeout-seconds: 15             # More generous timeout (was 10s)
-    grpc-idle-timeout-seconds: 600                  # 10 minutes for long operations (was 5 min)
+    grpc-flow-control-window: 67108864
+    grpc-keep-alive-time-seconds: 30
+    grpc-keep-alive-timeout-seconds: 10
+    grpc-idle-timeout-seconds: 300
 
     # Thread Pool Configuration
     processor-thread-pool: 20
@@ -142,44 +140,15 @@ app:
     keep-alive-warning-threshold: 60000
 
     # SSL Configuration -- only needed for local development using self-signed certificates
-    ssl-trust-all: ${SSL_TRUST_ALL:false}
+    ssl-trust-all: false
     ssl-trusted-hosts:
 
     # Feature Flags
     # This is just for testing purposes. It activates NoopProcessor and AlwaysTrueCriterion/AlwaysFalseCriterion
     # which can be used for testing workflows without having to implement actual processors/criteria
-    include-default-operations: ${INCLUDE_DEFAULT_OPERATIONS:false}
-
-    # Entity Discovery
-    # Base package scanned for CyodaEntity implementations during workflow import.
-    # Override to match your application's entity package.
-    entity-base-package: com.java_template.application
-
-    # Migrated from @Value annotations — single source of truth in Config
-    skip-ssl: false
-    execution-mode: platform
-    cyoda-light:
-      active: false
-      http-url: "http://cyoda-light:8080"
-      grpc-host: "cyoda-light"
-      grpc-port: 50051
+    include-default-operations: false
 
 cyoda:
   api:
     url: https://${app.config.cyoda-host}/api
 
----
-# Local development profile: verbose Spring Security / CORS logging.
-# Never enable on cloud deployments — leaks auth decisions and potentially bearer token metadata.
-spring:
-  config:
-    activate:
-      on-profile: local
-logging:
-  level:
-    # Shows each request passing through the security filter chain and why it's rejected
-    org.springframework.security: DEBUG
-    # Shows CORS pre-flight processing and origin matching decisions
-    org.springframework.web.cors: DEBUG
-    # Shows the CorsFilter itself accepting/rejecting
-    org.springframework.web.filter.CorsFilter: DEBUG

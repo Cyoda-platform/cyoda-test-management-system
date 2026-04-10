@@ -1,0 +1,21 @@
+{{- if .Values.cyodaLight.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: cyoda-light
+  labels:
+    app.kubernetes.io/name: cyoda-light
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: cyoda-light
+  ports:
+    - name: http
+      port: {{ .Values.cyodaLight.httpPort }}
+      targetPort: {{ .Values.cyodaLight.httpPort }}
+      protocol: TCP
+    - name: grpc
+      port: {{ .Values.cyodaLight.grpcPort }}
+      targetPort: {{ .Values.cyodaLight.grpcPort }}
+      protocol: TCP
+{{- end }}
