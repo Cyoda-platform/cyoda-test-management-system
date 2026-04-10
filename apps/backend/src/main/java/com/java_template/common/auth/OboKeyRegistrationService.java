@@ -264,8 +264,7 @@ public class OboKeyRegistrationService {
     }
 
     private String loadWorkflowJsonFromClasspath() {
-        String path = "/workflow/v" + OboSigningKey.ENTITY_VERSION
-                + "/" + OboSigningKey.ENTITY_NAME.toLowerCase() + ".json";
+        String path = "/obo-signing-key/workflow.json";
         try (var stream = getClass().getResourceAsStream(path)) {
             if (stream == null) {
                 throw new OboTokenException("OboSigningKey workflow file not found on classpath: " + path);
@@ -279,10 +278,10 @@ public class OboKeyRegistrationService {
     }
 
     private String loadSampleEntityJsonFromClasspath() {
-        String dirPath = "/entity-schemas/examples/" + OboSigningKey.ENTITY_NAME + "/";
-        try (var stream = getClass().getResourceAsStream(dirPath + "obo-signing-key.json")) {
+        String path = "/obo-signing-key/sample-entity.json";
+        try (var stream = getClass().getResourceAsStream(path)) {
             if (stream == null) {
-                logger.warn("OboSigningKey sample JSON not found at {}; using inline fallback", dirPath);
+                logger.warn("OboSigningKey sample JSON not found at {}; using inline fallback", path);
                 return "{\"key_id\":\"example\",\"encrypted_private_key\":\"ZQ==\","
                         + "\"public_key_der\":\"ZQ==\","
                         + "\"cyoda_key_expires_at\":\"2027-01-01T00:00:00Z\","

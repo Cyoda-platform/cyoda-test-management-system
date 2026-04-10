@@ -1,0 +1,7 @@
+{
+  "key_id": "example-key-001",
+  "encrypted_private_key": "ZXhhbXBsZWVuY3J5cHRlZHBheWxvYWQ=",
+  "public_key_der": "ZXhhbXBsZXB1YmxpY2tleWRlcg==",
+  "cyoda_key_expires_at": "2027-01-01T00:00:00Z",
+  "last_rotated_at": "2026-01-01T00:00:00Z"
+}
