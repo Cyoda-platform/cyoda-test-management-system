@@ -16,6 +16,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -39,11 +41,11 @@ class ResponseBuilderTest {
         // Setup common mock behavior
         when(criteriaRequest.getId()).thenReturn("criteria-123");
         when(criteriaRequest.getRequestId()).thenReturn("req-456");
-        when(criteriaRequest.getEntityId()).thenReturn("entity-789");
+        when(criteriaRequest.getEntityId()).thenReturn(UUID.fromString("550e8400-e29b-41d4-a716-446655440000"));
 
         when(processorRequest.getId()).thenReturn("processor-123");
         when(processorRequest.getRequestId()).thenReturn("req-456");
-        when(processorRequest.getEntityId()).thenReturn("entity-789");
+        when(processorRequest.getEntityId()).thenReturn(UUID.fromString("550e8400-e29b-41d4-a716-446655440000"));
         when(processorRequest.getPayload()).thenReturn(mock(org.cyoda.cloud.api.event.common.DataPayload.class));
     }
 
@@ -62,7 +64,7 @@ class ResponseBuilderTest {
         assertNotNull(response);
         assertEquals("criteria-123", response.getId());
         assertEquals("req-456", response.getRequestId());
-        assertEquals("entity-789", response.getEntityId());
+        assertEquals(UUID.fromString("550e8400-e29b-41d4-a716-446655440000"), response.getEntityId());
         assertTrue(response.getSuccess());
         assertTrue(response.getMatches());
     }

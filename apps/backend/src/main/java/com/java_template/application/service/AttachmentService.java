@@ -9,9 +9,11 @@ import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EdgeMessageService;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.cyoda.cloud.api.common.model.GroupConditionDto;
+import org.cyoda.cloud.api.common.model.GroupOperatorDto;
+import org.cyoda.cloud.api.common.model.OperatorTypeDto;
+import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
+import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -47,14 +49,17 @@ public class AttachmentService {
         this.objectMapper = objectMapper;
     }
 
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
+    private GroupConditionDto conditionByField(String fieldName, Object value) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$." + fieldName)
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(value));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
     }
 
     private AttachmentDTO withId(EntityWithMetadata<AttachmentDTO> result) {
@@ -172,7 +177,7 @@ public class AttachmentService {
      * Retrieves all attachments for a specific test case.
      */
     public List<AttachmentDTO> getAttachmentsByCaseId(UUID caseId) {
-        GroupCondition condition = conditionByField("caseId", caseId.toString());
+        GroupConditionDto condition = conditionByField("caseId", caseId.toString());
         return entityService.search(MODEL_SPEC, condition, AttachmentDTO.class).data()
                 .stream()
                 .map(this::withId)
@@ -183,7 +188,7 @@ public class AttachmentService {
      * Retrieves all attachments for a specific defect.
      */
     public List<AttachmentDTO> getAttachmentsByDefectId(UUID defectId) {
-        GroupCondition condition = conditionByField("defectId", defectId.toString());
+        GroupConditionDto condition = conditionByField("defectId", defectId.toString());
         return entityService.search(MODEL_SPEC, condition, AttachmentDTO.class).data()
                 .stream()
                 .map(this::withId)
@@ -196,7 +201,7 @@ public class AttachmentService {
     public PageResult<AttachmentDTO> getAttachmentsByProjectId(UUID projectId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(page).pageSize(size).build();
-        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        GroupConditionDto condition = conditionByField("projectId", projectId.toString());
         PageResult<EntityWithMetadata<AttachmentDTO>> result =
                 entityService.search(MODEL_SPEC, condition, AttachmentDTO.class, params);
         return PageResult.of(result.searchId(),

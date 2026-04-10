@@ -10,9 +10,11 @@ import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.cyoda.cloud.api.common.model.GroupConditionDto;
+import org.cyoda.cloud.api.common.model.GroupOperatorDto;
+import org.cyoda.cloud.api.common.model.OperatorTypeDto;
+import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
+import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
@@ -44,14 +46,17 @@ public class TestCaseService {
         this.objectMapper = objectMapper;
     }
 
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
+    private GroupConditionDto conditionByField(String fieldName, Object value) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$." + fieldName)
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(value));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
     }
 
     private TestCaseDTO withId(EntityWithMetadata<TestCaseDTO> result) {
@@ -93,17 +98,20 @@ public class TestCaseService {
     public PageResult<TestCaseDTO> getTestCasesBySuiteId(UUID suiteId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(page).pageSize(size).build();
-        SimpleCondition suiteCondition = new SimpleCondition()
-                .withJsonPath("$.suiteId")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(suiteId.toString()));
-        SimpleCondition deletedCondition = new SimpleCondition()
-                .withJsonPath("$.deleted")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(false));
-        GroupCondition condition = new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(suiteCondition, deletedCondition));
+        SimpleConditionDto suiteCondition = new SimpleConditionDto()
+                .jsonPath("$.suiteId")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(suiteId.toString()));
+        suiteCondition.setType(QueryConditionTypeDto.SIMPLE);
+        SimpleConditionDto deletedCondition = new SimpleConditionDto()
+                .jsonPath("$.deleted")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(false));
+        deletedCondition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto condition = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(suiteCondition, deletedCondition));
+        condition.setType(QueryConditionTypeDto.GROUP);
         PageResult<EntityWithMetadata<TestCaseDTO>> result =
                 entityService.search(MODEL_SPEC, condition, TestCaseDTO.class, params);
         List<TestCaseDTO> sorted = result.data().stream()
@@ -119,17 +127,20 @@ public class TestCaseService {
      * Used by the repository aggregate endpoint to avoid per-suite fetches.
      */
     public List<TestCaseDTO> getCasesByProjectId(UUID projectId) {
-        SimpleCondition projectCondition = new SimpleCondition()
-                .withJsonPath("$.projectId")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(projectId.toString()));
-        SimpleCondition deletedCondition = new SimpleCondition()
-                .withJsonPath("$.deleted")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(false));
-        GroupCondition condition = new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(projectCondition, deletedCondition));
+        SimpleConditionDto projectCondition = new SimpleConditionDto()
+                .jsonPath("$.projectId")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(projectId.toString()));
+        projectCondition.setType(QueryConditionTypeDto.SIMPLE);
+        SimpleConditionDto deletedCondition = new SimpleConditionDto()
+                .jsonPath("$.deleted")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(false));
+        deletedCondition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto condition = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(projectCondition, deletedCondition));
+        condition.setType(QueryConditionTypeDto.GROUP);
         return entityService.search(MODEL_SPEC, condition, TestCaseDTO.class).data()
                 .stream()
                 .map(this::withId)
@@ -137,7 +148,7 @@ public class TestCaseService {
     }
 
     public List<TestCaseDTO> getAllTestCases() {
-        GroupCondition condition = conditionByField("deleted", false);
+        GroupConditionDto condition = conditionByField("deleted", false);
         return entityService.search(MODEL_SPEC, condition, TestCaseDTO.class).data()
                 .stream()
                 .map(this::withId)

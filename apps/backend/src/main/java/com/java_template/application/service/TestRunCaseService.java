@@ -8,9 +8,11 @@ import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.cyoda.cloud.api.common.model.GroupConditionDto;
+import org.cyoda.cloud.api.common.model.GroupOperatorDto;
+import org.cyoda.cloud.api.common.model.OperatorTypeDto;
+import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
+import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -55,14 +57,17 @@ public class TestRunCaseService {
                 result.pageNumber(), result.pageSize(), result.totalElements());
     }
 
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
+    private GroupConditionDto conditionByField(String fieldName, Object value) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$." + fieldName)
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(value));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
     }
 
     /**
@@ -110,17 +115,20 @@ public class TestRunCaseService {
      * Used by the upsert guard in {@link #createTestRunCase}.
      */
     private List<TestRunCaseDTO> getTestRunCasesByTestRunIdAndTestCaseId(UUID testRunId, UUID testCaseId) {
-        SimpleCondition runCondition = new SimpleCondition()
-                .withJsonPath("$.testRunId")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(testRunId.toString()));
-        SimpleCondition caseCondition = new SimpleCondition()
-                .withJsonPath("$.testCaseId")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(testCaseId.toString()));
-        GroupCondition condition = new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(runCondition, caseCondition));
+        SimpleConditionDto runCondition = new SimpleConditionDto()
+                .jsonPath("$.testRunId")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(testRunId.toString()));
+        runCondition.setType(QueryConditionTypeDto.SIMPLE);
+        SimpleConditionDto caseCondition = new SimpleConditionDto()
+                .jsonPath("$.testCaseId")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(testCaseId.toString()));
+        caseCondition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto condition = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(runCondition, caseCondition));
+        condition.setType(QueryConditionTypeDto.GROUP);
         return entityService.search(MODEL_SPEC, condition, TestRunCaseDTO.class)
                 .data().stream()
                 .map(this::withId)

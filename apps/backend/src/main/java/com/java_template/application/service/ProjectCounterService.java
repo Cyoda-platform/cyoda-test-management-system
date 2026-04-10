@@ -6,9 +6,11 @@ import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.cyoda.cloud.api.common.model.GroupConditionDto;
+import org.cyoda.cloud.api.common.model.GroupOperatorDto;
+import org.cyoda.cloud.api.common.model.OperatorTypeDto;
+import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
+import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -63,14 +65,17 @@ public class ProjectCounterService {
         this.objectMapper = objectMapper;
     }
 
-    private GroupCondition conditionByProjectId(UUID projectId) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$.projectId")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(projectId.toString()));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
+    private GroupConditionDto conditionByProjectId(UUID projectId) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$.projectId")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(projectId.toString()));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
     }
 
     /**
@@ -135,7 +140,7 @@ public class ProjectCounterService {
     private Optional<ProjectCounterDTO> findCounterForProject(UUID projectId) {
         try {
             // Server-side filter: only fetch counters for this project (at most one record).
-            GroupCondition condition = conditionByProjectId(projectId);
+            GroupConditionDto condition = conditionByProjectId(projectId);
             return entityService.search(COUNTER_SPEC, condition, ProjectCounterDTO.class)
                     .data().stream()
                     .map(e -> {
@@ -157,7 +162,7 @@ public class ProjectCounterService {
      */
     private long scanMaxUsedId(UUID projectId) {
         try {
-            GroupCondition condition = conditionByProjectId(projectId);
+            GroupConditionDto condition = conditionByProjectId(projectId);
             SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                     .pageNumber(0).pageSize(10_000).build();
             return entityService.search(CASE_SPEC, condition, TestCaseDTO.class, params)

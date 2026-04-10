@@ -5,9 +5,11 @@ import com.java_template.application.dto.TestStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.cyoda.cloud.api.common.model.GroupConditionDto;
+import org.cyoda.cloud.api.common.model.GroupOperatorDto;
+import org.cyoda.cloud.api.common.model.OperatorTypeDto;
+import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
+import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
@@ -31,14 +33,17 @@ public class TestStepService {
         this.objectMapper = objectMapper;
     }
 
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
+    private GroupConditionDto conditionByField(String fieldName, Object value) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$." + fieldName)
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(value));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
     }
 
     private TestStepDTO withId(EntityWithMetadata<TestStepDTO> result) {
@@ -69,7 +74,7 @@ public class TestStepService {
      * Retrieves all test steps for a specific test case
      */
     public List<TestStepDTO> getTestStepsByTestCaseId(UUID testCaseId) {
-        GroupCondition condition = conditionByField("testCaseId", testCaseId.toString());
+        GroupConditionDto condition = conditionByField("testCaseId", testCaseId.toString());
         return entityService.search(MODEL_SPEC, condition, TestStepDTO.class).data()
                 .stream()
                 .map(this::withId)
