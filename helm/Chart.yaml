@@ -1,6 +1,6 @@
 apiVersion: v2
-name: cyoda-client
-description: A Helm chart for Kubernetes
+name: cyoda-tms
+description: A Helm chart for Cyoda Test Management System
 
 # A chart can be either an 'application' or a 'library' chart.
 #

@@ -1,4 +1,4 @@
-name: cyoda-client
+name: cyoda-tms
 
 imagePullSecret:
   enabled: true
@@ -17,11 +17,6 @@ container:
     vars:
       # Timezone
       TZ: /usr/share/zoneinfo/Europe/Berlin
-
-      # Cyoda Connection (REQUIRED - must be set via --set or values override)
-      CYODA_HOST: ""  # e.g., client-05e11da2107844fc944ee5b872fcb6b6.kube3.cyoda.org
-      CYODA_CLIENT_ID: ""
-      CYODA_CLIENT_SECRET: ""
 
       # Cyoda API Configuration
       CYODA_AI_API: cyoda
@@ -49,6 +44,18 @@ container:
       MONITORING_SCHEDULER_DELAY_SECONDS: "3"
       KEEP_ALIVE_WARNING_THRESHOLD: "60000"
 
+      # OpenTelemetry Configuration
+      OTEL_SERVICE_NAME: "cyoda-tms"
+      OTEL_METRICS_EXPORTER: "prometheus"
+      OTEL_TRACES_EXPORTER: "none"
+      OTEL_LOGS_EXPORTER: "none"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""
+      OTEL_EXPORTER_PROMETHEUS_PORT: "9464"
+      OTEL_INSTRUMENTATION_GRPC_ENABLED: "true"
+      OTEL_INSTRUMENTATION_SPRING_WEB_ENABLED: "true"
+      OTEL_INSTRUMENTATION_JDBC_ENABLED: "true"
+      OTEL_INSTRUMENTATION_EXECUTOR_ENABLED: "true"
+
       # SSL Configuration
       SSL_TRUST_ALL: "false"
       SSL_TRUSTED_HOSTS: ""
@@ -65,7 +72,10 @@ container:
     # Secrets to load as environment variables
     secrets: []
 
-podAnnotations: {}
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9464"
+  prometheus.io/path: "/metrics"
 
 health:
   liveness:
@@ -81,24 +91,29 @@ health:
     periodSeconds: 30
     failureThreshold: 10
 
+frontend:
+  image:
+    imageName: cyoda-tms-frontend
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
 service:
-  name: cyoda-client-service
+  name: cyoda-tms-service
   type: NodePort
   serverPort:
-    port: 8080
-    target: 8080
+    port: 80
+    target: 80
     name: http
 
 ingress:
   enabled: true
   className: "nginx"
-  annotations:
-    # Allow uploads up to 150MB (raw multipart body; Spring Boot limit is 100MB + envelope overhead)
-    nginx.ingress.kubernetes.io/proxy-body-size: "150m"
-    # Extended timeouts for large file transfers
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "120"
+  annotations: {}
   path: /
   pathType: Prefix
   tls: []
@@ -128,6 +143,22 @@ nodeSelector: {}
 affinity: {}
 strategy: {}
 
+cyodaLight:
+  enabled: false
+  image:
+    tag: "1.0.0"
+  httpPort: 8080
+  grpcPort: 50051
+  # Log level for the cyoda-light sidecar. Valid values: trace, debug, info, warn, error.
+  logLevel: "info"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
 image:
   pullPolicy: Always
-  imageName: client-app
+  imageName: cyoda-tms

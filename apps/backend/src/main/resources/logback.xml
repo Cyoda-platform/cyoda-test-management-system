@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  ABOUTME: Logback configuration with profile-based output format.
+  Default (local dev): human-readable console output.
+  "json" profile (K8s/ELK): structured JSON to stdout, one line per log event including stack traces.
+  Activate via: SPRING_PROFILES_ACTIVE=cloud or -Dspring.profiles.active=cloud
+  -->
+
+<configuration>
+    <contextName>cyoda-tms</contextName>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Human-readable console output (default, local dev) -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <!-- JSON console output for Kubernetes/ELK -->
+    <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>
+                {"application":"cyoda-tms"}
+            </customFields>
+            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSS'Z'</timestampPattern>
+            <timeZone>UTC</timeZone>
+        </encoder>
+    </appender>
+
+    <!-- Default: plain text console -->
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+
+    <!-- When "cloud" profile is active: JSON console only -->
+    <springProfile name="cloud">
+        <root level="INFO">
+            <appender-ref ref="JSON_STDOUT"/>
+        </root>
+    </springProfile>
+</configuration>

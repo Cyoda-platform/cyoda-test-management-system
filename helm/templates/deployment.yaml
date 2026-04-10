@@ -46,6 +46,9 @@ spec:
       volumes:
         - name: tmp
           emptyDir: { }
+        - name: nginx-config
+          configMap:
+            name: {{ .Values.name }}-nginx-config
         {{- with .Values.extraVolumes }}
         {{- tpl . $ | nindent 8 }}
         {{- end }}
@@ -58,7 +61,33 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: {{ .Values.name }}
+        # Frontend: nginx serving static files and proxying /api to backend
+        - name: frontend
+          image: "{{ .Values.global.registry.host }}/{{ .Values.frontend.image.imageName }}:{{ .Values.frontend.image.tag | default .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+        # Backend: Spring Boot API server
+        - name: backend
           image: "{{ .Values.global.registry.host }}/{{ .Values.image.imageName }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources: {{- toYaml .Values.resources | nindent 12 }}
@@ -68,20 +97,25 @@ spec:
           {{- end }}
           volumeMounts:
             - name: tmp
-              # Tmp folder used by spring to write data. We need to mount this because of "readOnlyRootFilesystem" (see above)
               mountPath: /tmp/
             {{- with .Values.extraVolumeMounts }}
             {{- tpl . $ | nindent 12 }}
             {{- end }}
           ports:
-            - name: {{ .Values.service.serverPort.name }}
-              containerPort: {{ .Values.service.serverPort.target }}
+            - name: backend
+              containerPort: 8080
               protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 60
           {{- if .Values.actuatorEnabled }}
           livenessProbe:
             httpGet:
               path: {{ .Values.health.liveness.path }}
-              port: {{ .Values.service.serverPort.target }}
+              port: 8080
               scheme: HTTP
             initialDelaySeconds: {{ .Values.health.liveness.initialDelaySeconds }}
             timeoutSeconds: {{ .Values.health.liveness.timeoutSeconds }}
@@ -90,7 +124,7 @@ spec:
           readinessProbe:
             httpGet:
               path: {{ .Values.health.readiness.path }}
-              port: {{ .Values.service.serverPort.target }}
+              port: 8080
               scheme: HTTP
             initialDelaySeconds: {{ .Values.health.readiness.initialDelaySeconds }}
             timeoutSeconds: {{ .Values.health.readiness.timeoutSeconds }}
@@ -115,10 +149,6 @@ spec:
             - secretRef:
                 name: {{ . }}
              {{- end }}
-    {{- with .Values.global.hostAliases }}
-      hostAliases:
-{{ toYaml . | indent 8 }}
-    {{- end }}
       {{- if .Values.global.imagePullSecret.enabled | default false }}
       imagePullSecrets:
         - name: regcred
