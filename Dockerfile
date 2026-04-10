@@ -58,7 +58,10 @@ RUN openssl rand -base64 32 > /app/obo-encryption-key.txt
 
 EXPOSE 8080
 
+# CORS wildcard is safe here because allow-credentials=false and authentication
+# flows via Bearer tokens, which are not subject to CORS credential restrictions.
 ENV APP_CORS_ALLOWED_ORIGINS="*"
+ENV APP_CORS_ALLOW_CREDENTIALS="false"
 
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -javaagent:/app/opentelemetry-javaagent.jar"
 
