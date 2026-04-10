@@ -126,6 +126,18 @@ public class DefectService {
         return withId(entityService.update(id, defect, null));
     }
 
+    /**
+     * Returns ALL defects for a project without pagination.
+     * Used internally for cascade-delete operations.
+     */
+    public List<DefectDTO> getAllDefectsByProjectId(UUID projectId) {
+        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        return entityService.search(MODEL_SPEC, condition, DefectDTO.class).data()
+                .stream()
+                .map(this::withId)
+                .toList();
+    }
+
     public boolean deleteDefect(UUID id) {
         entityService.deleteById(id);
         return true;

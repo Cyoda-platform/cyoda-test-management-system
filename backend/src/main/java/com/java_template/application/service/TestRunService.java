@@ -101,6 +101,18 @@ public class TestRunService {
     }
 
     /**
+     * Retrieves all test runs for a project without pagination.
+     * Used internally for cascade-delete operations.
+     */
+    public List<TestRunDTO> getAllTestRunsByProjectId(UUID projectId) {
+        return entityService.findAll(MODEL_SPEC, TestRunDTO.class).data()
+                .stream()
+                .map(this::withId)
+                .filter(r -> projectId.equals(r.getProjectId()))
+                .toList();
+    }
+
+    /**
      * Updates a test run, guarding against accidental caseIds / stepStatuses erasure.
      *
      * <p>The frontend sends a full-entity replacement body on every step-status click.

@@ -79,6 +79,24 @@ public class TestRunStepService {
                 page, size, result.totalElements());
     }
 
+    /**
+     * Returns ALL TestRunStep records for a given run-case without pagination.
+     * Used internally for cascade-delete operations.
+     */
+    public List<TestRunStepDTO> getAllTestRunStepsByTestRunCaseId(UUID testRunCaseId) {
+        GroupCondition condition = conditionByField("testRunCaseId", testRunCaseId.toString());
+        return entityService.search(MODEL_SPEC, condition, TestRunStepDTO.class)
+                .data().stream().map(this::withId).toList();
+    }
+
+    /**
+     * Hard-deletes a TestRunStep entity by ID.
+     * Used during cascade deletion of parent entities.
+     */
+    public void deleteTestRunStep(UUID id) {
+        entityService.deleteById(id);
+    }
+
     public Optional<TestRunStepDTO> updateTestRunStepStatus(UUID id, String status) {
         return getTestRunStepById(id).map(trs -> {
             trs.setStatus(status);

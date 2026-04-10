@@ -25,9 +25,11 @@ public class TestRunCaseDTO implements CyodaEntity {
 
     private UUID id;
 
-    // testRunId and testCaseId are always set from path parameters — never sent in the request body
+    // testRunId, testCaseId and projectId are always set from path parameters / service logic
+    // — never sent in the request body
     private UUID testRunId;
     private UUID testCaseId;
+    private UUID projectId;
 
     private String status;
     private String bugUrl;

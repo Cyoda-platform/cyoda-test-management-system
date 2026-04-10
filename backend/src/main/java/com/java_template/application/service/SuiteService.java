@@ -11,6 +11,9 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.cyoda.cloud.api.event.common.condition.GroupCondition;
 import org.cyoda.cloud.api.event.common.condition.Operation;
 import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
@@ -24,15 +27,20 @@ import java.util.UUID;
 @Service
 public class SuiteService {
 
+    private static final Logger log = LoggerFactory.getLogger(SuiteService.class);
     private static final ModelSpec MODEL_SPEC =
             new ModelSpec().withName(SuiteDTO.ENTITY_NAME).withVersion(SuiteDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
     private final ObjectMapper objectMapper;
+    private final TestCaseService testCaseService;
 
-    public SuiteService(EntityService entityService, ObjectMapper objectMapper) {
+    public SuiteService(EntityService entityService,
+                        ObjectMapper objectMapper,
+                        @Lazy TestCaseService testCaseService) {
         this.entityService = entityService;
         this.objectMapper = objectMapper;
+        this.testCaseService = testCaseService;
     }
 
     private GroupCondition conditionByField(String fieldName, Object value) {
@@ -114,6 +122,16 @@ public class SuiteService {
     }
 
     /**
+     * Retrieves all suites for a project without pagination.
+     * Used internally for cascade-delete operations.
+     */
+    public List<SuiteDTO> getAllSuitesByProjectId(UUID projectId) {
+        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        return entityService.search(MODEL_SPEC, condition, SuiteDTO.class)
+                .data().stream().map(this::withId).toList();
+    }
+
+    /**
      * Updates an existing suite
      */
     public SuiteDTO updateSuite(UUID id, SuiteDTO suite) {
@@ -121,10 +139,25 @@ public class SuiteService {
     }
 
     /**
-     * Deletes a suite by ID
+     * Cascade-deletes a suite and soft-deletes all its test cases.
+     *
+     * <p>Test cases are soft-deleted (not hard-deleted) so that completed
+     * {@code TestRun} records retain their execution history: {@code TestRunCase}
+     * and {@code TestRunStep} records continue to reference the soft-deleted
+     * {@code TestCase} and {@code TestStep} entities, preserving PASSED/FAILED
+     * results for auditing purposes.</p>
+     *
+     * <p>TestStep records are intentionally left untouched: they remain accessible
+     * via {@code testCaseId} and are still referenced by {@code TestRunStep.testStepId},
+     * keeping the run history intact.</p>
      */
     public boolean deleteSuite(UUID id) {
+        var cases = testCaseService.getAllTestCasesBySuiteId(id);
+        log.info("[Suite] Cascade soft-delete: {} TestCase(s) for suite {}", cases.size(), id);
+        cases.forEach(tc -> testCaseService.softDeleteTestCase(tc.getId()));
+
         entityService.deleteById(id);
+        log.info("[Suite] Deleted suite: {}", id);
         return true;
     }
 

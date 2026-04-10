@@ -12,12 +12,14 @@ import org.cyoda.cloud.api.event.common.condition.Operation;
 import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for Project operations
@@ -31,10 +33,38 @@ public class ProjectService {
 
     private final EntityService entityService;
     private final ObjectMapper objectMapper;
+    private final SuiteService suiteService;
+    private final TestCaseService testCaseService;
+    private final TestStepService testStepService;
+    private final TestRunService testRunService;
+    private final TestRunCaseService testRunCaseService;
+    private final TestRunStepService testRunStepService;
+    private final DefectService defectService;
+    private final AttachmentService attachmentService;
+    private final ProjectCounterService projectCounterService;
 
-    public ProjectService(EntityService entityService, ObjectMapper objectMapper) {
+    public ProjectService(EntityService entityService,
+                          ObjectMapper objectMapper,
+                          @Lazy SuiteService suiteService,
+                          @Lazy TestCaseService testCaseService,
+                          @Lazy TestStepService testStepService,
+                          @Lazy TestRunService testRunService,
+                          @Lazy TestRunCaseService testRunCaseService,
+                          @Lazy TestRunStepService testRunStepService,
+                          @Lazy DefectService defectService,
+                          @Lazy AttachmentService attachmentService,
+                          @Lazy ProjectCounterService projectCounterService) {
         this.entityService = entityService;
         this.objectMapper = objectMapper;
+        this.suiteService = suiteService;
+        this.testCaseService = testCaseService;
+        this.testStepService = testStepService;
+        this.testRunService = testRunService;
+        this.testRunCaseService = testRunCaseService;
+        this.testRunStepService = testRunStepService;
+        this.defectService = defectService;
+        this.attachmentService = attachmentService;
+        this.projectCounterService = projectCounterService;
     }
 
     private ProjectDTO withId(EntityWithMetadata<ProjectDTO> result) {
@@ -147,16 +177,80 @@ public class ProjectService {
         return withId(entityService.update(id, project, null));
     }
 
+    /**
+     * Cascade-deletes a project and ALL of its child entities in strict bottom-up order.
+     *
+     * <p>Deletion order (leaves first, root last):</p>
+     * <ol>
+     *   <li>TestRunStep  — fetched via TestRunCase IDs (parallel per-case queries)</li>
+     *   <li>TestRunCase  — fetched directly by projectId (single query)</li>
+     *   <li>TestRun      — fetched by projectId</li>
+     *   <li>TestStep     — fetched via TestCase IDs (parallel per-case queries)</li>
+     *   <li>TestCase     — fetched by projectId (including soft-deleted)</li>
+     *   <li>Suite        — fetched by projectId</li>
+     *   <li>Defect       — fetched by projectId</li>
+     *   <li>Attachment   — fetched by projectId</li>
+     *   <li>ProjectCounter</li>
+     *   <li>Project</li>
+     * </ol>
+     *
+     * <p>CompletableFuture is used to parallelise the per-entity-instance child
+     * lookups (TestRunStep per TestRunCase, TestStep per TestCase) and reduce total
+     * round-trip time when a project contains many test cases or run cases.</p>
+     */
     public boolean deleteProject(UUID id) {
-        // BUG-002 FIX: check existence before calling deleteById so the controller
-        // can return 404 for unknown IDs.  Previously this method always returned
-        // true, making ProjectController's notFound() branch unreachable dead code.
         if (!projectExists(id)) {
             logger.warn("[Project] Delete requested for non-existent project: {}", id);
             return false;
         }
+        logger.info("[Project] Starting cascade delete for project: {}", id);
+
+        // ── Phase 1: Execution data (TestRunSteps → TestRunCases → TestRuns) ─────────
+        var allRunCases = testRunCaseService.getAllTestRunCasesByProjectId(id);
+        logger.info("[Project] Cascade: {} TestRunCase(s) to delete", allRunCases.size());
+
+        if (!allRunCases.isEmpty()) {
+            var stepFutures = allRunCases.stream()
+                    .map(rc -> CompletableFuture.runAsync(() ->
+                            testRunStepService.getAllTestRunStepsByTestRunCaseId(rc.getId())
+                                    .forEach(s -> testRunStepService.deleteTestRunStep(s.getId()))))
+                    .toList();
+            CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
+            allRunCases.forEach(rc -> testRunCaseService.deleteTestRunCase(rc.getId()));
+        }
+
+        testRunService.getAllTestRunsByProjectId(id)
+                .forEach(run -> testRunService.deleteTestRun(run.getId()));
+
+        // ── Phase 2: Master data (TestSteps → TestCases → Suites) ────────────────────
+        var allCases = testCaseService.getAllCasesByProjectIdIncludingDeleted(id);
+        logger.info("[Project] Cascade: {} TestCase(s) to delete (including soft-deleted)", allCases.size());
+
+        if (!allCases.isEmpty()) {
+            var stepFutures = allCases.stream()
+                    .map(tc -> CompletableFuture.runAsync(() ->
+                            testStepService.getTestStepsByTestCaseId(tc.getId())
+                                    .forEach(s -> testStepService.deleteTestStep(s.getId()))))
+                    .toList();
+            CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
+            allCases.forEach(tc -> testCaseService.hardDeleteTestCase(tc.getId()));
+        }
+
+        suiteService.getAllSuitesByProjectId(id)
+                .forEach(suite -> entityService.deleteById(suite.getId()));
+
+        // ── Phase 3: Defects, attachments, counter ────────────────────────────────────
+        defectService.getAllDefectsByProjectId(id)
+                .forEach(d -> defectService.deleteDefect(d.getId()));
+
+        attachmentService.getAllAttachmentsByProjectId(id)
+                .forEach(a -> attachmentService.deleteAttachment(a.getId()));
+
+        projectCounterService.deleteCounterForProject(id);
+
+        // ── Phase 4: The project itself ────────────────────────────────────────────────
         entityService.deleteById(id);
-        logger.info("[Project] Deleted project: {}", id);
+        logger.info("[Project] Cascade delete complete for project: {}", id);
         return true;
     }
 

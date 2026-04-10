@@ -165,6 +165,49 @@ public class TestCaseService {
     }
 
     /**
+     * Hard-deletes a test case entity by ID, bypassing soft-delete logic.
+     * Used ONLY during project cascade deletion — ordinary deletion must go through
+     * {@link #deleteTestCase(UUID)} which applies the soft-delete flag.
+     */
+    public void hardDeleteTestCase(UUID id) {
+        entityService.deleteById(id);
+    }
+
+    /**
+     * Returns ALL test cases for a project (including soft-deleted ones) without pagination.
+     * Used internally for cascade hard-delete when a project is being removed.
+     */
+    public List<TestCaseDTO> getAllCasesByProjectIdIncludingDeleted(UUID projectId) {
+        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        return entityService.search(MODEL_SPEC, condition, TestCaseDTO.class).data()
+                .stream()
+                .map(this::withId)
+                .toList();
+    }
+
+    /**
+     * Returns all non-deleted test cases for a suite without pagination.
+     * Used internally for cascade soft-delete when a suite is being removed.
+     */
+    public List<TestCaseDTO> getAllTestCasesBySuiteId(UUID suiteId) {
+        SimpleCondition suiteCondition = new SimpleCondition()
+                .withJsonPath("$.suiteId")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(suiteId.toString()));
+        SimpleCondition deletedCondition = new SimpleCondition()
+                .withJsonPath("$.deleted")
+                .withOperation(Operation.EQUALS)
+                .withValue(objectMapper.valueToTree(false));
+        GroupCondition condition = new GroupCondition()
+                .withOperator(GroupCondition.Operator.AND)
+                .withConditions(List.of(suiteCondition, deletedCondition));
+        return entityService.search(MODEL_SPEC, condition, TestCaseDTO.class).data()
+                .stream()
+                .map(this::withId)
+                .toList();
+    }
+
+    /**
      * Bulk-updates the sortOrder for a list of test cases within a suite.
      * Each item carries the case UUID and its new 0-based position.
      * Unknown or deleted IDs are silently skipped.

@@ -31,6 +31,7 @@ public class TestRunCaseController {
             @PathVariable UUID runId,
             @Valid @RequestBody TestRunCaseDTO testRunCase) {
         testRunCase.setTestRunId(runId);
+        testRunCase.setProjectId(projectId);
         TestRunCaseDTO created = testRunCaseService.createTestRunCase(testRunCase);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }

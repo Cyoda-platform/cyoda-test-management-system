@@ -198,6 +198,41 @@ public class TestRunCaseService {
                 TestRunCaseDTO.class, params));
     }
 
+    /**
+     * Returns ALL TestRunCase records for a given project without pagination.
+     * Used internally for cascade-delete operations.
+     * Requires {@code projectId} to be stored on the entity (populated at creation time).
+     */
+    public List<TestRunCaseDTO> getAllTestRunCasesByProjectId(UUID projectId) {
+        return entityService.search(MODEL_SPEC,
+                        conditionByField("projectId", projectId.toString()),
+                        TestRunCaseDTO.class)
+                .data().stream()
+                .map(this::withId)
+                .toList();
+    }
+
+    /**
+     * Returns ALL TestRunCase records for a given test run without pagination.
+     * Used internally for cascade-delete operations.
+     */
+    public List<TestRunCaseDTO> getAllTestRunCasesByTestRunId(UUID testRunId) {
+        return entityService.search(MODEL_SPEC,
+                        conditionByField("testRunId", testRunId.toString()),
+                        TestRunCaseDTO.class)
+                .data().stream()
+                .map(this::withId)
+                .toList();
+    }
+
+    /**
+     * Hard-deletes a TestRunCase entity by ID.
+     * Used during cascade deletion of parent entities.
+     */
+    public void deleteTestRunCase(UUID id) {
+        entityService.deleteById(id);
+    }
+
     public Optional<TestRunCaseDTO> updateTestRunCaseStatus(UUID id, String status) {
         return getTestRunCaseById(id).map(trc -> {
             trc.setStatus(status);

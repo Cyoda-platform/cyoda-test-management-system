@@ -130,6 +130,17 @@ public class ProjectCounterService {
         }
     }
 
+    /**
+     * Deletes the ProjectCounter record for the given project, if it exists.
+     * Called during cascade deletion of a Project entity.
+     */
+    public void deleteCounterForProject(UUID projectId) {
+        findCounterForProject(projectId).ifPresent(counter -> {
+            entityService.deleteById(counter.getId());
+            logger.info("Deleted ProjectCounter for project {}", projectId);
+        });
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private Optional<ProjectCounterDTO> findCounterForProject(UUID projectId) {

@@ -248,6 +248,18 @@ public class AttachmentService {
     }
 
     /**
+     * Returns ALL attachments for a project without pagination.
+     * Used internally for cascade-delete operations.
+     */
+    public List<AttachmentDTO> getAllAttachmentsByProjectId(UUID projectId) {
+        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        return entityService.search(MODEL_SPEC, condition, AttachmentDTO.class).data()
+                .stream()
+                .map(this::withId)
+                .toList();
+    }
+
+    /**
      * Deletes attachment metadata and the corresponding EdgeMessage.
      */
     public boolean deleteAttachment(UUID id) {
