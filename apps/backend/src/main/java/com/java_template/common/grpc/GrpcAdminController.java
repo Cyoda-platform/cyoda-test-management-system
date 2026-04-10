@@ -2,10 +2,7 @@ package com.java_template.common.grpc;
 
 import com.java_template.common.grpc.client.connection.ConnectionManager;
 import com.java_template.common.grpc.client.monitoring.GrpcConnectionMonitor;
-import com.java_template.common.tool.CyodaInit;
-import com.java_template.common.tool.CyodaInitConfig;
 import io.grpc.ConnectivityState;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,17 +12,14 @@ public class GrpcAdminController {
 
     private final ConnectionManager connectionManager;
     private final GrpcConnectionMonitor connectionMonitor;
-    private final CyodaInit cyodaInit;
 
 
     public GrpcAdminController(
             final ConnectionManager connectionManager,
-            final GrpcConnectionMonitor connectionMonitor,
-            final CyodaInit cyodaInit
+            final GrpcConnectionMonitor connectionMonitor
     ) {
         this.connectionManager = connectionManager;
         this.connectionMonitor = connectionMonitor;
-        this.cyodaInit = cyodaInit;
     }
 
     @PostMapping("/reconnect")
@@ -44,24 +38,6 @@ public class GrpcAdminController {
     @GetMapping("/status")
     public ResponseEntity<GrpcConnectionMonitor.GrpcMonitoringState> getStatus() {
         return ResponseEntity.ok(connectionMonitor.getLastKnownState());
-    }
-
-    @PostMapping("/import-workflows")
-    public ResponseEntity<CyodaInit.ImportReport> importWorkflows(
-            @RequestParam(name = "recreateModels", defaultValue = "false") boolean recreateModels
-    ) {
-        try {
-            CyodaInitConfig config = CyodaInitConfig.withRecreateModels(recreateModels);
-            CyodaInit.ImportReport report = cyodaInit.initCyoda(config);
-            HttpStatus status = report.success() ? HttpStatus.OK : HttpStatus.MULTI_STATUS;
-            return ResponseEntity.status(status).body(report);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(CyodaInit.ImportReport.fatal(
-                            recreateModels,
-                            "Failed to import workflows: " + e.getMessage()
-                    ));
-        }
     }
 
 }
