@@ -1,0 +1,8 @@
+rootProject.name = 'cyoda-test-management-system'
+include ':apps:backend'
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+    }
+}

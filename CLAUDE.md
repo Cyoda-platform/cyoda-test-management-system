@@ -19,9 +19,9 @@ See `.claude/rules/tdd.md` for the full protocol if present.
 
 When adding or changing user-facing behaviour (API responses, workflow semantics, error codes), add or update E2E tests.
 
-- **Cucumber/Gherkin E2E tests** live in `backend/src/test/java/e2e/` with feature files under `backend/src/test/resources/features/`.
-- E2E tests require a **live Cyoda instance** (not Docker). Configure via `backend/src/test/resources/application-cucumber.yaml` or the env vars listed in `.env.example`.
-- Run with: `cd backend && ./gradlew cucumberTest`
+- **Cucumber/Gherkin E2E tests** live in `apps/backend/src/test/java/e2e/` with feature files under `apps/backend/src/test/resources/features/`.
+- E2E tests require a **live Cyoda instance** (not Docker). Configure via `apps/backend/src/test/resources/application-cucumber.yaml` or the env vars listed in `.env.example`.
+- Run with: `./gradlew :apps:backend:cucumberTest`
 - Coverage report is generated automatically by Jacoco: `build/test-report/`.
 
 ### Gate 3: Security by default
@@ -34,9 +34,9 @@ When adding or changing user-facing behaviour (API responses, workflow semantics
 
 ### Gate 4: Documentation hygiene
 
-- When changing env vars, update `.env.example`, the relevant `application*.yml`, and `backend/README.md` together.
-- When changing public API behaviour or developer workflow, update `backend/README.md`, `backend/CONTRIBUTING.md`, and `backend/usage-rules.md`.
-- When changing `common/` interfaces (framework code), update `backend/llms.txt` and `backend/llms-full.txt`.
+- When changing env vars, update `.env.example`, the relevant `application*.yml`, and `apps/backend/README.md` together.
+- When changing public API behaviour or developer workflow, update `apps/backend/README.md`, `apps/backend/CONTRIBUTING.md`, and `apps/backend/usage-rules.md`.
+- When changing `common/` interfaces (framework code), update `apps/backend/llms.txt` and `apps/backend/llms-full.txt`.
 
 ### Gate 5: Verify before claiming done
 
@@ -44,16 +44,16 @@ Use `superpowers:verification-before-completion` skill before claiming work is c
 
 ```bash
 # Unit tests only (fast, no Cyoda instance required)
-cd backend && ./gradlew test
+./gradlew :apps:backend:test
 
 # E2E / Cucumber tests (requires live Cyoda instance)
-cd backend && ./gradlew cucumberTest
+./gradlew :apps:backend:cucumberTest
 
 # Full build + compile check
-cd backend && ./gradlew build
+./gradlew :apps:backend:build
 
 # Static analysis (compiler warnings treated strictly)
-cd backend && ./gradlew compileJava compileKotlin
+./gradlew :apps:backend:compileJava :apps:backend:compileKotlin
 ```
 
 Do **not** claim work is done if any test — unit, integration, or E2E — is failing.
@@ -102,7 +102,7 @@ Do **not** claim work is done if any test — unit, integration, or E2E — is f
 
 ### Framework Code (`common/`) — DO NOT MODIFY
 
-`backend/src/main/java/com/java_template/common/` is framework code shared with the Cyoda template.
+`apps/backend/src/main/java/com/java_template/common/` is framework code shared with the Cyoda template.
 **Never modify anything in `common/`.** Changes there break upgrades and violate the template contract.
 Business logic belongs exclusively in `application/`.
 
@@ -116,13 +116,13 @@ Business logic belongs exclusively in `application/`.
 
 ### Workflow Configurations
 
-- FSM JSON files go in `backend/src/main/resources/workflow/$entity_name/version_$version/$entity_name.json`.
-- Import with `WorkflowImportTool` or `./gradlew runApp -PmainClass=com.java_template.common.tool.WorkflowImportTool`.
+- FSM JSON files go in `apps/backend/src/main/resources/workflow/$entity_name/version_$version/$entity_name.json`.
+- Import with `WorkflowImportTool` or `./gradlew :apps:backend:runApp -PmainClass=com.java_template.common.tool.WorkflowImportTool`.
 - Avoid cyclic FSM states. Processor/criterion `supports()` return values must match the operation names in the JSON.
 
-### Frontend (`frontend/`)
+### Frontend (`apps/frontend/`)
 
-- React 18 + TypeScript + Vite. Package manager: `npm` (or `bun`).
+- React 18 + TypeScript + Vite. Package manager: `pnpm`.
 - Unit tests: `vitest` — `npm run test`.
 - E2E browser tests: Playwright — `npx playwright test`.
 - Build: `npm run build`.
@@ -163,24 +163,24 @@ Security review uses `antigravity-bundle-security-developer:cc-skill-security-re
 
 | Task | Command |
 |---|---|
-| Build (compile + unit test) | `cd backend && ./gradlew build` |
-| Unit tests only | `cd backend && ./gradlew test` |
-| E2E / Cucumber tests | `cd backend && ./gradlew cucumberTest` |
-| Coverage report (Jacoco) | `cd backend && ./gradlew jacocoTestReport` |
-| Run application | `cd backend && ./gradlew runApp` |
-| Import workflows | `cd backend && ./gradlew runApp -PmainClass=com.java_template.common.tool.WorkflowImportTool --args='--spring.profiles.active=local'` |
-| Build fat JAR | `cd backend && ./gradlew bootJar` |
-| Validate workflow impls | `cd backend && ./gradlew validateWorkflowImplementations` |
-| Dependency refresh | `cd backend && ./gradlew dependencies` |
+| Build (compile + unit test) | `./gradlew :apps:backend:build` |
+| Unit tests only | `./gradlew :apps:backend:test` |
+| E2E / Cucumber tests | `./gradlew :apps:backend:cucumberTest` |
+| Coverage report (Jacoco) | `./gradlew :apps:backend:jacocoTestReport` |
+| Run application | `./gradlew :apps:backend:runApp` |
+| Import workflows | `./gradlew :apps:backend:runApp -PmainClass=com.java_template.common.tool.WorkflowImportTool --args='--spring.profiles.active=local'` |
+| Build fat JAR | `./gradlew :apps:backend:bootJar` |
+| Validate workflow impls | `./gradlew :apps:backend:validateWorkflowImplementations` |
+| Dependency refresh | `./gradlew :apps:backend:dependencies` |
 
 ### Frontend
 
 | Task | Command |
 |---|---|
-| Dev server | `cd frontend && npm run dev` |
-| Build | `cd frontend && npm run build` |
-| Unit tests (vitest) | `cd frontend && npm run test` |
-| Lint | `cd frontend && npm run lint` |
+| Dev server | `cd apps/frontend && npm run dev` |
+| Build | `cd apps/frontend && npm run build` |
+| Unit tests (vitest) | `cd apps/frontend && npm run test` |
+| Lint | `cd apps/frontend && npm run lint` |
 
 ### Deferred Work
 
@@ -191,7 +191,7 @@ Mark deferred items in code as:
 
 Search for all TODOs:
 ```bash
-grep -r "TODO(plan-reference)" backend/src/ frontend/src/
+grep -r "TODO(plan-reference)" apps/backend/src/ apps/frontend/src/
 ```
 
 ---
@@ -200,30 +200,39 @@ grep -r "TODO(plan-reference)" backend/src/ frontend/src/
 
 ```
 cyoda-test-management-system/
-├── backend/
-│   ├── src/main/java/com/java_template/
-│   │   ├── common/           # Framework code — DO NOT MODIFY
-│   │   └── application/      # Business logic — implement here
-│   │       ├── controller/
-│   │       ├── entity/
-│   │       ├── processor/
-│   │       ├── criterion/
-│   │       └── service/
-│   ├── src/main/kotlin/      # Kotlin utilities (UUID, etc.)
-│   ├── src/main/resources/
-│   │   ├── application.yml
-│   │   └── workflow/         # FSM workflow JSON configs
-│   ├── src/test/java/
-│   │   ├── e2e/              # Cucumber E2E tests (live Cyoda required)
-│   │   └── com/java_template/ # Unit & integration tests
-│   ├── src/test/resources/
-│   │   ├── features/         # Gherkin feature files
-│   │   └── application-cucumber.yaml
-│   ├── llm_example/          # Reference patterns — always consult before implementing
-│   ├── build.gradle
-│   └── README.md
-├── frontend/                 # React + TypeScript + Vite
+├── apps/
+│   ├── backend/
+│   │   ├── src/main/java/com/java_template/
+│   │   │   ├── common/           # Framework code — DO NOT MODIFY
+│   │   │   └── application/      # Business logic — implement here
+│   │   │       ├── controller/
+│   │   │       ├── entity/
+│   │   │       ├── processor/
+│   │   │       ├── criterion/
+│   │   │       └── service/
+│   │   ├── src/main/kotlin/      # Kotlin utilities (UUID, etc.)
+│   │   ├── src/main/resources/
+│   │   │   ├── application.yml
+│   │   │   └── workflow/         # FSM workflow JSON configs
+│   │   ├── src/test/java/
+│   │   │   ├── e2e/              # Cucumber E2E tests (live Cyoda required)
+│   │   │   └── com/java_template/ # Unit & integration tests
+│   │   ├── src/test/resources/
+│   │   │   ├── features/         # Gherkin feature files
+│   │   │   └── application-cucumber.yaml
+│   │   ├── llm_example/          # Reference patterns — always consult before implementing
+│   │   ├── project.json          # Nx project configuration
+│   │   ├── build.gradle
+│   │   └── README.md
+│   └── frontend/                 # React + TypeScript + Vite
+├── gradle/wrapper/               # Gradle wrapper (root level)
+├── helm/                         # Helm charts (root level)
 ├── docs/
-├── .env.example              # Required env var reference — keep up to date
-└── CLAUDE.md                 # This file
+├── settings.gradle               # Monorepo Gradle settings
+├── build.gradle                  # Root build file
+├── nx.json                       # Nx monorepo orchestration
+├── package.json                  # Root package.json with Nx scripts
+├── pnpm-workspace.yaml           # pnpm workspace config
+├── .env.example                  # Required env var reference — keep up to date
+└── CLAUDE.md                     # This file
 ```
