@@ -7,9 +7,11 @@ import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.cyoda.cloud.api.common.model.GroupConditionDto;
+import org.cyoda.cloud.api.common.model.GroupOperatorDto;
+import org.cyoda.cloud.api.common.model.OperatorTypeDto;
+import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
+import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -33,14 +35,17 @@ public class TestRunStepService {
         this.objectMapper = objectMapper;
     }
 
-    private GroupCondition conditionByField(String jsonPath, String value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + jsonPath)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
+    private GroupConditionDto conditionByField(String jsonPath, String value) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$." + jsonPath)
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(value));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
     }
 
     private TestRunStepDTO withId(EntityWithMetadata<TestRunStepDTO> result) {
@@ -71,7 +76,7 @@ public class TestRunStepService {
     public PageResult<TestRunStepDTO> getTestRunStepsByTestRunCaseId(UUID testRunCaseId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(page).pageSize(size).build();
-        GroupCondition condition = conditionByField("testRunCaseId", testRunCaseId.toString());
+        GroupConditionDto condition = conditionByField("testRunCaseId", testRunCaseId.toString());
         PageResult<EntityWithMetadata<TestRunStepDTO>> result =
                 entityService.search(MODEL_SPEC, condition, TestRunStepDTO.class, params);
         return PageResult.of(result.searchId(),
@@ -84,7 +89,7 @@ public class TestRunStepService {
      * Used internally for cascade-delete operations.
      */
     public List<TestRunStepDTO> getAllTestRunStepsByTestRunCaseId(UUID testRunCaseId) {
-        GroupCondition condition = conditionByField("testRunCaseId", testRunCaseId.toString());
+        GroupConditionDto condition = conditionByField("testRunCaseId", testRunCaseId.toString());
         return entityService.search(MODEL_SPEC, condition, TestRunStepDTO.class)
                 .data().stream().map(this::withId).toList();
     }

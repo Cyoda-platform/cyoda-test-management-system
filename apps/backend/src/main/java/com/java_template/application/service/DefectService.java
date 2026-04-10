@@ -7,9 +7,11 @@ import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.cyoda.cloud.api.common.model.GroupConditionDto;
+import org.cyoda.cloud.api.common.model.GroupOperatorDto;
+import org.cyoda.cloud.api.common.model.OperatorTypeDto;
+import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
+import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -34,14 +36,17 @@ public class DefectService {
         this.objectMapper = objectMapper;
     }
 
-    private GroupCondition conditionByField(String jsonPath, String value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + jsonPath)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
+    private GroupConditionDto conditionByField(String jsonPath, String value) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$." + jsonPath)
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(value));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
     }
 
     private DefectDTO withId(EntityWithMetadata<DefectDTO> result) {
@@ -76,24 +81,27 @@ public class DefectService {
     public PageResult<DefectDTO> getDefectsByProjectId(UUID projectId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(page).pageSize(size).build();
-        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        GroupConditionDto condition = conditionByField("projectId", projectId.toString());
         PageResult<EntityWithMetadata<DefectDTO>> result =
                 entityService.search(MODEL_SPEC, condition, DefectDTO.class, params);
         return toPage(result);
     }
 
     public List<DefectDTO> getDefectsByStatus(UUID projectId, String status) {
-        SimpleCondition projectCondition = new SimpleCondition()
-                .withJsonPath("$.projectId")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(projectId.toString()));
-        SimpleCondition statusCondition = new SimpleCondition()
-                .withJsonPath("$.status")
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(status));
-        GroupCondition condition = new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(projectCondition, statusCondition));
+        SimpleConditionDto projectCondition = new SimpleConditionDto()
+                .jsonPath("$.projectId")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(projectId.toString()));
+        projectCondition.setType(QueryConditionTypeDto.SIMPLE);
+        SimpleConditionDto statusCondition = new SimpleConditionDto()
+                .jsonPath("$.status")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(status));
+        statusCondition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto condition = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(projectCondition, statusCondition));
+        condition.setType(QueryConditionTypeDto.GROUP);
         return entityService.search(MODEL_SPEC, condition, DefectDTO.class)
                 .data().stream().map(this::withId).toList();
     }
@@ -111,7 +119,7 @@ public class DefectService {
         try {
             SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                     .pageNumber(page).pageSize(size).build();
-            GroupCondition condition = conditionByField("testRunId", testRunId.toString());
+            GroupConditionDto condition = conditionByField("testRunId", testRunId.toString());
             PageResult<EntityWithMetadata<DefectDTO>> result =
                     entityService.search(MODEL_SPEC, condition, DefectDTO.class, params);
             return toPage(result);
@@ -131,7 +139,7 @@ public class DefectService {
      * Used internally for cascade-delete operations.
      */
     public List<DefectDTO> getAllDefectsByProjectId(UUID projectId) {
-        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        GroupConditionDto condition = conditionByField("projectId", projectId.toString());
         return entityService.search(MODEL_SPEC, condition, DefectDTO.class).data()
                 .stream()
                 .map(this::withId)

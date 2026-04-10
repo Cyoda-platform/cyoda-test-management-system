@@ -8,9 +8,11 @@ import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
-import org.cyoda.cloud.api.event.common.condition.GroupCondition;
-import org.cyoda.cloud.api.event.common.condition.Operation;
-import org.cyoda.cloud.api.event.common.condition.SimpleCondition;
+import org.cyoda.cloud.api.common.model.GroupConditionDto;
+import org.cyoda.cloud.api.common.model.GroupOperatorDto;
+import org.cyoda.cloud.api.common.model.OperatorTypeDto;
+import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
+import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -43,14 +45,17 @@ public class SuiteService {
         this.testCaseService = testCaseService;
     }
 
-    private GroupCondition conditionByField(String fieldName, Object value) {
-        SimpleCondition condition = new SimpleCondition()
-                .withJsonPath("$." + fieldName)
-                .withOperation(Operation.EQUALS)
-                .withValue(objectMapper.valueToTree(value));
-        return new GroupCondition()
-                .withOperator(GroupCondition.Operator.AND)
-                .withConditions(List.of(condition));
+    private GroupConditionDto conditionByField(String fieldName, Object value) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$." + fieldName)
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(value));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
     }
 
     private SuiteDTO withId(EntityWithMetadata<SuiteDTO> result) {
@@ -98,7 +103,7 @@ public class SuiteService {
     public PageResult<SuiteDTO> getSuitesByProjectId(UUID projectId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(page).pageSize(size).build();
-        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        GroupConditionDto condition = conditionByField("projectId", projectId.toString());
         PageResult<EntityWithMetadata<SuiteDTO>> result =
                 entityService.search(MODEL_SPEC, condition, SuiteDTO.class, params);
         List<SuiteDTO> sorted = result.data().stream()
@@ -126,7 +131,7 @@ public class SuiteService {
      * Used internally for cascade-delete operations.
      */
     public List<SuiteDTO> getAllSuitesByProjectId(UUID projectId) {
-        GroupCondition condition = conditionByField("projectId", projectId.toString());
+        GroupConditionDto condition = conditionByField("projectId", projectId.toString());
         return entityService.search(MODEL_SPEC, condition, SuiteDTO.class)
                 .data().stream().map(this::withId).toList();
     }

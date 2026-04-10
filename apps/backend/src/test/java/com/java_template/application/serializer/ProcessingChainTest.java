@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -77,7 +78,7 @@ class ProcessingChainTest {
         request = new EntityProcessorCalculationRequest();
         request.setId("test-request-123");
         request.setRequestId("req-456");
-        request.setEntityId("entity-789");
+        request.setEntityId(UUID.fromString("550e8400-e29b-41d4-a716-446655440000"));
         request.setProcessorId("processor-123");
         request.setProcessorName("TestProcessor");
 
@@ -612,7 +613,7 @@ class ProcessingChainTest {
 
             ObjectNode result = objectMapper.createObjectNode();
             result.put("requestId", context.request().getId());
-            result.put("entityId", context.request().getEntityId());
+            result.put("entityId", context.request().getEntityId().toString());
             result.put("originalName", context.payload().get("name").asText());
             return result;
         };
@@ -628,7 +629,7 @@ class ProcessingChainTest {
 
         JsonNode resultData = response.getPayload().getData();
         assertEquals("test-request-123", resultData.get("requestId").asText());
-        assertEquals("entity-789", resultData.get("entityId").asText());
+        assertEquals("550e8400-e29b-41d4-a716-446655440000", resultData.get("entityId").asText());
         assertEquals("Fluffy", resultData.get("originalName").asText());
     }
 
@@ -1012,7 +1013,7 @@ class ProcessingChainTest {
         // Given - Create request with metadata in payload
         EntityProcessorCalculationRequest requestWithMeta = new EntityProcessorCalculationRequest();
         requestWithMeta.setId("test-request-123");
-        requestWithMeta.setEntityId("550e8400-e29b-41d4-a716-446655440000");
+        requestWithMeta.setEntityId(UUID.fromString("550e8400-e29b-41d4-a716-446655440000"));
 
         // Create test payload with both data and metadata
         ObjectNode testData = objectMapper.createObjectNode();
