@@ -29,13 +29,22 @@ public class ClientAuthorizationInterceptor implements ClientInterceptor {
                     // pull the access token from the authentication service.
                     // This will re-use an existing cached token if it is still valid for a short period (minute)
                     OAuth2AccessToken accessToken = authentication.getAccessToken();
-                    String freshToken = accessToken.getTokenValue();
-                    Metadata.Key<String> authKey = Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
-                    headers.put(authKey, "Bearer " + freshToken);
+                    if (accessToken == null) {
+                        LOG.error("Access token is null!");
+                    } else {
+                        String freshToken = accessToken.getTokenValue();
+                        if (freshToken == null || freshToken.isEmpty()) {
+                            LOG.error("Access token value is null or empty!");
+                        } else {
+                            Metadata.Key<String> authKey = Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
+                            headers.put(authKey, "Bearer " + freshToken);
+                            LOG.debug("Authorization header added successfully. Token starts with: {}", freshToken.substring(0, Math.min(10, freshToken.length())));
+                        }
+                    }
                 } catch (ClientAuthorizationException e) {
-                    LOG.error("Failed to get access token. Will not set the Bearer Token {}", e.getError().getDescription());
+                    LOG.error("Failed to get access token (ClientAuthorizationException). Will not set the Bearer Token: {}", e.getError().getDescription());
                 } catch (Exception e) {
-                    LOG.error("Failed to get access token. Will not set the Bearer Token", e);
+                    LOG.error("Failed to get access token (Exception). Will not set the Bearer Token: {}", e.getMessage(), e);
                 }
                 super.start(responseListener, headers);
             }
