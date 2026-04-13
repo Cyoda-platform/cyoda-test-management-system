@@ -1,9 +1,8 @@
 {
-  "id": "ts-001",
-  "testCaseId": "tc-001",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "testCaseId": "550e8400-e29b-41d4-a716-446655440001",
   "stepNumber": 1,
-  "action": "Click on 'Proceed to Checkout' button",
-  "expectedResult": "User is redirected to the checkout page with order summary displayed",
-  "status": "untested"
+  "action": "Click on the login button",
+  "expectedResult": "Login form is displayed",
+  "deleted": false
 }
-

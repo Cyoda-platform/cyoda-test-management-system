@@ -1,13 +1,14 @@
 package com.java_template.application.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.java_template.common.workflow.CyodaEntity;
 import com.java_template.common.workflow.OperationSpecification;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.cyoda.cloud.api.event.common.ModelSpec;
+
+import jakarta.validation.constraints.Size;
 
 import java.util.UUID;
 
@@ -23,11 +24,18 @@ public class TestStepDTO implements CyodaEntity {
     private static final ModelSpec MODEL_SPEC = new ModelSpec().withName(ENTITY_NAME).withVersion(ENTITY_VERSION);
 
     private UUID id;
+
+    // testCaseId is always set from the URL path parameter — never sent in the request body
     private UUID testCaseId;
+
     private Integer stepNumber;
-    @JsonProperty("action")
+
+    @Size(max = 2000, message = "Action must not exceed 2000 characters")
     private String action;
+
+    @Size(max = 2000, message = "Expected result must not exceed 2000 characters")
     private String expectedResult;
+
     private boolean deleted;
 
     @Override
