@@ -15,8 +15,8 @@ export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
 
 # Cyoda Configuration
 export CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
-export CYODA_CLIENT_ID="kLXY45"
-export CYODA_CLIENT_SECRET="OAIsUzQMP4LoW19JTwoi"
+export CYODA_CLIENT_ID="94kyAy"
+export CYODA_CLIENT_SECRET="h5a1RwFN6FNHmVTfoFfT"
 
 echo "📋 Configuration:"
 echo "   Frontend: http://localhost:5173"
