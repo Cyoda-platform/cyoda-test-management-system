@@ -1,0 +1,66 @@
+{{- if .Values.cyodaLight.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cyoda-light
+  labels:
+    app.kubernetes.io/name: cyoda-light
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cyoda-light
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cyoda-light
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 9000
+      {{- if .Values.global.imagePullSecret.enabled | default false }}
+      imagePullSecrets:
+        - name: regcred
+      {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      containers:
+        - name: cyoda-light
+          image: "{{ .Values.global.registry.host }}/cyoda/cyoda-light:{{ .Values.cyodaLight.image.tag }}"
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - name: http
+              containerPort: {{ .Values.cyodaLight.httpPort }}
+              protocol: TCP
+            - name: grpc
+              containerPort: {{ .Values.cyodaLight.grpcPort }}
+              protocol: TCP
+          env:
+            - name: CYODA_LIGHT_LOG_LEVEL
+              value: "{{ .Values.cyodaLight.logLevel }}"
+            - name: CYODA_LIGHT_HTTP_PORT
+              value: "{{ .Values.cyodaLight.httpPort }}"
+            - name: CYODA_LIGHT_GRPC_PORT
+              value: "{{ .Values.cyodaLight.grpcPort }}"
+          resources:
+            {{- toYaml .Values.cyodaLight.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.cyodaLight.httpPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.cyodaLight.httpPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 5
+{{- end }}

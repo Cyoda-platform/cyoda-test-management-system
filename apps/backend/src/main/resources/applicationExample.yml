@@ -1,0 +1,154 @@
+# copy this into profile specific yaml file, for example application-local.yml
+# Fill in all the values in <>
+logging:
+  level:
+    root: INFO
+
+server:
+  port: 9090
+  forward-headers-strategy: framework
+  servlet:
+    context-path: /api
+
+spring:
+  mvc:
+    problemdetails:
+      enabled: true
+  servlet:
+    multipart:
+      # Maximum file size for uploads (default: 1MB)
+      max-file-size: 100MB
+      # Maximum request size for multipart/form-data (default: 10MB)
+      max-request-size: 100MB
+      # Whether to resolve multipart requests lazily
+      resolve-lazily: false
+
+springdoc:
+  swagger-ui:
+    use-root-path: true
+    try-it-out-enabled: true
+    csrf:
+      enabled: false
+
+# CORS Configuration
+# Environment-specific settings for Cross-Origin Resource Sharing
+# Override via environment variables or profile-specific YAML files for different environments (dev/staging/prod)
+app:
+  auth:
+    # Local PoC JWT signing secret. Set APP_AUTH_SECRET in any real environment.
+    # MIGRATION: Delete this entire block when switching to a real IdP and add:
+    #   spring.security.oauth2.resourceserver.jwt.issuer-uri: https://your-tenant.example.com/
+    secret: ${APP_AUTH_SECRET:change-me-dev-secret-32-chars-min}
+    issuer: cyoda-tms-local
+    token-ttl-seconds: 3600
+  cors:
+    # Comma-separated list of allowed origins (no wildcards when credentials enabled)
+    # Dev: http://localhost:3000,http://localhost:5173
+    # Prod: https://app.yourdomain.com
+    allowed-origins: http://localhost:8080,http://localhost:8081,http://localhost:8082,http://localhost:8083,http://localhost:3000,http://localhost:5173
+    # Allowed HTTP methods
+    allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+    # Allowed request headers
+    allowed-headers: Authorization,Content-Type,Accept,Origin,X-Requested-With,Cache-Control
+    # Headers exposed to the client (empty by default for security)
+    exposed-headers:
+    # Allow credentials (cookies, auth headers) - false is more secure
+    allow-credentials: false
+    # Preflight cache duration in seconds (3600 = 1 hour)
+    max-age-seconds: 3600
+    # URL pattern to apply CORS to
+    path-pattern: /**
+  event:
+    auth-context:
+      mode: REQUIRED
+  obo:
+    # Encryption key for OBO signing key at rest. Resolved in order:
+    # 1. encryption-key env var / property (if non-blank)
+    # 2. encryption-key-file (read from file path; generated at Docker build time)
+    # When neither source provides a key, OBO is disabled.
+    encryption-key: ${APP_OBO_ENCRYPTION_KEY:}
+    encryption-key-file: ${APP_OBO_ENCRYPTION_KEY_FILE:/app/obo-encryption-key.txt}
+    admin-client-id: ${CYODA_CLIENT_ID}
+    admin-client-secret: ${CYODA_CLIENT_SECRET}
+    key-id: cyoda-tms-key-001
+    issuer: cyoda-tms-local
+    subject-token-ttl-seconds: 300
+    roles-claim-name: roles
+    validity-days: 90
+    rotation-warning-days: 14
+    rotation-grace-period-seconds: 3600
+  trino:
+    # Leave host and port out for Cyoda Cloud. Defaults will work.
+    # Trino host override. Defaults to trino-{app.config.cyoda-host} if blank or not set.
+    # host:
+    # Trino port override. Defaults to 443 if not set
+    # port:
+    # Catalog and schema as configured in the Cyoda workspace Trino/SQL menu.
+    catalog: cyoda
+    schema: public
+    # Set to false when the local Trino instance runs on plain HTTP (no TLS).
+    # Production Trino endpoints require TLS — leave true or remove this line.
+    ssl-enabled: true
+    # SSLVerification: FULL (default), CA, or NONE.
+    # NONE skips certificate chain validation while keeping transport encrypted — use when
+    # Trino uses a self-signed or private-CA certificate and ssl-enabled is true.
+    ssl-verification: FULL
+    # PKCS12 trust store for verifying the Trino server certificate (leave blank for JVM default).
+    ssl-trust-store-path:
+    ssl-trust-store-password:
+    # PKCS12 key store for mutual TLS (leave blank when client certificates are not required).
+    ssl-key-store-path:
+    ssl-key-store-password:
+  config:
+    # Cyoda Platform Connection
+    # Override these via environment variables or profile-specific YAML files
+    # MUST SET cyoda-host, cyoda-client-id, cyoda-client-secret. Get them from Cyoda AI Studio, for example
+    cyoda-host: <CYODA_HOST>
+    cyoda-client-id: <CYODA_CLIENT_ID>
+    cyoda-client-secret: <CYODA_CLIENT_SECRET>
+    cyoda-api-url: https://${app.config.cyoda-host}/api
+
+    # gRPC Configuration
+    grpc-address: grpc-${app.config.cyoda-host}
+    grpc-server-port: 443
+    grpc-processor-tag: cyoda_application
+    grpc-communication-data-format: JSON
+
+    # gRPC Channel Configuration
+    grpc-max-inbound-message-size: 16777216
+    grpc-max-inbound-metadata-size: 16384
+    grpc-flow-control-window: 67108864
+    grpc-keep-alive-time-seconds: 30
+    grpc-keep-alive-timeout-seconds: 10
+    grpc-idle-timeout-seconds: 300
+
+    # Thread Pool Configuration
+    processor-thread-pool: 20
+    criteria-thread-pool: 20
+    control-thread-pool: 3
+
+    # Connection Configuration
+    handshake-timeout-ms: 5000
+    initial-reconnect-delay-ms: 200
+    max-reconnect-delay-ms: 10000
+    failed-reconnects-limit: 10
+
+    # Monitoring Configuration
+    sent-events-cache-max-size: 100
+    monitoring-scheduler-initial-delay-seconds: 1
+    monitoring-scheduler-delay-seconds: 3
+    keep-alive-warning-threshold: 60000
+
+    # SSL Configuration -- only needed for local development using self-signed certificates
+    ssl-trust-all: false
+    ssl-trusted-hosts:
+
+    # Feature Flags
+    # This is just for testing purposes. It activates NoopProcessor and AlwaysTrueCriterion/AlwaysFalseCriterion
+    # which can be used for testing workflows without having to implement actual processors/criteria
+    include-default-operations: false
+
+cyoda:
+  api:
+    url: https://${app.config.cyoda-host}/api
+

@@ -1,0 +1,156 @@
+{{- if .Values.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  {{ .Values.name }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.name }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount | default 1 }}
+  {{- end }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 8 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: {{ .Values.name }}
+    spec:
+      {{- if .Values.global.hostAliases }}
+      hostAliases:
+        {{ toYaml .Values.global.hostAliases | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nodeSelector }}
+      nodeSelector: {{- .Values.nodeSelector | toYaml | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: { }
+        - name: nginx-config
+          configMap:
+            name: {{ .Values.name }}-nginx-config
+        {{- with .Values.extraVolumes }}
+        {{- tpl . $ | nindent 8 }}
+        {{- end }}
+      automountServiceAccountToken: false
+      {{- if .Values.serviceAccountName }}
+      serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- end }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        # Frontend: nginx serving static files and proxying /api to backend
+        - name: frontend
+          image: "{{ .Values.global.registry.host }}/{{ .Values.frontend.image.imageName }}:{{ .Values.frontend.image.tag | default .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+        # Backend: Spring Boot API server
+        - name: backend
+          image: "{{ .Values.global.registry.host }}/{{ .Values.image.imageName }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp/
+            {{- with .Values.extraVolumeMounts }}
+            {{- tpl . $ | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: backend
+              containerPort: 8080
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 60
+          {{- if .Values.actuatorEnabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.health.liveness.path }}
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.health.liveness.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.health.liveness.timeoutSeconds }}
+            periodSeconds: {{ .Values.health.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.health.liveness.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.health.readiness.path }}
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.health.readiness.initialDelaySeconds }}
+            timeoutSeconds: {{ .Values.health.readiness.timeoutSeconds }}
+            periodSeconds: {{ .Values.health.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.health.readiness.failureThreshold }}
+          {{- end }}
+          env:
+            {{- range $k, $v := .Values.container.env.vars }}
+            - name: {{ $k }}
+              value: "{{ $v }}"
+            {{- end }}
+            {{- range $k, $v := .Values.container.env.additionalVars }}
+            - name: {{ $k }}
+              value: "{{ $v }}"
+            {{- end }}
+          envFrom:
+            {{- range .Values.container.env.configMaps }}
+            - configMapRef:
+                name: {{ . }}
+            {{- end }}
+            {{- range .Values.container.env.secrets }}
+            - secretRef:
+                name: {{ . }}
+             {{- end }}
+      {{- if .Values.global.imagePullSecret.enabled | default false }}
+      imagePullSecrets:
+        - name: regcred
+      {{- end }}
+{{- end }}

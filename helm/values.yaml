@@ -1,0 +1,164 @@
+name: cyoda-tms
+
+imagePullSecret:
+  enabled: true
+
+enabled: true
+useNamespaceForIngress: false
+
+imagePullSecrets:
+  - name: regcred
+
+# Enable Spring Boot Actuator health endpoints
+actuatorEnabled: true
+
+container:
+  env:
+    vars:
+      # Timezone
+      TZ: /usr/share/zoneinfo/Europe/Berlin
+
+      # Cyoda API Configuration
+      CYODA_AI_API: cyoda
+      WORKFLOW_AI_API: workflow
+      CONNECTION_AI_API: connection
+      RANDOM_AI_API: random
+      TRINO_AI_API: trino
+
+      # gRPC Configuration
+      GRPC_PROCESSOR_TAG: cyoda_application
+      GRPC_SERVER_PORT: "443"
+
+      # Optional Configuration
+      ENTITY_VERSION: "1000"
+      EXTERNAL_CALCULATIONS_THREAD_POOL: "10"
+      HANDSHAKE_TIMEOUT_MS: "5000"
+      INITIAL_RECONNECT_DELAY_MS: "200"
+      MAX_RECONNECT_DELAY_MS: "10000"
+      FAILED_RECONNECTS_LIMIT: "10"
+      GRPC_COMMUNICATION_DATA_FORMAT: "JSON"
+
+      # Monitoring
+      SENT_EVENTS_CACHE_MAX_SIZE: "100"
+      MONITORING_SCHEDULER_INITIAL_DELAY_SECONDS: "1"
+      MONITORING_SCHEDULER_DELAY_SECONDS: "3"
+      KEEP_ALIVE_WARNING_THRESHOLD: "60000"
+
+      # OpenTelemetry Configuration
+      OTEL_SERVICE_NAME: "cyoda-tms"
+      OTEL_METRICS_EXPORTER: "prometheus"
+      OTEL_TRACES_EXPORTER: "none"
+      OTEL_LOGS_EXPORTER: "none"
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ""
+      OTEL_EXPORTER_PROMETHEUS_PORT: "9464"
+      OTEL_INSTRUMENTATION_GRPC_ENABLED: "true"
+      OTEL_INSTRUMENTATION_SPRING_WEB_ENABLED: "true"
+      OTEL_INSTRUMENTATION_JDBC_ENABLED: "true"
+      OTEL_INSTRUMENTATION_EXECUTOR_ENABLED: "true"
+
+      # SSL Configuration
+      SSL_TRUST_ALL: "false"
+      SSL_TRUSTED_HOSTS: ""
+
+      # Feature Flags
+      INCLUDE_DEFAULT_OPERATIONS: "false"
+
+    # Additional environment variables can be added here
+    additionalVars: {}
+
+    # ConfigMaps to load as environment variables
+    configMaps: []
+
+    # Secrets to load as environment variables
+    secrets: []
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9464"
+  prometheus.io/path: "/metrics"
+
+health:
+  liveness:
+    path: /actuator/health/liveness
+    initialDelaySeconds: 120
+    timeoutSeconds: 5
+    periodSeconds: 30
+    failureThreshold: 10
+  readiness:
+    path: /actuator/health/readiness
+    initialDelaySeconds: 120
+    timeoutSeconds: 5
+    periodSeconds: 30
+    failureThreshold: 10
+
+frontend:
+  image:
+    imageName: cyoda-tms-frontend
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+service:
+  name: cyoda-tms-service
+  type: NodePort
+  serverPort:
+    port: 80
+    target: 80
+    name: http
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+  path: /
+  pathType: Prefix
+  tls: []
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+extraVolumeMounts: {}
+extraVolumes: {}
+securityContext: {}
+tolerations: []
+priorityClassName: ""
+serviceAccountName: ""
+nodeSelector: {}
+affinity: {}
+strategy: {}
+
+cyodaLight:
+  enabled: false
+  image:
+    tag: "1.0.0"
+  httpPort: 8080
+  grpcPort: 50051
+  # Log level for the cyoda-light sidecar. Valid values: trace, debug, info, warn, error.
+  logLevel: "info"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+image:
+  pullPolicy: Always
+  imageName: cyoda-tms

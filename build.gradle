@@ -1,0 +1,2 @@
+// Root build file — dependency resolution is configured in settings.gradle.
+// Subproject build logic lives in apps/backend/build.gradle.
