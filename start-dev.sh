@@ -14,9 +14,14 @@ echo ""
 export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
 
 # Cyoda Configuration
-export CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
-export CYODA_CLIENT_ID="94kyAy"
-export CYODA_CLIENT_SECRET="h5a1RwFN6FNHmVTfoFfT"
+# Load from .env file if it exists, otherwise use defaults
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+else
+  export CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
+  export CYODA_CLIENT_ID="nbeLy7"
+  export CYODA_CLIENT_SECRET="sFn0F3XSKG3rXdfaZJxa"
+fi
 
 echo "📋 Configuration:"
 echo "   Frontend: http://localhost:5173"
