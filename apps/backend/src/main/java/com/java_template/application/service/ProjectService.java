@@ -216,53 +216,84 @@ public class ProjectService {
         }
         logger.info("[Project] Starting cascade delete for project: {}", id);
 
-        // ── Phase 1: Execution data (TestRunSteps → TestRunCases → TestRuns) ─────────
-        var allRunCases = testRunCaseService.getAllTestRunCasesByProjectId(id);
-        logger.info("[Project] Cascade: {} TestRunCase(s) to delete", allRunCases.size());
+        try {
+            // ── Phase 1: Execution data (TestRunSteps → TestRunCases → TestRuns) ─────────
+            var allRunCases = testRunCaseService.getAllTestRunCasesByProjectId(id);
+            logger.info("[Project] Cascade: {} TestRunCase(s) to delete", allRunCases.size());
 
-        if (!allRunCases.isEmpty()) {
-            var stepFutures = allRunCases.stream()
-                    .map(rc -> CompletableFuture.runAsync(() ->
-                            testRunStepService.getAllTestRunStepsByTestRunCaseId(rc.getId())
-                                    .forEach(s -> testRunStepService.deleteTestRunStep(s.getId()))))
-                    .toList();
-            CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
-            allRunCases.forEach(rc -> testRunCaseService.deleteTestRunCase(rc.getId()));
+            if (!allRunCases.isEmpty()) {
+                var stepFutures = allRunCases.stream()
+                        .map(rc -> CompletableFuture.runAsync(() -> {
+                            logger.debug("[Project] Deleting TestRunSteps for TestRunCase: {}", rc.getId());
+                            try {
+                                testRunStepService.getAllTestRunStepsByTestRunCaseId(rc.getId())
+                                        .forEach(s -> testRunStepService.deleteTestRunStep(s.getId()));
+                            } catch (Exception e) {
+                                logger.error("[Project] Failed to delete TestRunSteps for TestRunCase {}: {}",
+                                    rc.getId(), e.getMessage(), e);
+                                throw new RuntimeException(e);
+                            }
+                        }))
+                        .toList();
+                try {
+                    CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
+                } catch (Exception e) {
+                    logger.error("[Project] Failed during parallel TestRunStep deletion: {}", e.getMessage(), e);
+                    throw new RuntimeException("Cascade delete failed at TestRunStep phase: " + e.getMessage(), e);
+                }
+                allRunCases.forEach(rc -> testRunCaseService.deleteTestRunCase(rc.getId()));
+            }
+
+            testRunService.getAllTestRunsByProjectId(id)
+                    .forEach(run -> testRunService.deleteTestRun(run.getId()));
+
+            // ── Phase 2: Master data (TestSteps → TestCases → Suites) ────────────────────
+            var allCases = testCaseService.getAllCasesByProjectIdIncludingDeleted(id);
+            logger.info("[Project] Cascade: {} TestCase(s) to delete (including soft-deleted)", allCases.size());
+
+            if (!allCases.isEmpty()) {
+                var stepFutures = allCases.stream()
+                        .map(tc -> CompletableFuture.runAsync(() -> {
+                            logger.debug("[Project] Deleting TestSteps for TestCase: {}", tc.getId());
+                            try {
+                                testStepService.getAllTestStepsByTestCaseIdIncludingDeleted(tc.getId())
+                                        .forEach(s -> testStepService.hardDeleteTestStep(s.getId()));
+                            } catch (Exception e) {
+                                logger.error("[Project] Failed to delete TestSteps for TestCase {}: {}",
+                                    tc.getId(), e.getMessage(), e);
+                                throw new RuntimeException(e);
+                            }
+                        }))
+                        .toList();
+                try {
+                    CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
+                } catch (Exception e) {
+                    logger.error("[Project] Failed during parallel TestStep deletion: {}", e.getMessage(), e);
+                    throw new RuntimeException("Cascade delete failed at TestStep phase: " + e.getMessage(), e);
+                }
+                allCases.forEach(tc -> testCaseService.hardDeleteTestCase(tc.getId()));
+            }
+
+            suiteService.getAllSuitesByProjectId(id)
+                    .forEach(suite -> entityService.deleteById(suite.getId()));
+
+            // ── Phase 3: Defects, attachments, counter ────────────────────────────────────
+            defectService.getAllDefectsByProjectId(id)
+                    .forEach(d -> defectService.deleteDefect(d.getId()));
+
+            attachmentService.getAllAttachmentsByProjectId(id)
+                    .forEach(a -> attachmentService.deleteAttachment(a.getId()));
+
+            projectCounterService.deleteCounterForProject(id);
+
+            // ── Phase 4: The project itself ────────────────────────────────────────────────
+            entityService.deleteById(id);
+            logger.info("[Project] Cascade delete complete for project: {}", id);
+            return true;
+        } catch (Exception e) {
+            logger.error("[Project] Cascade delete FAILED for project {}: {}", id, e.getMessage(), e);
+            throw new RuntimeException("Failed to delete project: " + e.getMessage(), e);
         }
-
-        testRunService.getAllTestRunsByProjectId(id)
-                .forEach(run -> testRunService.deleteTestRun(run.getId()));
-
-        // ── Phase 2: Master data (TestSteps → TestCases → Suites) ────────────────────
-        var allCases = testCaseService.getAllCasesByProjectIdIncludingDeleted(id);
-        logger.info("[Project] Cascade: {} TestCase(s) to delete (including soft-deleted)", allCases.size());
-
-        if (!allCases.isEmpty()) {
-            var stepFutures = allCases.stream()
-                    .map(tc -> CompletableFuture.runAsync(() ->
-                            testStepService.getAllTestStepsByTestCaseIdIncludingDeleted(tc.getId())
-                                    .forEach(s -> testStepService.hardDeleteTestStep(s.getId()))))
-                    .toList();
-            CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
-            allCases.forEach(tc -> testCaseService.hardDeleteTestCase(tc.getId()));
-        }
-
-        suiteService.getAllSuitesByProjectId(id)
-                .forEach(suite -> entityService.deleteById(suite.getId()));
-
-        // ── Phase 3: Defects, attachments, counter ────────────────────────────────────
-        defectService.getAllDefectsByProjectId(id)
-                .forEach(d -> defectService.deleteDefect(d.getId()));
-
-        attachmentService.getAllAttachmentsByProjectId(id)
-                .forEach(a -> attachmentService.deleteAttachment(a.getId()));
-
-        projectCounterService.deleteCounterForProject(id);
-
-        // ── Phase 4: The project itself ────────────────────────────────────────────────
-        entityService.deleteById(id);
-        logger.info("[Project] Cascade delete complete for project: {}", id);
-        return true;
     }
 
     public List<ProjectDTO> searchProjects(String query) {
