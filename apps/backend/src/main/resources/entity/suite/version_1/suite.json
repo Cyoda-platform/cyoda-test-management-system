@@ -3,6 +3,9 @@
   "projectId": "ecommerce-v2",
   "name": "Checkout Flow",
   "description": "Test suite covering the complete checkout process from cart to order confirmation",
-  "parentSuiteId": null
+  "parentSuiteId": null,
+  "sortOrder": 1,
+  "createdAt": "2024-01-15T10:30:00Z",
+  "updatedAt": "2024-01-15T10:30:00Z"
 }
 

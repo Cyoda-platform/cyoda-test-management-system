@@ -39,12 +39,9 @@ trap cleanup EXIT
 
 # Start backend in background
 echo "🚀 Starting Backend..."
-cd backend
-./gradlew bootRun \
-  --args="--app.config.cyoda-host=$CYODA_HOST --app.config.cyoda-client-id=$CYODA_CLIENT_ID --app.config.cyoda-client-secret=$CYODA_CLIENT_SECRET" \
+./gradlew :apps:backend:runApp \
   > /tmp/tms-backend.log 2>&1 &
 BACKEND_PID=$!
-cd ..
 
 echo "✅ Backend PID: $BACKEND_PID"
 
@@ -61,10 +58,10 @@ done
 
 # Start frontend in background
 echo "🚀 Starting Frontend..."
-cd frontend
+cd apps/frontend
 npm run dev > /tmp/tms-frontend.log 2>&1 &
 FRONTEND_PID=$!
-cd ..
+cd ../..
 
 echo "✅ Frontend PID: $FRONTEND_PID"
 echo ""

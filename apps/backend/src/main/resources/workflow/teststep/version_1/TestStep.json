@@ -1,0 +1,74 @@
+{
+  "version": "1",
+  "name": "TestStep",
+  "description": "Workflow for test step definition lifecycle within a test case",
+  "initialState": "initial",
+  "active": true,
+  "states": {
+    "initial": {
+      "transitions": [
+        {
+          "name": "create_step",
+          "description": "Creates a new step definition for a test case",
+          "manual": true,
+          "next": "created",
+          "criterion": {
+            "type": "group",
+            "operator": "AND",
+            "conditions": [
+              {
+                "type": "simple",
+                "jsonPath": "$.user.role",
+                "operation": "EQUALS",
+                "value": "Admin"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "created": {
+      "transitions": [
+        {
+          "name": "update_step",
+          "description": "Modifies the step action or expected result",
+          "manual": true,
+          "next": "created",
+          "criterion": {
+            "type": "group",
+            "operator": "AND",
+            "conditions": [
+              {
+                "type": "simple",
+                "jsonPath": "$.user.role",
+                "operation": "EQUALS",
+                "value": "Admin"
+              }
+            ]
+          }
+        },
+        {
+          "name": "soft_delete_step",
+          "description": "Hides the step while preserving it in existing test run snapshots",
+          "manual": true,
+          "next": "deleted",
+          "criterion": {
+            "type": "group",
+            "operator": "AND",
+            "conditions": [
+              {
+                "type": "simple",
+                "jsonPath": "$.user.role",
+                "operation": "EQUALS",
+                "value": "Admin"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "deleted": {
+      "transitions": []
+    }
+  }
+}

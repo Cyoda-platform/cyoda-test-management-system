@@ -28,6 +28,7 @@ public class TestStepDTO implements CyodaEntity {
     @JsonProperty("action")
     private String action;
     private String expectedResult;
+    private boolean deleted;
 
     @Override
     @JsonIgnore

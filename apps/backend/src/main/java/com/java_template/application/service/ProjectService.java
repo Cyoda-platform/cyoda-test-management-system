@@ -179,6 +179,12 @@ public class ProjectService {
     }
 
     public ProjectDTO updateProject(UUID id, ProjectDTO project) {
+        // Always send a non-null updatedAt — Cyoda's internal ObjectMapper does NOT respect
+        // @JsonInclude(NON_NULL), so null is still serialised and sent. If the schema was
+        // registered with updatedAt present (which createProject now guarantees), sending
+        // null causes INVALID_ARGUMENT: No DataType defined for path $.updatedAt.
+        project.setId(null);
+        project.setUpdatedAt(Instant.now().toString());
         return withId(entityService.update(id, project, null));
     }
 
@@ -234,8 +240,8 @@ public class ProjectService {
         if (!allCases.isEmpty()) {
             var stepFutures = allCases.stream()
                     .map(tc -> CompletableFuture.runAsync(() ->
-                            testStepService.getTestStepsByTestCaseId(tc.getId())
-                                    .forEach(s -> testStepService.deleteTestStep(s.getId()))))
+                            testStepService.getAllTestStepsByTestCaseIdIncludingDeleted(tc.getId())
+                                    .forEach(s -> testStepService.hardDeleteTestStep(s.getId()))))
                     .toList();
             CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
             allCases.forEach(tc -> testCaseService.hardDeleteTestCase(tc.getId()));
