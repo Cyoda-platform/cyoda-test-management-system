@@ -10,7 +10,6 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PieChart, BarChart3, Bug, Server } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject, useTestRuns, useReports, useCreateReport } from '@/hooks/useApi';
-import { nextListDisplayId } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -65,7 +64,7 @@ const CreateReport = () => {
         projectId: projectId!,
         body: {
           name:                    reportName.trim(),
-          displayId:               nextListDisplayId('REP', existingReports),
+          // displayId is assigned server-side (REP-N via ProjectCounterService)
           type:                    reportType as 'Summary' | 'Regression' | 'Sprint' | 'Custom',
           description,
           createdBy:               'current_user',

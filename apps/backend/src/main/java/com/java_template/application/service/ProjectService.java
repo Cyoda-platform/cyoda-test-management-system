@@ -43,6 +43,7 @@ public class ProjectService {
     private final TestRunStepService testRunStepService;
     private final DefectService defectService;
     private final AttachmentService attachmentService;
+    private final ReportService reportService;
     private final ProjectCounterService projectCounterService;
 
     public ProjectService(EntityService entityService,
@@ -55,6 +56,7 @@ public class ProjectService {
                           @Lazy TestRunStepService testRunStepService,
                           @Lazy DefectService defectService,
                           @Lazy AttachmentService attachmentService,
+                          @Lazy ReportService reportService,
                           @Lazy ProjectCounterService projectCounterService) {
         this.entityService = entityService;
         this.objectMapper = objectMapper;
@@ -66,6 +68,7 @@ public class ProjectService {
         this.testRunStepService = testRunStepService;
         this.defectService = defectService;
         this.attachmentService = attachmentService;
+        this.reportService = reportService;
         this.projectCounterService = projectCounterService;
     }
 
@@ -201,6 +204,7 @@ public class ProjectService {
      *   <li>Suite        — fetched by projectId</li>
      *   <li>Defect       — fetched by projectId</li>
      *   <li>Attachment   — fetched by projectId</li>
+     *   <li>Report       — fetched by projectId</li>
      *   <li>ProjectCounter</li>
      *   <li>Project</li>
      * </ol>
@@ -277,12 +281,15 @@ public class ProjectService {
             suiteService.getAllSuitesByProjectId(id)
                     .forEach(suite -> entityService.deleteById(suite.getId()));
 
-            // ── Phase 3: Defects, attachments, counter ────────────────────────────────────
+            // ── Phase 3: Defects, attachments, reports, counter ──────────────────────────
             defectService.getAllDefectsByProjectId(id)
                     .forEach(d -> defectService.deleteDefect(d.getId()));
 
             attachmentService.getAllAttachmentsByProjectId(id)
                     .forEach(a -> attachmentService.deleteAttachment(a.getId()));
+
+            reportService.getAllReportsByProjectId(id)
+                    .forEach(r -> reportService.deleteReport(r.getId()));
 
             projectCounterService.deleteCounterForProject(id);
 

@@ -1,8 +1,11 @@
 package com.java_template.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.java_template.application.dto.DefectDTO;
 import com.java_template.application.dto.ProjectCounterDTO;
+import com.java_template.application.dto.ReportDTO;
 import com.java_template.application.dto.TestCaseDTO;
+import com.java_template.application.dto.TestRunDTO;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
@@ -19,21 +22,22 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.ObjLongConsumer;
+import java.util.function.ToLongFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Provides globally unique, strictly-increasing, never-reusable display IDs
- * for test cases within a project.
+ * for test cases (TC-N), test runs (TR-N), and defects (DEF-N) within a project.
  *
- * Format: "TC-{n}"  (e.g. TC-1, TC-42, TC-100)
- *
- * One {@link ProjectCounterDTO} record is stored per project.  On first use the
- * counter is bootstrapped by scanning ALL existing test-case displayIds
- * (including soft-deleted ones) so deleted IDs are never recycled.
+ * One {@link ProjectCounterDTO} record is stored per project, containing
+ * separate counters for each entity type.  On first use each counter is
+ * bootstrapped by scanning existing displayIds (including soft-deleted records)
+ * so that deleted IDs are never recycled.
  *
  * A per-project in-process lock prevents duplicate assignments when multiple
- * cases are created in quick succession within the same JVM instance.
+ * entities are created concurrently within the same JVM instance.
  */
 @Service
 public class ProjectCounterService {
@@ -48,8 +52,22 @@ public class ProjectCounterService {
             .withName(TestCaseDTO.ENTITY_NAME)
             .withVersion(TestCaseDTO.ENTITY_VERSION);
 
-    /** Matches "TC-{digits}" display IDs produced by this service. */
-    private static final Pattern TC_PATTERN = Pattern.compile("^TC-(\\d+)$");
+    private static final ModelSpec RUN_SPEC = new ModelSpec()
+            .withName(TestRunDTO.ENTITY_NAME)
+            .withVersion(TestRunDTO.ENTITY_VERSION);
+
+    private static final ModelSpec DEFECT_SPEC = new ModelSpec()
+            .withName(DefectDTO.ENTITY_NAME)
+            .withVersion(DefectDTO.ENTITY_VERSION);
+
+    private static final ModelSpec REPORT_SPEC = new ModelSpec()
+            .withName(ReportDTO.ENTITY_NAME)
+            .withVersion(ReportDTO.ENTITY_VERSION);
+
+    private static final Pattern TC_PATTERN  = Pattern.compile("^TC-(\\d+)$");
+    private static final Pattern TR_PATTERN  = Pattern.compile("^TR-(\\d+)$");
+    private static final Pattern DEF_PATTERN = Pattern.compile("^DEF-(\\d+)$");
+    private static final Pattern REP_PATTERN = Pattern.compile("^REP-(\\d+)$");
 
     private final EntityService entityService;
     private final ObjectMapper objectMapper;
@@ -65,74 +83,47 @@ public class ProjectCounterService {
         this.objectMapper = objectMapper;
     }
 
-    private GroupConditionDto conditionByProjectId(UUID projectId) {
-        SimpleConditionDto condition = new SimpleConditionDto()
-                .jsonPath("$.projectId")
-                .operation(OperatorTypeDto.EQUALS)
-                .value(objectMapper.valueToTree(projectId.toString()));
-        condition.setType(QueryConditionTypeDto.SIMPLE);
-        GroupConditionDto group = new GroupConditionDto()
-                .operator(GroupOperatorDto.AND)
-                .conditions(List.of(condition));
-        group.setType(QueryConditionTypeDto.GROUP);
-        return group;
-    }
+    // ── Public API ────────────────────────────────────────────────────────────
 
-    /**
-     * Returns the next unique display ID for a new test case in {@code projectId}.
-     * The returned value is immediately reserved; subsequent calls will never
-     * return the same value for the same project.
-     */
+    /** Next unique TC-N display ID for a new test case. */
     public String nextDisplayId(UUID projectId) {
         return nextDisplayIdBatch(projectId, 1).get(0);
     }
 
-    /**
-     * Reserves {@code count} consecutive display IDs for a batch import operation
-     * and returns them as a list (e.g. ["TC-5","TC-6","TC-7"]).
-     *
-     * A single synchronized block advances the counter by {@code count} in one
-     * database round-trip, eliminating the N-calls-per-imported-case N+1 pattern
-     * that made bulk imports extremely slow.
-     *
-     * @param projectId the project whose counter to advance
-     * @param count     how many IDs to reserve (must be &gt; 0)
-     * @return an ordered list of {@code count} unique display IDs
-     */
-    public java.util.List<String> nextDisplayIdBatch(UUID projectId, int count) {
-        if (count <= 0) throw new IllegalArgumentException("count must be > 0");
-        Object lock = projectLocks.computeIfAbsent(projectId, k -> new Object());
-        synchronized (lock) {
-            Optional<ProjectCounterDTO> existing = findCounterForProject(projectId);
+    /** Batch-reserve {@code count} TC-N IDs (one counter round-trip). */
+    public List<String> nextDisplayIdBatch(UUID projectId, int count) {
+        return nextBatch(projectId, count, "TC",
+                ProjectCounterDTO::getNextId,
+                ProjectCounterDTO::setNextId,
+                () -> scanMaxForSpec(projectId, CASE_SPEC, TestCaseDTO.class,
+                        TestCaseDTO::getDisplayId, TC_PATTERN));
+    }
 
-            long firstAssigned;
-            if (existing.isPresent()) {
-                ProjectCounterDTO counter = existing.get();
-                firstAssigned = counter.getNextId();
-                counter.setNextId(firstAssigned + count);
-                entityService.update(counter.getId(), counter, null);
-                logger.debug("Assigned TC-{}..TC-{} for project {} (batch={})",
-                        firstAssigned, firstAssigned + count - 1, projectId, count);
-            } else {
-                // First use for this project: bootstrap by scanning existing IDs
-                long maxUsed = scanMaxUsedId(projectId);
-                firstAssigned = maxUsed + 1;
+    /** Next unique TR-N display ID for a new test run. */
+    public String nextRunDisplayId(UUID projectId) {
+        return nextBatch(projectId, 1, "TR",
+                ProjectCounterDTO::getNextRunId,
+                ProjectCounterDTO::setNextRunId,
+                () -> scanMaxForSpec(projectId, RUN_SPEC, TestRunDTO.class,
+                        TestRunDTO::getDisplayId, TR_PATTERN)).get(0);
+    }
 
-                ProjectCounterDTO counter = new ProjectCounterDTO();
-                counter.setProjectId(projectId);
-                counter.setNextId(firstAssigned + count);
-                entityService.create(counter);
+    /** Next unique DEF-N display ID for a new defect. */
+    public String nextDefectDisplayId(UUID projectId) {
+        return nextBatch(projectId, 1, "DEF",
+                ProjectCounterDTO::getNextDefectId,
+                ProjectCounterDTO::setNextDefectId,
+                () -> scanMaxForSpec(projectId, DEFECT_SPEC, DefectDTO.class,
+                        DefectDTO::getDisplayId, DEF_PATTERN)).get(0);
+    }
 
-                logger.info("Initialized TC counter for project {} — first batch: TC-{}..TC-{} (prev max: {})",
-                        projectId, firstAssigned, firstAssigned + count - 1, maxUsed);
-            }
-
-            java.util.List<String> ids = new java.util.ArrayList<>(count);
-            for (long i = 0; i < count; i++) {
-                ids.add("TC-" + (firstAssigned + i));
-            }
-            return ids;
-        }
+    /** Next unique REP-N display ID for a new report. */
+    public String nextReportDisplayId(UUID projectId) {
+        return nextBatch(projectId, 1, "REP",
+                ProjectCounterDTO::getNextReportId,
+                ProjectCounterDTO::setNextReportId,
+                () -> scanMaxForSpec(projectId, REPORT_SPEC, ReportDTO.class,
+                        ReportDTO::getDisplayId, REP_PATTERN)).get(0);
     }
 
     /**
@@ -146,11 +137,80 @@ public class ProjectCounterService {
         });
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    // ── Core generic implementation ───────────────────────────────────────────
+
+    /**
+     * Reserves {@code count} IDs from the specified counter field and returns
+     * formatted strings like ["TR-1","TR-2"].
+     *
+     * @param getter    reads the relevant counter field from the DTO
+     * @param setter    writes the incremented value back
+     * @param bootstrap called once to scan the max already-used ID when no
+     *                  counter record exists yet (never-reuse guarantee)
+     */
+    private List<String> nextBatch(UUID projectId, int count, String prefix,
+                                   ToLongFunction<ProjectCounterDTO> getter,
+                                   ObjLongConsumer<ProjectCounterDTO> setter,
+                                   java.util.function.LongSupplier bootstrap) {
+        if (count <= 0) throw new IllegalArgumentException("count must be > 0");
+        Object lock = projectLocks.computeIfAbsent(projectId, k -> new Object());
+        synchronized (lock) {
+            Optional<ProjectCounterDTO> existing = findCounterForProject(projectId);
+
+            long firstAssigned;
+            if (existing.isPresent()) {
+                ProjectCounterDTO counter = existing.get();
+                firstAssigned = getter.applyAsLong(counter);
+                if (firstAssigned == 0) {
+                    // Field not yet initialised on an older counter record — bootstrap
+                    firstAssigned = bootstrap.getAsLong() + 1;
+                }
+                setter.accept(counter, firstAssigned + count);
+                entityService.update(counter.getId(), counter, null);
+                logger.debug("Assigned {}-{}..{}-{} for project {} (batch={})",
+                        prefix, firstAssigned, prefix, firstAssigned + count - 1, projectId, count);
+            } else {
+                long maxUsed = bootstrap.getAsLong();
+                firstAssigned = maxUsed + 1;
+
+                ProjectCounterDTO counter = new ProjectCounterDTO();
+                counter.setProjectId(projectId);
+                // Initialise all counters so the record is complete from the start
+                counter.setNextId(prefix.equals("TC") ? firstAssigned + count : 1);
+                counter.setNextRunId(prefix.equals("TR") ? firstAssigned + count : 1);
+                counter.setNextDefectId(prefix.equals("DEF") ? firstAssigned + count : 1);
+                counter.setNextReportId(prefix.equals("REP") ? firstAssigned + count : 1);
+                entityService.create(counter);
+
+                logger.info("Initialized {} counter for project {} — first batch: {}-{}..{}-{} (prev max: {})",
+                        prefix, projectId, prefix, firstAssigned, prefix, firstAssigned + count - 1, maxUsed);
+            }
+
+            List<String> ids = new java.util.ArrayList<>(count);
+            for (long i = 0; i < count; i++) {
+                ids.add(prefix + "-" + (firstAssigned + i));
+            }
+            return ids;
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private GroupConditionDto conditionByProjectId(UUID projectId) {
+        SimpleConditionDto condition = new SimpleConditionDto()
+                .jsonPath("$.projectId")
+                .operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(projectId.toString()));
+        condition.setType(QueryConditionTypeDto.SIMPLE);
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(condition));
+        group.setType(QueryConditionTypeDto.GROUP);
+        return group;
+    }
 
     private Optional<ProjectCounterDTO> findCounterForProject(UUID projectId) {
         try {
-            // Server-side filter: only fetch counters for this project (at most one record).
             GroupConditionDto condition = conditionByProjectId(projectId);
             return entityService.search(COUNTER_SPEC, condition, ProjectCounterDTO.class)
                     .data().stream()
@@ -167,27 +227,30 @@ public class ProjectCounterService {
     }
 
     /**
-     * Scans all test cases for this project (including soft-deleted) and returns
-     * the highest numeric suffix found in "TC-{n}" display IDs, or 0 if none.
-     * Uses a server-side projectId filter so only this project's cases are loaded.
+     * Scans all entities of the given spec/class for this project and returns the
+     * highest numeric suffix found in displayIds matching {@code pattern}, or 0.
+     * Used once per entity type to bootstrap the counter from pre-existing data.
      */
-    private long scanMaxUsedId(UUID projectId) {
+    private <T extends com.java_template.common.workflow.CyodaEntity> long scanMaxForSpec(
+            UUID projectId, ModelSpec spec, Class<T> clazz,
+            java.util.function.Function<T, String> idExtractor, Pattern pattern) {
         try {
             GroupConditionDto condition = conditionByProjectId(projectId);
             SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                     .pageNumber(0).pageSize(10_000).build();
-            return entityService.search(CASE_SPEC, condition, TestCaseDTO.class, params)
+            return entityService.search(spec, condition, clazz, params)
                     .data().stream()
-                    .map(e -> e.entity().getDisplayId())
+                    .map(e -> idExtractor.apply(e.entity()))
                     .filter(id -> id != null)
                     .mapToLong(id -> {
-                        Matcher m = TC_PATTERN.matcher(id);
+                        Matcher m = pattern.matcher(id);
                         return m.matches() ? Long.parseLong(m.group(1)) : 0L;
                     })
                     .max()
                     .orElse(0L);
         } catch (Exception ex) {
-            logger.warn("Could not scan existing case IDs for project {}: {}", projectId, ex.getMessage());
+            logger.warn("Could not scan existing {} IDs for project {}: {}",
+                    pattern.pattern(), projectId, ex.getMessage());
             return 0L;
         }
     }

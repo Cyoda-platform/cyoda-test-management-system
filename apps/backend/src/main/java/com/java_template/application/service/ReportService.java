@@ -9,6 +9,7 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,9 +23,11 @@ public class ReportService {
             new ModelSpec().withName(ReportDTO.ENTITY_NAME).withVersion(ReportDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
+    private final ProjectCounterService projectCounterService;
 
-    public ReportService(EntityService entityService) {
+    public ReportService(EntityService entityService, ProjectCounterService projectCounterService) {
         this.entityService = entityService;
+        this.projectCounterService = projectCounterService;
     }
 
     private ReportDTO withId(EntityWithMetadata<ReportDTO> result) {
@@ -42,7 +45,14 @@ public class ReportService {
     public ReportDTO createReport(ReportDTO report) {
         report.setCreatedAt(LocalDateTime.now());
         report.setUpdatedAt(LocalDateTime.now());
-        return withId(entityService.create(report));
+        // Always override any client-supplied displayId with a server-generated REP-N
+        String displayId = projectCounterService.nextReportDisplayId(report.getProjectId());
+        report.setDisplayId(displayId);
+        ReportDTO created = withId(entityService.create(report));
+        // Persist displayId explicitly — Cyoda's create reload may not return it
+        created.setDisplayId(displayId);
+        entityService.update(created.getId(), created, null);
+        return created;
     }
 
     public Optional<ReportDTO> getReportById(UUID id) {
@@ -51,6 +61,20 @@ public class ReportService {
         } catch (Exception e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * Returns ALL reports for a project without pagination.
+     * Used internally for cascade-delete operations.
+     */
+    public List<ReportDTO> getAllReportsByProjectId(UUID projectId) {
+        SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
+                .pageNumber(0).pageSize(Integer.MAX_VALUE).build();
+        return entityService.findAll(MODEL_SPEC, ReportDTO.class, params)
+                .data().stream()
+                .filter(r -> r.entity().getProjectId() != null && r.entity().getProjectId().equals(projectId))
+                .map(this::withId)
+                .toList();
     }
 
     public PageResult<ReportDTO> getReportsByProjectId(UUID projectId, int page, int size) {

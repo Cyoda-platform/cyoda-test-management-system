@@ -11,7 +11,6 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject, useSuites, useTestRuns, useCreateTestRun, keys } from '@/hooks/useApi';
 import { testCasesApi } from '@/lib/api';
-import { nextListDisplayId } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -153,7 +152,7 @@ const CreateTestRun = () => {
           environment,
           buildVersion,
           description,
-          displayId: nextListDisplayId('TR', existingRuns),
+          // displayId is assigned server-side (TR-N via ProjectCounterService)
           status: 'initial',
           passed: 0,
           failed: 0,

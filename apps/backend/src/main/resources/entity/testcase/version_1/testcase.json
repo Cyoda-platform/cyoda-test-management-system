@@ -2,7 +2,7 @@
   "id": "tc-001",
   "projectId": "ecommerce-v2",
   "suiteId": "suite-001",
-  "displayId": "S1-1",
+  "displayId": "TC-1",
   "title": "Verify successful checkout with valid payment",
   "description": "User adds items to cart and completes checkout with valid credit card",
   "preconditions": "User is logged in, cart contains at least one item, payment gateway is operational",

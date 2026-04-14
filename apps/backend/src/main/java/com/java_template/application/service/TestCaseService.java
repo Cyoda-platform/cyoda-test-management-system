@@ -75,12 +75,21 @@ public class TestCaseService {
      * Creates a new test case.
      * Always generates a server-side display ID using the project counter so IDs
      * are unique across the project, independent of suite names, and never reused.
+     *
+     * Note: Cyoda's create-then-reload cycle may not return the displayId in the
+     * reloaded payload.  We therefore persist it explicitly via a follow-up update
+     * so that subsequent reads always see the correct TC-X value.
      */
     public TestCaseDTO createTestCase(TestCaseDTO testCase) {
         testCase.setDeleted(false);
         // Always override any client-supplied displayId with a server-generated one
-        testCase.setDisplayId(projectCounterService.nextDisplayId(testCase.getProjectId()));
-        return withId(entityService.create(testCase));
+        String displayId = projectCounterService.nextDisplayId(testCase.getProjectId());
+        testCase.setDisplayId(displayId);
+        TestCaseDTO created = withId(entityService.create(testCase));
+        // Cyoda's create reload may strip the displayId; persist it explicitly
+        created.setDisplayId(displayId);
+        entityService.update(created.getId(), created, null);
+        return created;
     }
 
     public Optional<TestCaseDTO> getTestCaseById(UUID id) {
@@ -294,9 +303,13 @@ public class TestCaseService {
             tc.setPriority(item.getPriority() != null ? item.getPriority()
                     : com.java_template.application.dto.Priority.MEDIUM);
             tc.setDeleted(false);
-            tc.setDisplayId(displayIds.get(i));
+            String batchDisplayId = displayIds.get(i);
+            tc.setDisplayId(batchDisplayId);
 
             TestCaseDTO saved = withId(entityService.create(tc));
+            // Persist displayId explicitly (Cyoda's create reload may strip it)
+            saved.setDisplayId(batchDisplayId);
+            entityService.update(saved.getId(), saved, null);
 
             // Create steps inline if provided
             if (item.getSteps() != null && !item.getSteps().isEmpty()) {

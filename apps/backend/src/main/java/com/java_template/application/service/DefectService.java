@@ -29,10 +29,14 @@ public class DefectService {
             new ModelSpec().withName(DefectDTO.ENTITY_NAME).withVersion(DefectDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
+    private final ProjectCounterService projectCounterService;
     private final ObjectMapper objectMapper;
 
-    public DefectService(EntityService entityService, ObjectMapper objectMapper) {
+    public DefectService(EntityService entityService,
+                         ProjectCounterService projectCounterService,
+                         ObjectMapper objectMapper) {
         this.entityService = entityService;
+        this.projectCounterService = projectCounterService;
         this.objectMapper = objectMapper;
     }
 
@@ -67,7 +71,14 @@ public class DefectService {
         defect.setStatus("Open");
         defect.setCreatedAt(LocalDateTime.now());
         defect.setUpdatedAt(LocalDateTime.now());
-        return withId(entityService.create(defect));
+        // Always override any client-supplied displayId with a server-generated DEF-N
+        String displayId = projectCounterService.nextDefectDisplayId(defect.getProjectId());
+        defect.setDisplayId(displayId);
+        DefectDTO created = withId(entityService.create(defect));
+        // Persist displayId explicitly — Cyoda's create reload may not return it
+        created.setDisplayId(displayId);
+        entityService.update(created.getId(), created, null);
+        return created;
     }
 
     public Optional<DefectDTO> getDefectById(UUID id) {

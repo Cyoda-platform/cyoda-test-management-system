@@ -28,10 +28,14 @@ public class TestRunService {
             new ModelSpec().withName(TestRunDTO.ENTITY_NAME).withVersion(TestRunDTO.ENTITY_VERSION);
 
     private final EntityService entityService;
+    private final ProjectCounterService projectCounterService;
     private final ObjectMapper objectMapper;
 
-    public TestRunService(EntityService entityService, ObjectMapper objectMapper) {
+    public TestRunService(EntityService entityService,
+                          ProjectCounterService projectCounterService,
+                          ObjectMapper objectMapper) {
         this.entityService = entityService;
+        this.projectCounterService = projectCounterService;
         this.objectMapper = objectMapper;
     }
 
@@ -64,9 +68,14 @@ public class TestRunService {
         LocalDateTime now = LocalDateTime.now();
         testRun.setCreatedAt(now);
         testRun.setStartedAt(now);
-        // Create the test run in "initial" state
-        // Note: initialize_run transition will be called via API when user is ready
-        return withId(entityService.create(testRun));
+        // Always override any client-supplied displayId with a server-generated TR-N
+        String displayId = projectCounterService.nextRunDisplayId(testRun.getProjectId());
+        testRun.setDisplayId(displayId);
+        TestRunDTO created = withId(entityService.create(testRun));
+        // Persist displayId explicitly — Cyoda's create reload may not return it
+        created.setDisplayId(displayId);
+        entityService.update(created.getId(), created, null);
+        return created;
     }
 
     public Optional<TestRunDTO> getTestRunById(UUID id) {

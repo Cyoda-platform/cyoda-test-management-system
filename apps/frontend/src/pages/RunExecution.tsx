@@ -33,7 +33,7 @@ import {
   type Attachment,
   type TestRunCase,
 } from '@/lib/api';
-import { isUuid, nextListDisplayId } from '@/lib/utils';
+import { isUuid } from '@/lib/utils';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -827,7 +827,7 @@ const RunExecution = () => {
       setCreatedDefects((prev) => [
         {
           id:          created.id,
-          displayId:   created.displayId ?? nextListDisplayId('DEF', prev),
+          displayId:   created.displayId,
           caseId:      runCaseId,
           caseTitle:   allCases.find((item) => item.id === defect.caseId)?.title ?? activeCase.title,
           stepIdx:     defectContext.stepIdx,

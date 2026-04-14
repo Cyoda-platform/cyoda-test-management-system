@@ -12,7 +12,7 @@ import { useProject, useDefects, useCreateDefect, useUpdateDefect, useDeleteDefe
 import type { Defect } from '@/lib/api';
 import { attachmentsApi } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
-import { listDisplayId, nextListDisplayId, formatDate, isUuid } from '@/lib/utils';
+import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -221,7 +221,7 @@ const Defects = () => {
           link:        formLink,
           status:      formStatus,
           source:      formSource,
-          displayId:   nextListDisplayId('DEF', defects),
+          // displayId is assigned server-side (DEF-N via ProjectCounterService)
         },
       };
 

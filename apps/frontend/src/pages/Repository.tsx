@@ -28,59 +28,11 @@ import { suitesApi, testCasesApi, testStepsApi, attachmentsApi } from '@/lib/api
 import type { LocalCase as TestCase, LocalStep, LocalSuite as Suite } from '@/lib/localTypes';
 // TestRun type only needed for legacy Create Run handler shape — removed, using API directly
 
-const UUID_LIKE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const buildSuitePrefix = (suiteName: string) => {
-  const words = suiteName.match(/[A-Za-z0-9]+/g) ?? [];
-  if (words.length === 0) return 'TC';
-
-  const acronymWord = words.find((word) => /^[A-Z0-9]{2,4}$/.test(word));
-  if (acronymWord) return acronymWord.slice(0, 4);
-
-  if (words.length > 1) {
-    return words.slice(0, 3).map((word) => word[0]).join('').toUpperCase();
-  }
-
-  return words[0].slice(0, 3).toUpperCase();
-};
-
-const formatCaseDisplayId = ({
-  rawId,
-  suiteName,
-  caseIndex,
-  displayId,
-  shortId,
-}: {
-  rawId: string;
-  suiteName: string;
-  caseIndex: number;
-  displayId?: string;
-  shortId?: string;
-}) => {
-  const explicitId = displayId?.trim() || shortId?.trim();
-  if (explicitId) return explicitId;
-  if (rawId && !UUID_LIKE_REGEX.test(rawId) && rawId.length <= 18) return rawId;
-  return `${buildSuitePrefix(suiteName)}-${caseIndex + 1}`;
-};
-
-/**
- * Generates the next stable display ID for a new test case in a suite.
- * Reads the highest sequential number from existing displayIds so the new ID
- * is unique and independent of list position.
- */
-const buildNextDisplayId = (suiteId: string, suiteName: string, currentSuites: Suite[]): string => {
-  const suite = currentSuites.find(s => s.id === suiteId);
-  const prefix = buildSuitePrefix(suiteName);
-  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`^${escapedPrefix}-(\\d+)$`);
-  const maxNum = (suite?.cases ?? []).reduce((max, c) => {
-    const m = (c.displayId ?? '').match(pattern);
-    return m ? Math.max(max, parseInt(m[1], 10)) : max;
-  }, 0);
-  return `${prefix}-${maxNum + 1}`;
-};
-
-const getCaseDisplayId = (testCase: Pick<TestCase, 'id' | 'displayId'>) => testCase.displayId || testCase.id;
+// Display IDs are always assigned server-side as "TC-{n}".
+// Never generate suite-scoped IDs on the client — fall back to the technical UUID
+// only if the server hasn't assigned one yet (edge case during initial load).
+const getCaseDisplayId = (testCase: Pick<TestCase, 'id' | 'displayId'>) =>
+  testCase.displayId?.trim() || testCase.id;
 
 const Repository = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -100,15 +52,9 @@ const Repository = () => {
       id:        s.id,
       projectId: s.projectId,
       name:      s.name,
-      cases:     s.cases.map((c, caseIndex) => ({
+      cases:     s.cases.map((c) => ({
         id:            c.id,
-        displayId:     formatCaseDisplayId({
-          rawId: c.id,
-          suiteName: s.name,
-          caseIndex,
-          displayId: c.displayId,
-          shortId: undefined,
-        }),
+        displayId:     c.displayId ?? undefined,
         suiteId:       c.suiteId,
         title:         c.title,
         priority:      c.priority,
@@ -667,6 +613,23 @@ const Repository = () => {
   const [caseSuiteId, setCaseSuiteId] = useState<string>('');
   const [editingCase, setEditingCase] = useState<TestCase | null>(null);
 
+  // Fetch steps for the case being edited (separate from selectedCase to avoid cross-contamination)
+  const { data: editingStepsData = [] } = useQuery({
+    queryKey: keys.steps.all(projectId!, caseSuiteId, editingCaseId),
+    queryFn:  () => testStepsApi.list(projectId!, caseSuiteId, editingCaseId),
+    enabled:  !!editingCase && !!caseSuiteId && !!editingCaseId,
+  });
+  const stepsForEditingCase: LocalStep[] = useMemo(
+    () => editingStepsData.map(s => ({
+      id:             s.id,
+      order:          s.stepNumber,
+      action:         s.action,
+      expectedResult: s.expectedResult,
+      status:         s.status,
+    })),
+    [editingStepsData]
+  );
+
   // Quick create modal
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [quickCreateSuiteId, setQuickCreateSuiteId] = useState<string>('');
@@ -1184,8 +1147,9 @@ const Repository = () => {
   };
 
   // When editing a case, merge fetched steps in so CaseFormPage can pre-populate them
+  // Use stepsForEditingCase (not stepsForSelectedCase) to avoid showing steps from the detail panel
   const editingCaseWithSteps: TestCase | null = editingCase
-    ? { ...editingCase, steps: stepsForSelectedCase }
+    ? { ...editingCase, steps: stepsForEditingCase }
     : null;
 
   if (caseFormOpen) {

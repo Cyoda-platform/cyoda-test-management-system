@@ -11,12 +11,12 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import java.util.UUID;
 
 /**
- * Stores a monotonically-increasing counter per project used to assign unique,
- * non-reusable display IDs (TC-1, TC-2, …) to test cases.
+ * Stores monotonically-increasing counters per project for assigning unique,
+ * non-reusable display IDs to test cases (TC-N), test runs (TR-N), and defects (DEF-N).
  *
- * One record exists per project. The counter is read-then-incremented inside a
+ * One record exists per project. Each counter is read-then-incremented inside a
  * per-project synchronized block in ProjectCounterService to prevent reuse even
- * under concurrent case creation.
+ * under concurrent creation.
  */
 @Data
 @NoArgsConstructor
@@ -32,8 +32,17 @@ public class ProjectCounterDTO implements CyodaEntity {
     /** The project this counter belongs to. */
     private UUID projectId;
 
-    /** The next ID value to assign. Starts at 1 and only ever increases. */
+    /** Next TC-N value to assign (test cases). Starts at 1, only ever increases. */
     private long nextId;
+
+    /** Next TR-N value to assign (test runs). Starts at 1, only ever increases. */
+    private long nextRunId;
+
+    /** Next DEF-N value to assign (defects). Starts at 1, only ever increases. */
+    private long nextDefectId;
+
+    /** Next REP-N value to assign (reports). Starts at 1, only ever increases. */
+    private long nextReportId;
 
     @Override
     @JsonIgnore
