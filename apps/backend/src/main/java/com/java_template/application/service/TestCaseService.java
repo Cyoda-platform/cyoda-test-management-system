@@ -84,29 +84,16 @@ public class TestCaseService {
      * so that subsequent reads always see the correct TC-X value.
      */
     public TestCaseDTO createTestCase(TestCaseDTO testCase) {
-        log.warn("===== TESTCASESERVICE.createTestCase ENTRY ===== title={}", testCase.getTitle());
         testCase.setDeleted(false);
         // Always override any client-supplied displayId with a server-generated one
-        log.warn("===== CALLING projectCounterService.nextDisplayId() with projectId={}", testCase.getProjectId());
         String displayId = projectCounterService.nextDisplayId(testCase.getProjectId());
-        log.warn("===== projectCounterService.nextDisplayId() returned: {}", displayId);
         testCase.setDisplayId(displayId);
         // Initialize timestamps
         String now = Instant.now().toString();
         testCase.setCreatedAt(now);
         testCase.setUpdatedAt(now);
 
-        // Log what we're sending to Cyoda
-        try {
-            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(testCase);
-            log.warn("===== CREATING TESTCASE WITH JSON: =====\n{}\n=====", json);
-        } catch (Exception e) {
-            log.error("Failed to serialize TestCase for logging", e);
-        }
-
-        log.warn("===== ABOUT TO CALL entityService.create() =====");
         TestCaseDTO created = withId(entityService.create(testCase));
-        log.warn("===== entityService.create() RETURNED =====");
         // Cyoda's create reload may strip the displayId; persist it explicitly
         created.setDisplayId(displayId);
         entityService.update(created.getId(), created, null);

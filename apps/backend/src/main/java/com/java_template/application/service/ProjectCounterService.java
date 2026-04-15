@@ -153,12 +153,9 @@ public class ProjectCounterService {
                                    ObjLongConsumer<ProjectCounterDTO> setter,
                                    java.util.function.LongSupplier bootstrap) {
         if (count <= 0) throw new IllegalArgumentException("count must be > 0");
-        logger.warn("===== NEXTBATCH CALLED ===== prefix={}, projectId={}", prefix, projectId);
         Object lock = projectLocks.computeIfAbsent(projectId, k -> new Object());
         synchronized (lock) {
-            logger.warn("===== FINDCOUNTERFORPROJECT =====");
             Optional<ProjectCounterDTO> existing = findCounterForProject(projectId);
-            logger.warn("===== FINDCOUNTERFORPROJECT DONE, exists={} =====", existing.isPresent());
 
             long firstAssigned;
             if (existing.isPresent()) {
@@ -184,17 +181,7 @@ public class ProjectCounterService {
                 counter.setNextRunId(prefix.equals("TR") ? firstAssigned + count : 1);
                 counter.setNextDefectId(prefix.equals("DEF") ? firstAssigned + count : 1);
                 counter.setNextReportId(prefix.equals("REP") ? firstAssigned + count : 1);
-
-                // Log the JSON
-                try {
-                    String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(counter);
-                    logger.warn("===== ABOUT TO CREATE PROJECTCOUNTER WITH JSON =====\n{}\n=====", json);
-                } catch (Exception e) {
-                    logger.error("Failed to serialize counter", e);
-                }
-
                 entityService.create(counter);
-                logger.warn("===== PROJECTCOUNTER CREATED SUCCESSFULLY =====");
 
                 logger.info("Initialized {} counter for project {} — first batch: {}-{}..{}-{} (prev max: {})",
                         prefix, projectId, prefix, firstAssigned, prefix, firstAssigned + count - 1, maxUsed);
@@ -249,14 +236,11 @@ public class ProjectCounterService {
             UUID projectId, ModelSpec spec, Class<T> clazz,
             java.util.function.Function<T, String> idExtractor, Pattern pattern) {
         try {
-            logger.warn("===== SCANMAXFORSPEC STARTING ===== spec={}, projectId={}", spec.getName(), projectId);
             GroupConditionDto condition = conditionByProjectId(projectId);
             SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                     .pageNumber(0).pageSize(10_000).build();
-            logger.warn("===== CALLING entityService.search() =====");
-            var result = entityService.search(spec, condition, clazz, params);
-            logger.warn("===== entityService.search() RETURNED, scanning data =====");
-            return result.data().stream()
+            return entityService.search(spec, condition, clazz, params)
+                    .data().stream()
                     .map(e -> idExtractor.apply(e.entity()))
                     .filter(id -> id != null)
                     .mapToLong(id -> {

@@ -7,7 +7,6 @@ import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.application.service.TestCaseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import jakarta.validation.Valid;
@@ -19,7 +18,6 @@ import java.util.UUID;
 /**
  * REST controller for Test Case operations
  */
-@Slf4j
 @RestController
 @RequestMapping("/projects/{projectId}/suites/{suiteId}/cases")
 @Tag(name = "Test Cases", description = "Test case management endpoints")
@@ -33,7 +31,6 @@ public class TestCaseController {
     @PostMapping
     @Operation(summary = "Create a new test case")
     public ResponseEntity<TestCaseDTO> createTestCase(@PathVariable UUID projectId, @PathVariable UUID suiteId, @Valid @RequestBody TestCaseDTO testCase) {
-        log.warn("===== TESTCASECONTROLLER.createTestCase CALLED ===== projectId={}, suiteId={}, testCaseTitle={}", projectId, suiteId, testCase.getTitle());
         testCase.setProjectId(projectId);
         testCase.setSuiteId(suiteId);
         TestCaseDTO created = testCaseService.createTestCase(testCase);
