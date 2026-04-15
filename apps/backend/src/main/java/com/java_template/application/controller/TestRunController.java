@@ -106,13 +106,14 @@ public class TestRunController {
     }
 
     @PostMapping("/{id}/unlock")
-    @Operation(summary = "Unlock a completed test run (Admin only)")
+    @Operation(summary = "Unlock a completed test run (Tester or Admin)")
     public ResponseEntity<TestRunDTO> unlockTestRun(
             @PathVariable UUID projectId,
             @PathVariable UUID id,
             HttpServletRequest request) {
         String role = (String) request.getAttribute("role");
-        if (!"Admin".equals(role)) {
+        // Allow both Tester and Admin to unlock runs
+        if (!"Tester".equals(role) && !"Admin".equals(role)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return testRunService.getTestRunById(id)

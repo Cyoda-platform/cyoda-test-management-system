@@ -100,6 +100,8 @@ public class TestRunService {
             log.warn("===== CREATETESTRUN UPDATING WITH CASE IDS AND STEP STATUSES =====");
         }
 
+        // Update with data but WITHOUT transition. TestRun stays in 'initial' state.
+        // It will transition to 'active' on the first status update (when user starts executing).
         entityService.update(created.getId(), created, null);
         return created;
     }
@@ -173,6 +175,19 @@ public class TestRunService {
         log.warn("===== UPDATETESTRUN ENTRY ===== id={}, incomingStatus={}, incomingStepStatusesEmpty={}",
                 id, testRun.getStatus(), needsStatusMerge);
 
+        final String[] operationName = new String[]{null};  // No transition by default - use array to allow mutation in lambda
+
+        // Check existing run state FIRST, before any merge logic
+        Optional<TestRunDTO> existingOpt = getTestRunById(id);
+        if (existingOpt.isPresent()) {
+            TestRunDTO existing = existingOpt.get();
+            // If the run is in 'initial' state, transition to 'active' on ANY update
+            if ("initial".equals(existing.getStatus())) {
+                operationName[0] = "initialize_run";
+                log.warn("===== UPDATETESTRUN DETECTED INITIAL STATE - transitioning to active =====");
+            }
+        }
+
         if (needsCaseIdsMerge || needsStatusMerge) {
             getTestRunById(id).ifPresent(existing -> {
                 log.warn("===== UPDATETESTRUN MERGE ===== existingStatus={}, existingStepStatusesEmpty={}",
@@ -200,23 +215,30 @@ public class TestRunService {
             });
         }
 
-        log.warn("===== UPDATETESTRUN CALLING entityService.update() with status={}, stepStatusesEmpty={}",
-                testRun.getStatus(), (testRun.getStepStatuses() == null || testRun.getStepStatuses().isEmpty() || testRun.getStepStatuses().equals("{}")));
+        log.warn("===== UPDATETESTRUN CALLING entityService.update() with status={}, stepStatusesEmpty={}, operationName={}",
+                testRun.getStatus(), (testRun.getStepStatuses() == null || testRun.getStepStatuses().isEmpty() || testRun.getStepStatuses().equals("{}")), operationName[0]);
 
-        return withId(entityService.update(id, testRun, null));
+        return withId(entityService.update(id, testRun, operationName[0]));
     }
 
     public Optional<TestRunDTO> completeTestRun(UUID id) {
         return getTestRunById(id).map(run -> {
             run.setCompletedAt(Instant.now().toString());
+            run.setStatus("completed");  // Explicitly set status to 'completed'
+            // Do NOT clear stepStatuses or caseIds here — they must be preserved
+            // for historical reporting and audit trails. The "complete_run" operation
+            // in the workflow will set the run to read-only state.
             return withId(entityService.update(id, run, "complete_run"));
         });
     }
 
     public Optional<TestRunDTO> unlockTestRun(UUID id) {
-        return getTestRunById(id).map(run ->
-                withId(entityService.update(id, run, "unlock_run"))
-        );
+        return getTestRunById(id).map(run -> {
+            run.setStatus("active");  // Explicitly set status back to 'active'
+            // Preserve all data when unlocking — the "unlock_run" operation will
+            // restore edit permissions while keeping historical step statuses intact.
+            return withId(entityService.update(id, run, "unlock_run"));
+        });
     }
 
     public boolean testRunExists(UUID id) {

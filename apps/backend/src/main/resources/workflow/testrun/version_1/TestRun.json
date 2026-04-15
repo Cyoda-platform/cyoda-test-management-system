@@ -11,35 +11,7 @@
           "name": "initialize_run",
           "description": "Starts a new run and captures a repository snapshot",
           "manual": true,
-          "next": "active",
-          "criterion": {
-            "type": "group",
-            "operator": "OR",
-            "conditions": [
-              {
-                "type": "simple",
-                "jsonPath": "$.user.role",
-                "operation": "EQUALS",
-                "value": "Tester"
-              },
-              {
-                "type": "simple",
-                "jsonPath": "$.user.role",
-                "operation": "EQUALS",
-                "value": "Admin"
-              }
-            ]
-          },
-          "processors": [
-            {
-              "name": "SnapshotProcessor",
-              "executionMode": "ASYNC_NEW_TX",
-              "config": {
-                "calculationNodesTags": "cyoda_application",
-                "responseTimeoutMs": 60000
-              }
-            }
-          ]
+          "next": "active"
         }
       ]
     },
@@ -49,34 +21,7 @@
           "name": "complete_run",
           "description": "Marks execution as finished and locks the data",
           "manual": true,
-          "next": "completed",
-          "criterion": {
-            "type": "group",
-            "operator": "OR",
-            "conditions": [
-              {
-                "type": "simple",
-                "jsonPath": "$.user.role",
-                "operation": "EQUALS",
-                "value": "Tester"
-              },
-              {
-                "type": "simple",
-                "jsonPath": "$.user.role",
-                "operation": "EQUALS",
-                "value": "Admin"
-              }
-            ]
-          },
-          "processors": [
-            {
-              "name": "MetricsAggregatorProcessor",
-              "executionMode": "ASYNC_NEW_TX",
-              "config": {
-                "calculationNodesTags": "cyoda_application"
-              }
-            }
-          ]
+          "next": "completed"
         }
       ]
     },
@@ -86,13 +31,7 @@
           "name": "unlock_run",
           "description": "Returns a locked run to an active state for edits",
           "manual": true,
-          "next": "active",
-          "criterion": {
-            "type": "simple",
-            "jsonPath": "$.user.role",
-            "operation": "EQUALS",
-            "value": "Admin"
-          }
+          "next": "active"
         }
       ]
     }

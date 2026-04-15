@@ -1013,7 +1013,11 @@ const RunExecution = () => {
                 unlockRun.mutate(
                   { projectId: projectId!, id: runId! },
                   {
-                    onSuccess: () => toast.success('Run unlocked'),
+                    onSuccess: () => {
+                      // Invalidate the run details query so it refetches with the new 'active' status
+                      qc.invalidateQueries({ queryKey: keys.testRunDetails(projectId!, runId!) });
+                      toast.success('Run unlocked');
+                    },
                     onError:   (e) => toast.error(e.message),
                   }
                 )
@@ -1031,7 +1035,11 @@ const RunExecution = () => {
                 completeRun.mutate(
                   { projectId: projectId!, id: runId! },
                   {
-                    onSuccess: () => toast.success('Run completed'),
+                    onSuccess: () => {
+                      // Invalidate the run details query so it refetches with the new 'completed' status
+                      qc.invalidateQueries({ queryKey: keys.testRunDetails(projectId!, runId!) });
+                      toast.success('Run completed');
+                    },
                     onError:   (e) => toast.error(e.message),
                   }
                 )

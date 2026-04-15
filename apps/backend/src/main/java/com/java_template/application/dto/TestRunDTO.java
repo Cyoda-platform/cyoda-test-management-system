@@ -12,7 +12,6 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,6 +28,7 @@ import org.slf4j.LoggerFactory;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class TestRunDTO implements CyodaEntity {
 
     public static final String ENTITY_NAME = "TestRun";
@@ -76,11 +76,10 @@ public class TestRunDTO implements CyodaEntity {
     /**
      * Flat step-level execution state, stored as JSON string on the run entity to avoid
      * creating per-run TestRunStep entities.
-     * Stored as JSON: {"key": "status"} where status is one of:
+     * Stored as JSON string: "{\"key\": \"status\"}" where status is one of:
      * "UNTESTED" | "PASSED" | "FAILED" | "SKIPPED"
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    @JsonRawValue
     private String stepStatuses;
 
     private String startedAt;
