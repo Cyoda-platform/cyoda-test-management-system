@@ -14,8 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Map;
 
 /**
@@ -58,9 +56,7 @@ public class AuthController {
         cookie.setAttribute("SameSite", "Lax");  // Allow cookie in cross-site requests (for Vite proxy)
         httpResponse.addCookie(cookie);
 
-        LocalDateTime expiresAt = LocalDateTime.ofInstant(
-                Instant.ofEpochMilli(authResponse.expiresAt),
-                ZoneId.systemDefault());
+        String expiresAt = Instant.ofEpochMilli(authResponse.expiresAt).toString();
 
         // Return token in body for Authorization header usage (e.g., in dev with CORS)
         // Token is ALSO set in HttpOnly cookie for browsers that support it

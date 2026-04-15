@@ -2,7 +2,7 @@ package com.java_template.application.repository;
 
 import com.java_template.application.dto.SuiteDTO;
 import org.springframework.stereotype.Repository;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -17,8 +17,8 @@ public class SuiteRepository {
     public SuiteDTO create(SuiteDTO suite) {
         UUID id = UUID.randomUUID();
         suite.setId(id);
-        suite.setCreatedAt(LocalDateTime.now());
-        suite.setUpdatedAt(LocalDateTime.now());
+        suite.setCreatedAt(Instant.now().toString());
+        suite.setUpdatedAt(Instant.now().toString());
         suites.put(id, suite);
         return suite;
     }
@@ -49,7 +49,7 @@ public class SuiteRepository {
             if (suite.getProjectId() != null) {
                 existing.setProjectId(suite.getProjectId());
             }
-            existing.setUpdatedAt(LocalDateTime.now());
+            existing.setUpdatedAt(Instant.now().toString());
             return existing;
         });
     }

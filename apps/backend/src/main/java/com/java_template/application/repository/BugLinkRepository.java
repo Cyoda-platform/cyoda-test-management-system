@@ -2,7 +2,7 @@ package com.java_template.application.repository;
 
 import com.java_template.application.dto.BugLinkDTO;
 import org.springframework.stereotype.Repository;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -17,7 +17,7 @@ public class BugLinkRepository {
     public BugLinkDTO create(BugLinkDTO bugLink) {
         UUID id = UUID.randomUUID();
         bugLink.setId(id);
-        bugLink.setCreatedAt(LocalDateTime.now());
+        bugLink.setCreatedAt(Instant.now().toString());
         bugLinks.put(id, bugLink);
         return bugLink;
     }

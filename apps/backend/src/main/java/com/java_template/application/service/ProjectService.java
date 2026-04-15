@@ -142,6 +142,10 @@ public class ProjectService {
             logger.info("[Project] Created project: id={}, createdAt={}, updatedAt={}",
                 entity.getId(), entity.getCreatedAt(), entity.getUpdatedAt());
 
+            // Initialize ProjectCounter to avoid expensive scanning on first TestCase creation
+            logger.info("[Project] Initializing ProjectCounter for project: {}", entity.getId());
+            projectCounterService.initializeCounterForProject(entity.getId());
+
             return entity;
         } catch (Exception e) {
             logger.error("[Project] Failed to create project: {}", project.getName(), e);

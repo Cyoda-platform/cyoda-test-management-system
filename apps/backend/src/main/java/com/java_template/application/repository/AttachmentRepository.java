@@ -2,7 +2,7 @@ package com.java_template.application.repository;
 
 import com.java_template.application.dto.AttachmentDTO;
 import org.springframework.stereotype.Repository;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -17,7 +17,7 @@ public class AttachmentRepository {
     public AttachmentDTO create(AttachmentDTO attachment) {
         UUID id = UUID.randomUUID();
         attachment.setId(id);
-        attachment.setUploadedAt(LocalDateTime.now());
+        attachment.setUploadedAt(Instant.now().toString());
         attachments.put(id, attachment);
         return attachment;
     }

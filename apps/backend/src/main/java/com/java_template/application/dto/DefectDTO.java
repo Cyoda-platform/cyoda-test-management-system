@@ -11,7 +11,6 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -69,8 +68,8 @@ public class DefectDTO implements CyodaEntity {
      */
     private UUID testRunCaseId;
 
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private String createdAt;
+    private String updatedAt;
 
     @Override
     @JsonIgnore

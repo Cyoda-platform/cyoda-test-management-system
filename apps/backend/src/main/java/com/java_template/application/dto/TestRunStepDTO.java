@@ -10,7 +10,6 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 
 import jakarta.validation.constraints.Size;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -36,8 +35,8 @@ public class TestRunStepDTO implements CyodaEntity {
     @Size(max = 2000, message = "Actual result must not exceed 2000 characters")
     private String actualResult;
 
-    private LocalDateTime startedAt;
-    private LocalDateTime completedAt;
+    private String startedAt;
+    private String completedAt;
 
     @Override
     @JsonIgnore

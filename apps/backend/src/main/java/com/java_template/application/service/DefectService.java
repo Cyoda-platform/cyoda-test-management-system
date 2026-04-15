@@ -14,7 +14,7 @@ import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -69,8 +69,9 @@ public class DefectService {
 
     public DefectDTO createDefect(DefectDTO defect) {
         defect.setStatus("Open");
-        defect.setCreatedAt(LocalDateTime.now());
-        defect.setUpdatedAt(LocalDateTime.now());
+        String now = Instant.now().toString();
+        defect.setCreatedAt(now);
+        defect.setUpdatedAt(now);
         // Always override any client-supplied displayId with a server-generated DEF-N
         String displayId = projectCounterService.nextDefectDisplayId(defect.getProjectId());
         defect.setDisplayId(displayId);
@@ -141,7 +142,7 @@ public class DefectService {
     }
 
     public DefectDTO updateDefect(UUID id, DefectDTO defect) {
-        defect.setUpdatedAt(LocalDateTime.now());
+        defect.setUpdatedAt(Instant.now().toString());
         return withId(entityService.update(id, defect, null));
     }
 

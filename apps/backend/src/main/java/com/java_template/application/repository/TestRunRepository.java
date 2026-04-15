@@ -2,7 +2,7 @@ package com.java_template.application.repository;
 
 import com.java_template.application.dto.TestRunDTO;
 import org.springframework.stereotype.Repository;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -17,8 +17,8 @@ public class TestRunRepository {
     public TestRunDTO create(TestRunDTO testRun) {
         UUID id = UUID.randomUUID();
         testRun.setId(id);
-        testRun.setCreatedAt(LocalDateTime.now());
-        testRun.setUpdatedAt(LocalDateTime.now());
+        testRun.setCreatedAt(Instant.now().toString());
+        testRun.setUpdatedAt(Instant.now().toString());
         testRuns.put(id, testRun);
         return testRun;
     }
@@ -64,7 +64,7 @@ public class TestRunRepository {
             if (testRun.getProjectId() != null) {
                 existing.setProjectId(testRun.getProjectId());
             }
-            existing.setUpdatedAt(LocalDateTime.now());
+            existing.setUpdatedAt(Instant.now().toString());
             return existing;
         });
     }

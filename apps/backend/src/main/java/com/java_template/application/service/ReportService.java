@@ -8,7 +8,7 @@ import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,8 +43,9 @@ public class ReportService {
     }
 
     public ReportDTO createReport(ReportDTO report) {
-        report.setCreatedAt(LocalDateTime.now());
-        report.setUpdatedAt(LocalDateTime.now());
+        String now = Instant.now().toString();
+        report.setCreatedAt(now);
+        report.setUpdatedAt(now);
         // Always override any client-supplied displayId with a server-generated REP-N
         String displayId = projectCounterService.nextReportDisplayId(report.getProjectId());
         report.setDisplayId(displayId);
@@ -93,7 +94,7 @@ public class ReportService {
     }
 
     public ReportDTO updateReport(UUID id, ReportDTO report) {
-        report.setUpdatedAt(LocalDateTime.now());
+        report.setUpdatedAt(Instant.now().toString());
         return withId(entityService.update(id, report, null));
     }
 

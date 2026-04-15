@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -33,8 +32,8 @@ public class TestRunCaseDTO implements CyodaEntity {
 
     private String status;
     private String bugUrl;
-    private LocalDateTime startedAt;
-    private LocalDateTime completedAt;
+    private String startedAt;
+    private String completedAt;
 
     @Override
     @JsonIgnore

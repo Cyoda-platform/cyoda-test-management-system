@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -27,7 +27,7 @@ public class ExportController {
         export.setId(UUID.randomUUID());
         export.setFormat(format);
         export.setStatus("PROCESSING");
-        export.setCreatedAt(LocalDateTime.now());
+        export.setCreatedAt(Instant.now().toString());
         
         return ResponseEntity.status(HttpStatus.CREATED).body(export);
     }
@@ -42,7 +42,7 @@ public class ExportController {
         export.setId(id);
         export.setFormat("JSON");
         export.setStatus("COMPLETED");
-        export.setCreatedAt(LocalDateTime.now());
+        export.setCreatedAt(Instant.now().toString());
         export.setDownloadUrl("/api/projects/" + projectId + "/export/" + id + "/download");
         
         return ResponseEntity.ok(export);

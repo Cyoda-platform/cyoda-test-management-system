@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -83,6 +84,9 @@ public class SuiteService {
             int count = getSuitesByProjectId(suite.getProjectId(), 0, 1000).data().size();
             suite.setSortOrder(count);
         }
+        String now = Instant.now().toString();
+        suite.setCreatedAt(now);
+        suite.setUpdatedAt(now);
         return withId(entityService.create(suite));
     }
 

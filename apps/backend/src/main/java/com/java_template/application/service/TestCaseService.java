@@ -9,6 +9,7 @@ import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
 import com.java_template.common.service.EntityService;
+import lombok.extern.slf4j.Slf4j;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.cyoda.cloud.api.common.model.GroupConditionDto;
 import org.cyoda.cloud.api.common.model.GroupOperatorDto;
@@ -17,6 +18,7 @@ import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +27,7 @@ import java.util.UUID;
 /**
  * Service for Test Case operations
  */
+@Slf4j
 @Service
 public class TestCaseService {
 
@@ -81,11 +84,29 @@ public class TestCaseService {
      * so that subsequent reads always see the correct TC-X value.
      */
     public TestCaseDTO createTestCase(TestCaseDTO testCase) {
+        log.warn("===== TESTCASESERVICE.createTestCase ENTRY ===== title={}", testCase.getTitle());
         testCase.setDeleted(false);
         // Always override any client-supplied displayId with a server-generated one
+        log.warn("===== CALLING projectCounterService.nextDisplayId() with projectId={}", testCase.getProjectId());
         String displayId = projectCounterService.nextDisplayId(testCase.getProjectId());
+        log.warn("===== projectCounterService.nextDisplayId() returned: {}", displayId);
         testCase.setDisplayId(displayId);
+        // Initialize timestamps
+        String now = Instant.now().toString();
+        testCase.setCreatedAt(now);
+        testCase.setUpdatedAt(now);
+
+        // Log what we're sending to Cyoda
+        try {
+            String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(testCase);
+            log.warn("===== CREATING TESTCASE WITH JSON: =====\n{}\n=====", json);
+        } catch (Exception e) {
+            log.error("Failed to serialize TestCase for logging", e);
+        }
+
+        log.warn("===== ABOUT TO CALL entityService.create() =====");
         TestCaseDTO created = withId(entityService.create(testCase));
+        log.warn("===== entityService.create() RETURNED =====");
         // Cyoda's create reload may strip the displayId; persist it explicitly
         created.setDisplayId(displayId);
         entityService.update(created.getId(), created, null);

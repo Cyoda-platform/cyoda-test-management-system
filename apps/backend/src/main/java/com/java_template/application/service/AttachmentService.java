@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -91,7 +92,7 @@ public class AttachmentService {
         attachment.setFileName(file.getOriginalFilename());
         attachment.setFileType(file.getContentType());
         attachment.setFileSize(fileSizeBytes);
-        attachment.setUploadedAt(java.time.LocalDateTime.now());
+        attachment.setUploadedAt(Instant.now().toString());
 
         // Store file content + metadata in EdgeMessage.
         // Nginx is configured with proxy-body-size: 150m and Spring Boot multipart limits are 100MB,
@@ -224,7 +225,7 @@ public class AttachmentService {
         copy.setFileName(source.getFileName());
         copy.setFileType(source.getFileType());
         copy.setFileSize(source.getFileSize());
-        copy.setUploadedAt(java.time.LocalDateTime.now());
+        copy.setUploadedAt(Instant.now().toString());
 
         // Try to copy content via a new EdgeMessage
         if (source.getMessageId() != null) {

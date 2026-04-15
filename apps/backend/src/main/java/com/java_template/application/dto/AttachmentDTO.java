@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -30,7 +29,7 @@ public class AttachmentDTO implements CyodaEntity {
     private String fileName;
     private String fileType;
     private long fileSize;
-    private LocalDateTime uploadedAt;
+    private String uploadedAt;
     /** ID of the corresponding EdgeMessage in Cyoda that holds the file content */
     private UUID messageId;
     /** Base64-encoded file content — used as fallback when EdgeMessage is unavailable */

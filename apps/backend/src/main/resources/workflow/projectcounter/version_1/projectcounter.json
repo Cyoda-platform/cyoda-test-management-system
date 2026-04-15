@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "name": "ProjectCounter",
+  "desc": "Workflow for project counter management (internal utility)",
+  "initialState": "created",
+  "active": true,
+  "states": {
+    "created": {
+      "transitions": [
+        {
+          "name": "update_counter",
+          "next": "created",
+          "manual": true,
+          "description": "Updates counter values",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

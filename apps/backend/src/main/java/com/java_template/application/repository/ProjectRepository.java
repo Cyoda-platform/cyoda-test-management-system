@@ -16,7 +16,7 @@ public class ProjectRepository {
     public ProjectDTO create(ProjectDTO project) {
         UUID id = UUID.randomUUID();
         project.setId(id);
-        String now = java.time.LocalDateTime.now().toString() + "Z";
+        String now = java.time.Instant.now().toString().toString() + "Z";
         project.setCreatedAt(now);
         project.setUpdatedAt(now);
         projects.put(id, project);
@@ -46,7 +46,7 @@ public class ProjectRepository {
             if (project.getDescription() != null) {
                 existing.setDescription(project.getDescription());
             }
-            existing.setUpdatedAt(java.time.LocalDateTime.now().toString() + "Z");
+            existing.setUpdatedAt(java.time.Instant.now().toString().toString() + "Z");
             return existing;
         });
     }

@@ -11,7 +11,6 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -63,8 +62,8 @@ public class ReportDTO implements CyodaEntity {
     private boolean sectionDefectTable      = true;
     private boolean sectionEnvironmentInfo  = true;
 
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private String createdAt;
+    private String updatedAt;
 
     @Override
     @JsonIgnore

@@ -13,7 +13,7 @@ import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -65,7 +65,7 @@ public class TestRunService {
     }
 
     public TestRunDTO createTestRun(TestRunDTO testRun) {
-        LocalDateTime now = LocalDateTime.now();
+        String now = Instant.now().toString();
         testRun.setCreatedAt(now);
         testRun.setStartedAt(now);
         // Always override any client-supplied displayId with a server-generated TR-N
@@ -170,7 +170,7 @@ public class TestRunService {
 
     public Optional<TestRunDTO> completeTestRun(UUID id) {
         return getTestRunById(id).map(run -> {
-            run.setCompletedAt(LocalDateTime.now());
+            run.setCompletedAt(Instant.now().toString());
             return withId(entityService.update(id, run, "complete_run"));
         });
     }

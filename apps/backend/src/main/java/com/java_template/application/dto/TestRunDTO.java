@@ -11,7 +11,6 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -75,10 +74,10 @@ public class TestRunDTO implements CyodaEntity {
      */
     private Map<String, String> stepStatuses = new LinkedHashMap<>();
 
-    private LocalDateTime startedAt;
-    private LocalDateTime completedAt;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private String startedAt;
+    private String completedAt;
+    private String createdAt;
+    private String updatedAt;
 
     @Override
     @JsonIgnore

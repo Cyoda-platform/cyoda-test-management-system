@@ -1,6 +1,5 @@
 package com.java_template.application.dto;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -23,7 +22,7 @@ public record AttachmentMetadataDTO(
         String fileName,
         String fileType,
         long fileSize,
-        LocalDateTime uploadedAt,
+        String uploadedAt,
         UUID messageId
 ) {
     /**

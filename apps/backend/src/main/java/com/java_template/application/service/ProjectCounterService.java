@@ -153,9 +153,12 @@ public class ProjectCounterService {
                                    ObjLongConsumer<ProjectCounterDTO> setter,
                                    java.util.function.LongSupplier bootstrap) {
         if (count <= 0) throw new IllegalArgumentException("count must be > 0");
+        logger.warn("===== NEXTBATCH CALLED ===== prefix={}, projectId={}", prefix, projectId);
         Object lock = projectLocks.computeIfAbsent(projectId, k -> new Object());
         synchronized (lock) {
+            logger.warn("===== FINDCOUNTERFORPROJECT =====");
             Optional<ProjectCounterDTO> existing = findCounterForProject(projectId);
+            logger.warn("===== FINDCOUNTERFORPROJECT DONE, exists={} =====", existing.isPresent());
 
             long firstAssigned;
             if (existing.isPresent()) {
@@ -174,13 +177,24 @@ public class ProjectCounterService {
                 firstAssigned = maxUsed + 1;
 
                 ProjectCounterDTO counter = new ProjectCounterDTO();
+                counter.setId(UUID.randomUUID());  // ← SET ID BEFORE CREATING!
                 counter.setProjectId(projectId);
                 // Initialise all counters so the record is complete from the start
                 counter.setNextId(prefix.equals("TC") ? firstAssigned + count : 1);
                 counter.setNextRunId(prefix.equals("TR") ? firstAssigned + count : 1);
                 counter.setNextDefectId(prefix.equals("DEF") ? firstAssigned + count : 1);
                 counter.setNextReportId(prefix.equals("REP") ? firstAssigned + count : 1);
+
+                // Log the JSON
+                try {
+                    String json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(counter);
+                    logger.warn("===== ABOUT TO CREATE PROJECTCOUNTER WITH JSON =====\n{}\n=====", json);
+                } catch (Exception e) {
+                    logger.error("Failed to serialize counter", e);
+                }
+
                 entityService.create(counter);
+                logger.warn("===== PROJECTCOUNTER CREATED SUCCESSFULLY =====");
 
                 logger.info("Initialized {} counter for project {} — first batch: {}-{}..{}-{} (prev max: {})",
                         prefix, projectId, prefix, firstAssigned, prefix, firstAssigned + count - 1, maxUsed);
@@ -235,11 +249,14 @@ public class ProjectCounterService {
             UUID projectId, ModelSpec spec, Class<T> clazz,
             java.util.function.Function<T, String> idExtractor, Pattern pattern) {
         try {
+            logger.warn("===== SCANMAXFORSPEC STARTING ===== spec={}, projectId={}", spec.getName(), projectId);
             GroupConditionDto condition = conditionByProjectId(projectId);
             SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                     .pageNumber(0).pageSize(10_000).build();
-            return entityService.search(spec, condition, clazz, params)
-                    .data().stream()
+            logger.warn("===== CALLING entityService.search() =====");
+            var result = entityService.search(spec, condition, clazz, params);
+            logger.warn("===== entityService.search() RETURNED, scanning data =====");
+            return result.data().stream()
                     .map(e -> idExtractor.apply(e.entity()))
                     .filter(id -> id != null)
                     .mapToLong(id -> {
@@ -252,6 +269,41 @@ public class ProjectCounterService {
             logger.warn("Could not scan existing {} IDs for project {}: {}",
                     pattern.pattern(), projectId, ex.getMessage());
             return 0L;
+        }
+    }
+
+    /**
+     * Initialize ProjectCounter for a new project with all counters starting at 1.
+     * This avoids expensive scanning on first TestCase/TestRun/Defect creation.
+     *
+     * If the counter already exists, this is a no-op (idempotent).
+     */
+    public void initializeCounterForProject(UUID projectId) {
+        try {
+            // Check if counter already exists
+            Optional<ProjectCounterDTO> existing = findCounterForProject(projectId);
+            if (existing.isPresent()) {
+                logger.info("[Counter] ProjectCounter already exists for project: {}", projectId);
+                return;  // Already initialized, nothing to do
+            }
+
+            logger.info("[Counter] Initializing ProjectCounter for project: {}", projectId);
+
+            // Create new counter with all counters starting at 1
+            ProjectCounterDTO counter = new ProjectCounterDTO();
+            counter.setId(UUID.randomUUID());  // Generate unique ID
+            counter.setProjectId(projectId);
+            counter.setNextId(1L);           // TC-N counter
+            counter.setNextRunId(1L);        // TR-N counter
+            counter.setNextDefectId(1L);     // DEF-N counter
+            counter.setNextReportId(1L);     // REP-N counter
+
+            // Initialize counter in Cyoda (no timestamps on ProjectCounter)
+            entityService.create(counter);
+            logger.info("[Counter] ProjectCounter initialized successfully for project: {}", projectId);
+        } catch (Exception e) {
+            logger.warn("[Counter] Failed to initialize ProjectCounter for project {}: {}", projectId, e.getMessage());
+            // Don't throw — let next operation handle counter creation if needed
         }
     }
 }

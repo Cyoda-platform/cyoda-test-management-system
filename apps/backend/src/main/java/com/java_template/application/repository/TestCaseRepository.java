@@ -2,7 +2,7 @@ package com.java_template.application.repository;
 
 import com.java_template.application.dto.TestCaseDTO;
 import org.springframework.stereotype.Repository;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -17,8 +17,8 @@ public class TestCaseRepository {
     public TestCaseDTO create(TestCaseDTO testCase) {
         UUID id = UUID.randomUUID();
         testCase.setId(id);
-        testCase.setCreatedAt(LocalDateTime.now());
-        testCase.setUpdatedAt(LocalDateTime.now());
+        testCase.setCreatedAt(Instant.now().toString());
+        testCase.setUpdatedAt(Instant.now().toString());
         testCase.setDeleted(false);
         testCases.put(id, testCase);
         return testCase;
@@ -62,7 +62,7 @@ public class TestCaseRepository {
             if (testCase.getSuiteId() != null) {
                 existing.setSuiteId(testCase.getSuiteId());
             }
-            existing.setUpdatedAt(LocalDateTime.now());
+            existing.setUpdatedAt(Instant.now().toString());
             return existing;
         });
     }
@@ -70,7 +70,7 @@ public class TestCaseRepository {
     public boolean softDelete(UUID id) {
         return testCases.computeIfPresent(id, (k, v) -> {
             v.setDeleted(true);
-            v.setUpdatedAt(LocalDateTime.now());
+            v.setUpdatedAt(Instant.now().toString());
             return v;
         }) != null;
     }
