@@ -173,6 +173,15 @@ public class TestCaseService {
     }
 
     public TestCaseDTO updateTestCase(UUID id, TestCaseDTO testCase) {
+        // Protect displayId from being overwritten by client updates
+        // If the client doesn't send displayId (or sends null), preserve the existing one
+        TestCaseDTO existing = getTestCaseById(id)
+                .orElseThrow(() -> new RuntimeException("Test case not found: " + id));
+
+        if (testCase.getDisplayId() == null || testCase.getDisplayId().isEmpty()) {
+            testCase.setDisplayId(existing.getDisplayId());
+        }
+
         return withId(entityService.update(id, testCase, null));
     }
 

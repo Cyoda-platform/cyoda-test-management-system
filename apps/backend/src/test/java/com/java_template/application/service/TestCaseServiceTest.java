@@ -83,5 +83,86 @@ public class TestCaseServiceTest {
         assertFalse(created.isDeleted());
     }
 
+    /**
+     * Test that updateTestCase protects displayId from being overwritten.
+     * When a client sends an update without displayId (or with null displayId),
+     * the existing displayId should be preserved.
+     */
+    @Test
+    public void testUpdateTestCase_ProtectsDisplayId_WhenClientSendsNull() {
+        // Arrange: existing test case with a displayId
+        TestCaseDTO existing = new TestCaseDTO();
+        existing.setId(caseId);
+        existing.setTitle("Original Title");
+        existing.setDescription("Original Description");
+        existing.setDisplayId("TC-001");  // ← Existing displayId
+        existing.setProjectId(projectId);
+        existing.setSuiteId(suiteId);
+        existing.setDeleted(false);
+
+        // Mock getTestCaseById to return the existing case
+        when(entityService.getById(eq(caseId), any(), eq(TestCaseDTO.class)))
+                .thenReturn(entityWithMetadata(existing, caseId));
+
+        // Client sends update WITHOUT displayId (displayId = null)
+        TestCaseDTO updatePayload = new TestCaseDTO();
+        updatePayload.setTitle("Updated Title");
+        updatePayload.setDescription("Updated Description");
+        updatePayload.setPriority(Priority.HIGH);
+        updatePayload.setDisplayId(null);  // ← Client doesn't send displayId
+
+        // Mock entityService.update to return updated case
+        when(entityService.update(eq(caseId), any(TestCaseDTO.class), isNull()))
+                .thenAnswer(inv -> {
+                    TestCaseDTO dto = inv.getArgument(1);
+                    return entityWithMetadata(dto, caseId);
+                });
+
+        // Act: update the test case
+        TestCaseDTO result = testCaseService.updateTestCase(caseId, updatePayload);
+
+        // Assert: displayId should be preserved (not null, not changed)
+        assertEquals("TC-001", result.getDisplayId(), "displayId should be preserved from existing record");
+        assertEquals("Updated Title", result.getTitle(), "title should be updated");
+        assertEquals("Updated Description", result.getDescription(), "description should be updated");
+        assertEquals(Priority.HIGH, result.getPriority(), "priority should be updated");
+    }
+
+    /**
+     * Test that if client explicitly sends a new displayId, it's accepted.
+     * (Edge case: normally clients shouldn't do this, but the API allows it)
+     */
+    @Test
+    public void testUpdateTestCase_AcceptsNewDisplayId_IfClientSends() {
+        // Arrange: existing test case with displayId TC-001
+        TestCaseDTO existing = new TestCaseDTO();
+        existing.setId(caseId);
+        existing.setTitle("Original Title");
+        existing.setDisplayId("TC-001");
+        existing.setProjectId(projectId);
+        existing.setSuiteId(suiteId);
+        existing.setDeleted(false);
+
+        when(entityService.getById(eq(caseId), any(), eq(TestCaseDTO.class)))
+                .thenReturn(entityWithMetadata(existing, caseId));
+
+        // Client sends update WITH a new displayId
+        TestCaseDTO updatePayload = new TestCaseDTO();
+        updatePayload.setTitle("Updated Title");
+        updatePayload.setDisplayId("TC-999");  // ← Client sends a different displayId
+
+        when(entityService.update(eq(caseId), any(TestCaseDTO.class), isNull()))
+                .thenAnswer(inv -> {
+                    TestCaseDTO dto = inv.getArgument(1);
+                    return entityWithMetadata(dto, caseId);
+                });
+
+        // Act
+        TestCaseDTO result = testCaseService.updateTestCase(caseId, updatePayload);
+
+        // Assert: new displayId should be accepted (client's value takes precedence if provided)
+        assertEquals("TC-999", result.getDisplayId(), "new displayId should be accepted");
+    }
+
 }
 
