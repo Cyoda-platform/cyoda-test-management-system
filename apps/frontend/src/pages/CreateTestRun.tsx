@@ -161,7 +161,7 @@ const CreateTestRun = () => {
           // Snapshot the selected case IDs so RunExecution can filter to only
           // this run's cases without creating extra entities.
           caseIds: Array.from(selectedCases),
-          stepStatuses: {},
+          stepStatuses: JSON.stringify({}),  // Store as JSON string (not object)
         },
       });
 

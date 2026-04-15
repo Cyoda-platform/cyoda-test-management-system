@@ -5,6 +5,7 @@ import com.java_template.application.dto.TestRunDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.service.EntityService;
+import lombok.extern.slf4j.Slf4j;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 import org.cyoda.cloud.api.common.model.GroupConditionDto;
 import org.cyoda.cloud.api.common.model.GroupOperatorDto;
@@ -21,6 +22,7 @@ import java.util.UUID;
 /**
  * Service for Test Run operations
  */
+@Slf4j
 @Service
 public class TestRunService {
 
@@ -71,9 +73,33 @@ public class TestRunService {
         // Always override any client-supplied displayId with a server-generated TR-N
         String displayId = projectCounterService.nextRunDisplayId(testRun.getProjectId());
         testRun.setDisplayId(displayId);
+
+        log.warn("===== CREATETESTRUN ENTRY ===== projectId={}, incomingCaseIdsCount={}, incomingStepStatusesEmpty={}",
+                testRun.getProjectId(),
+                (testRun.getCaseIds() != null ? testRun.getCaseIds().size() : 0),
+                (testRun.getStepStatuses() == null || testRun.getStepStatuses().isEmpty() || testRun.getStepStatuses().equals("{}")));
+
+        // Save caseIds and stepStatuses temporarily
+        // Cyoda cannot handle complex types during create, so we'll add them in a follow-up update
+        java.util.List<String> savedCaseIds = testRun.getCaseIds();
+        String savedStepStatuses = testRun.getStepStatuses();
+
+        // Clear them before create to avoid Cyoda schema validation errors
+        testRun.setCaseIds(null);
+        testRun.setStepStatuses(null);
+
         TestRunDTO created = withId(entityService.create(testRun));
         // Persist displayId explicitly — Cyoda's create reload may not return it
         created.setDisplayId(displayId);
+
+        // Now restore caseIds and stepStatuses on the follow-up update
+        if ((savedCaseIds != null && !savedCaseIds.isEmpty()) ||
+            (savedStepStatuses != null && !savedStepStatuses.isEmpty() && !savedStepStatuses.equals("{}"))) {
+            created.setCaseIds(savedCaseIds);
+            created.setStepStatuses(savedStepStatuses);
+            log.warn("===== CREATETESTRUN UPDATING WITH CASE IDS AND STEP STATUSES =====");
+        }
+
         entityService.update(created.getId(), created, null);
         return created;
     }
@@ -137,33 +163,45 @@ public class TestRunService {
      *
      * <p>Similarly, {@code stepStatuses} is never allowed to shrink — the server merges
      * the incoming map on top of the stored one so that a concurrent update from another
-     * tab cannot silently discard progress already saved by the first tab.</p>
+     * tab cannot silently discard progress already saved by the first tab.
+     * Note: stepStatuses is stored as JSON string, so merging happens via Map conversion.</p>
      */
     public TestRunDTO updateTestRun(UUID id, TestRunDTO testRun) {
         boolean needsCaseIdsMerge   = testRun.getCaseIds() == null || testRun.getCaseIds().isEmpty();
-        boolean needsStatusMerge    = testRun.getStepStatuses() == null;
+        boolean needsStatusMerge    = testRun.getStepStatuses() == null || testRun.getStepStatuses().isEmpty() || testRun.getStepStatuses().equals("{}");
+
+        log.warn("===== UPDATETESTRUN ENTRY ===== id={}, incomingStatus={}, incomingStepStatusesEmpty={}",
+                id, testRun.getStatus(), needsStatusMerge);
 
         if (needsCaseIdsMerge || needsStatusMerge) {
             getTestRunById(id).ifPresent(existing -> {
+                log.warn("===== UPDATETESTRUN MERGE ===== existingStatus={}, existingStepStatusesEmpty={}",
+                        existing.getStatus(), (existing.getStepStatuses() == null || existing.getStepStatuses().isEmpty() || existing.getStepStatuses().equals("{}")));
+
                 if (needsCaseIdsMerge
                         && existing.getCaseIds() != null
                         && !existing.getCaseIds().isEmpty()) {
                     testRun.setCaseIds(existing.getCaseIds());
                 }
-                if (needsStatusMerge && existing.getStepStatuses() != null) {
+                if (needsStatusMerge && existing.getStepStatuses() != null && !existing.getStepStatuses().equals("{}")) {
                     testRun.setStepStatuses(existing.getStepStatuses());
                 } else if (!needsStatusMerge
                         && existing.getStepStatuses() != null
-                        && !existing.getStepStatuses().isEmpty()) {
-                    // Merge: keep any keys from the stored map that the caller did not send.
+                        && !existing.getStepStatuses().equals("{}")) {
+                    // Merge: convert both JSON strings to maps, merge them, then convert back.
                     // This prevents a concurrent save from the second browser tab from wiping
                     // step progress saved by the first tab.
-                    java.util.Map<String, String> merged = new java.util.LinkedHashMap<>(existing.getStepStatuses());
-                    merged.putAll(testRun.getStepStatuses());
-                    testRun.setStepStatuses(merged);
+                    java.util.Map<String, String> existingMap = existing.getStepStatusesAsMap();
+                    java.util.Map<String, String> incomingMap = testRun.getStepStatusesAsMap();
+                    existingMap.putAll(incomingMap);
+                    testRun.setStepStatusesFromMap(existingMap);
+                    log.warn("===== UPDATETESTRUN MERGED ===== finalStepStatusesCount={}", existingMap.size());
                 }
             });
         }
+
+        log.warn("===== UPDATETESTRUN CALLING entityService.update() with status={}, stepStatusesEmpty={}",
+                testRun.getStatus(), (testRun.getStepStatuses() == null || testRun.getStepStatuses().isEmpty() || testRun.getStepStatuses().equals("{}")));
 
         return withId(entityService.update(id, testRun, null));
     }

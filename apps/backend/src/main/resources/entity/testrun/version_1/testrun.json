@@ -6,15 +6,19 @@
   "environment": "staging",
   "buildVersion": "v1.0.0",
   "description": "Sample test run for entity model registration",
-  "status": "initial",
-  "passed": 0,
-  "failed": 0,
-  "skipped": 0,
+  "status": "active",
+  "passed": 2,
+  "failed": 1,
+  "skipped": 1,
   "untested": 0,
-  "caseIds": [],
-  "stepStatuses": {},
-  "startedAt": "2026-04-14T00:00:00Z",
-  "completedAt": "2026-04-14T00:00:00Z",
-  "createdAt": "2026-04-14T00:00:00Z",
-  "updatedAt": "2026-04-14T00:00:00Z"
+  "caseIds": [
+    "00000000-0000-0000-0000-000000000010",
+    "00000000-0000-0000-0000-000000000011",
+    "00000000-0000-0000-0000-000000000012"
+  ],
+  "stepStatuses": "{\"step_001\":\"PASSED\",\"step_002\":\"PASSED\",\"step_003\":\"FAILED\",\"step_004\":\"SKIPPED\"}",
+  "startedAt": "2026-04-14T10:00:00Z",
+  "completedAt": "2026-04-14T11:30:00Z",
+  "createdAt": "2026-04-14T09:45:00Z",
+  "updatedAt": "2026-04-14T11:30:00Z"
 }

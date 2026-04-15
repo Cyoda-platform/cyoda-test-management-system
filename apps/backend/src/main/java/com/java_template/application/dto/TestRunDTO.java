@@ -1,6 +1,7 @@
 package com.java_template.application.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.java_template.common.workflow.CyodaEntity;
 import com.java_template.common.workflow.OperationSpecification;
 import lombok.AllArgsConstructor;
@@ -11,11 +12,16 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import com.fasterxml.jackson.annotation.JsonRawValue;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Test Run DTO for TMS
@@ -64,20 +70,57 @@ public class TestRunDTO implements CyodaEntity {
      * Stored directly on the run to avoid creating separate TestRunCase entities
      * (whose Cyoda entity model may not be registered).
      */
-    private List<String> caseIds = new ArrayList<>();
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    private List<String> caseIds;
 
     /**
-     * Flat step-level execution state, stored on the run entity to avoid
+     * Flat step-level execution state, stored as JSON string on the run entity to avoid
      * creating per-run TestRunStep entities.
-     * Key format: "caseId::stepId"  →  uppercase status
-     * ("UNTESTED" | "PASSED" | "FAILED" | "SKIPPED").
+     * Stored as JSON: {"key": "status"} where status is one of:
+     * "UNTESTED" | "PASSED" | "FAILED" | "SKIPPED"
      */
-    private Map<String, String> stepStatuses = new LinkedHashMap<>();
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    @JsonRawValue
+    private String stepStatuses;
 
     private String startedAt;
     private String completedAt;
     private String createdAt;
     private String updatedAt;
+
+    private static final Logger log = LoggerFactory.getLogger(TestRunDTO.class);
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * Convert stepStatuses from JSON string to Map.
+     * Used when converting from Cyoda entity (stored as JSON string) to application code (uses Map).
+     */
+    @JsonIgnore
+    public Map<String, String> getStepStatusesAsMap() {
+        if (stepStatuses == null || stepStatuses.isEmpty() || stepStatuses.equals("{}")) {
+            return new HashMap<>();
+        }
+        try {
+            return objectMapper.readValue(stepStatuses, new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>(){});
+        } catch (Exception e) {
+            log.warn("Failed to parse stepStatuses JSON: {}", stepStatuses, e);
+            return new HashMap<>();
+        }
+    }
+
+    /**
+     * Convert stepStatuses from Map to JSON string.
+     * Used when converting from application code (Map) to Cyoda entity (stored as JSON string).
+     */
+    @JsonIgnore
+    public void setStepStatusesFromMap(Map<String, String> map) {
+        try {
+            this.stepStatuses = objectMapper.writeValueAsString(map != null ? map : new HashMap<>());
+        } catch (Exception e) {
+            log.warn("Failed to serialize stepStatuses map", e);
+            this.stepStatuses = "{}";
+        }
+    }
 
     @Override
     @JsonIgnore

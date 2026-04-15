@@ -318,9 +318,18 @@ const RunExecution = () => {
 
   // Seed the accumulated map when the run first loads (or when stepStatuses are
   // restored from the server after a page refresh).
+  // Note: stepStatuses comes from server as JSON string, needs to be parsed.
   useEffect(() => {
     if (run?.stepStatuses && Object.keys(fullStepStatusesRef.current).length === 0) {
-      fullStepStatusesRef.current = { ...run.stepStatuses };
+      try {
+        const parsed = typeof run.stepStatuses === 'string'
+          ? JSON.parse(run.stepStatuses)
+          : run.stepStatuses;
+        fullStepStatusesRef.current = { ...parsed };
+      } catch (e) {
+        console.warn('Failed to parse stepStatuses:', run.stepStatuses, e);
+        fullStepStatusesRef.current = {};
+      }
     }
   }, [run?.stepStatuses]);
 
@@ -457,9 +466,20 @@ const RunExecution = () => {
    * Restore case-level status immediately on mount, before a user clicks into each
    * individual case. Prefer the persisted flat run.stepStatuses map; fall back to
    * DB-backed TestRunCase.status when no per-step snapshot exists.
+   * Note: stepStatuses comes from server as JSON string, needs to be parsed.
    */
   const persistedCaseStatusById = useMemo(() => {
-    const statusMap = run?.stepStatuses ?? {};
+    let statusMap: Record<string, string> = {};
+    if (run?.stepStatuses) {
+      try {
+        statusMap = typeof run.stepStatuses === 'string'
+          ? JSON.parse(run.stepStatuses)
+          : run.stepStatuses;
+      } catch (e) {
+        console.warn('Failed to parse stepStatuses:', run.stepStatuses, e);
+        statusMap = {};
+      }
+    }
     const result: Record<string, StepStatus> = {};
 
     allCases.forEach((tc) => {
@@ -571,12 +591,22 @@ const RunExecution = () => {
         // Guard: same as in setStepStatus — never send empty caseIds.
         // The backend will preserve the existing list if undefined is sent.
         caseIds: (r.caseIds && r.caseIds.length > 0) ? r.caseIds : undefined,
-        stepStatuses: fullStepStatusesRef.current,
+        // Convert stepStatuses from object to JSON string (backend expects string)
+        stepStatuses: JSON.stringify(fullStepStatusesRef.current),
         ...(r.createdAt ? { createdAt: r.createdAt } : {}),
         ...agg,
       }).then(() => {
         qc.invalidateQueries({ queryKey: keys.runs.detail(projectId, runId) });
-      }).catch(() => { /* best effort */ });
+      }).catch((error) => {
+        // Log the error so we can debug why progress isn't being saved
+        console.error('[RunExecution cleanup] Failed to save test run progress on unmount:', {
+          runId,
+          projectId,
+          error: error instanceof Error ? error.message : String(error),
+          stepStatuses: fullStepStatusesRef.current,
+          runStatus: r?.status,
+        });
+      });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -591,7 +621,18 @@ const RunExecution = () => {
 
       // Read persisted statuses from run.stepStatuses.
       // Key format: "caseId::stepId" → uppercase status string.
-      const runStepStatuses = runRef.current?.stepStatuses ?? {};
+      // Note: stepStatuses comes from server as JSON string, needs to be parsed.
+      let runStepStatuses: Record<string, string> = {};
+      if (runRef.current?.stepStatuses) {
+        try {
+          runStepStatuses = typeof runRef.current.stepStatuses === 'string'
+            ? JSON.parse(runRef.current.stepStatuses)
+            : runRef.current.stepStatuses;
+        } catch (e) {
+          console.warn('Failed to parse stepStatuses:', runRef.current.stepStatuses, e);
+          runStepStatuses = {};
+        }
+      }
       const initial: StepStatus[] = sortedSteps.map((s) => {
         const key = `${activeCase.id}::${s.id}`;
         return normalizeStepStatus(runStepStatuses[key]);
@@ -648,7 +689,8 @@ const RunExecution = () => {
           // The backend also has a matching server-side guard in updateTestRun().
           caseIds: (r.caseIds && r.caseIds.length > 0) ? r.caseIds : undefined,
           // Use the local accumulated map — never the potentially-stale server copy.
-          stepStatuses: fullStepStatusesRef.current,
+          // Convert to JSON string (backend expects string)
+          stepStatuses: JSON.stringify(fullStepStatusesRef.current),
           ...(r.createdAt ? { createdAt: r.createdAt } : {}),
           ...agg,
         },
