@@ -12,8 +12,55 @@
 # 1. Убедись что .env файл имеет правильные credentials
 cat .env | grep CYODA
 
-# 2. Запусти импорт скрипт
+# 2. ⚠️ ОБЯЗАТЕЛЬНО: Удали все tenant entities (каскадное удаление)
+# Запусти удаление в правильном порядке (от листьев к корню):
+# TestRunStep → TestRunCase → TestRun → Attachment → Defect →
+# TestStep → TestCase → Suite → Report → ProjectCounter → Project
+
+# 3. Разлочи и удали все модели
+# Потом запусти импорт скрипт:
+
+# 3. Запусти импорт скрипт
 ./import-schemas.sh
+```
+
+---
+
+## 🚨 ВАЖНО: Каскадное удаление перед переimпортом
+
+**ВСЕГДА удаляй все tenant entities ПЕРЕД переimпортом!**
+
+### Правильный порядок удаления (Bottom-Up / от листьев к корню):
+
+```bash
+# Удалить entities в правильном порядке (зависимости!)
+TestRunStep    # ← листья (самые глубокие)
+TestRunCase
+TestRun
+Attachment
+Defect
+TestStep
+TestCase
+Suite
+Report
+ProjectCounter
+Project        # ← корень (самый верхний)
+```
+
+### Почему важен порядок?
+
+Если удалять в неправильном порядке (например, сначала Project), то Cyoda не сможет удалить child entities (TestCase, Suite и т.д.) и они останутся как **orphaned entities**.
+
+### Автоматическое удаление всех entities (каскадом):
+
+```bash
+set -a; source .env; set +a; TOKEN=$(curl -s -u "$CYODA_CLIENT_ID:$CYODA_CLIENT_SECRET" -H 'Content-Type: application/x-www-form-urlencoded' -d 'grant_type=client_credentials&scope=ROLE_M2M' "https://$CYODA_HOST/api/oauth/token" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("access_token",""))');
+
+MODELS_ORDER=("TestRunStep" "TestRunCase" "TestRun" "Attachment" "Defect" "TestStep" "TestCase" "Suite" "Report" "ProjectCounter" "Project")
+
+for model in "${MODELS_ORDER[@]}"; do
+  curl -s -X DELETE -H "Authorization: Bearer $TOKEN" "https://$CYODA_HOST/api/entity/$model/1" > /dev/null 2>&1
+done
 ```
 
 ---
@@ -106,6 +153,31 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
 ---
 
 ## ⚠️ Важные замечания
+
+### 0. ПОЛНЫЙ ЦИКЛ: Удали entities, модели, потом переimпортируй
+
+**Перед каждым переimпортом нужно:**
+
+1. **Удалить все tenant entities** (каскадом, см. выше)
+2. **Разлочить все модели:**
+```bash
+MODELS=("Project" "Suite" "TestCase" "TestStep" "Defect" "TestRun" "TestRunCase" "TestRunStep" "Attachment" "Report" "ProjectCounter")
+for model in "${MODELS[@]}"; do
+  curl -s -X PUT -H "Authorization: Bearer $TOKEN" "https://$CYODA_HOST/api/model/$model/1/unlock"
+done
+```
+
+3. **Удалить все модели:**
+```bash
+for model in "${MODELS[@]}"; do
+  curl -s -X DELETE -H "Authorization: Bearer $TOKEN" "https://$CYODA_HOST/api/model/$model/1"
+done
+```
+
+4. **Потом запусти импорт:**
+```bash
+./import-schemas.sh
+```
 
 ### 1. Модели должны быть удалены перед переimпортом
 
