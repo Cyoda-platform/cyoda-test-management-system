@@ -29,7 +29,7 @@ public class SnapshotProcessor implements CyodaProcessor {
         EntityProcessorCalculationRequest request = context.getEvent();
         logger.warn("===== SNAPSHOT_PROCESSOR ===== request_id={}, data={}",
             request.getId(),
-            request.getEntity());
+            request.getPayload());
 
         // TODO(snapshot-implementation): Save snapshot to database
         // This should capture all test case IDs and their current state at this moment
