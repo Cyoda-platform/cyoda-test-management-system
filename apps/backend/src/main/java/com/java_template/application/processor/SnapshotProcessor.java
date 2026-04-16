@@ -27,14 +27,19 @@ public class SnapshotProcessor implements CyodaProcessor {
     @Override
     public EntityProcessorCalculationResponse process(CyodaEventContext<EntityProcessorCalculationRequest> context) {
         EntityProcessorCalculationRequest request = context.getEvent();
-        logger.debug("{}: Processing snapshot creation for request: {}", processorName, request.getId());
+        logger.warn("===== SNAPSHOT_PROCESSOR ===== request_id={}, data={}",
+            request.getId(),
+            request.getEntity());
 
-        // Stub implementation - returns entity unchanged
+        // TODO(snapshot-implementation): Save snapshot to database
+        // This should capture all test case IDs and their current state at this moment
+        // For now, just logging that processor was called
+
         EntityProcessorCalculationResponse response = new EntityProcessorCalculationResponse();
         response.setId(request.getId());
         response.setSuccess(true);
 
-        logger.debug("{}: Snapshot processing completed", processorName);
+        logger.warn("===== SNAPSHOT_PROCESSOR COMPLETED ===== request_id={}", request.getId());
         return response;
     }
 

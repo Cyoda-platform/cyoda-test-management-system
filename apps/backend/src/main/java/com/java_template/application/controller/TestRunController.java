@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +18,7 @@ import java.util.UUID;
 /**
  * REST controller for Test Run operations
  */
+@Slf4j
 @RestController
 @RequestMapping("/projects/{projectId}/runs")
 @Tag(name = "Test Runs", description = "Test run management endpoints")
@@ -112,8 +114,10 @@ public class TestRunController {
             @PathVariable UUID id,
             HttpServletRequest request) {
         String role = (String) request.getAttribute("role");
-        // Allow both Tester and Admin to unlock runs
-        if (!"Tester".equals(role) && !"Admin".equals(role)) {
+        log.warn("===== UNLOCK_RUN ===== role={}", role);
+        // Allow both Tester and Admin to unlock runs (case-insensitive)
+        if (role == null || (!role.equalsIgnoreCase("Tester") && !role.equalsIgnoreCase("Admin"))) {
+            log.warn("===== UNLOCK_RUN FORBIDDEN ===== role={} is not Tester or Admin", role);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return testRunService.getTestRunById(id)

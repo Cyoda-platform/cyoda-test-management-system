@@ -11,7 +11,17 @@
           "name": "initialize_run",
           "description": "Starts a new run and captures a repository snapshot",
           "manual": true,
-          "next": "active"
+          "next": "active",
+          "processors": [
+            {
+              "name": "SnapshotProcessor",
+              "executionMode": "SYNC",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "responseTimeoutMs": 60000
+              }
+            }
+          ]
         }
       ]
     },

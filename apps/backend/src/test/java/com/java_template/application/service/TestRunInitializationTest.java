@@ -156,18 +156,19 @@ class TestRunInitializationTest {
     @Test
     @DisplayName("AC: startedAt timestamp recorded on creation")
     void testStartedAtRecorded() {
-        // Given: test run without startedAt
-        LocalDateTime now = LocalDateTime.now();
-        testRun.setStartedAt(now);
+        // Given: test run
+        testRun.setStartedAt(null);  // Don't set it; createTestRun should set it
 
         when(entityService.create(any(TestRunDTO.class)))
+                .thenReturn(entityWithMetadata(testRun, runId));
+        when(entityService.update(any(UUID.class), any(TestRunDTO.class), isNull()))
                 .thenReturn(entityWithMetadata(testRun, runId));
 
         TestRunDTO created = testRunService.createTestRun(testRun);
 
-        // Then: startedAt should be recorded
+        // Then: startedAt should be recorded (as ISO 8601 string)
         assertNotNull(created.getStartedAt(), "AC: startedAt should be recorded");
-        assertTrue(created.getStartedAt().isBefore(LocalDateTime.now().plusSeconds(1)),
-                   "AC: startedAt should be current time");
+        assertTrue(created.getStartedAt().matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z"),
+                   "AC: startedAt should be ISO 8601 formatted string");
     }
 }

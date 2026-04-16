@@ -1014,8 +1014,9 @@ const RunExecution = () => {
                   { projectId: projectId!, id: runId! },
                   {
                     onSuccess: () => {
-                      // Invalidate the run details query so it refetches with the new 'active' status
+                      // Invalidate both the run details AND the runs list so UI updates everywhere
                       qc.invalidateQueries({ queryKey: keys.testRunDetails(projectId!, runId!) });
+                      qc.invalidateQueries({ queryKey: keys.runs.all(projectId!) });
                       toast.success('Run unlocked');
                     },
                     onError:   (e) => toast.error(e.message),
@@ -1036,8 +1037,9 @@ const RunExecution = () => {
                   { projectId: projectId!, id: runId! },
                   {
                     onSuccess: () => {
-                      // Invalidate the run details query so it refetches with the new 'completed' status
+                      // Invalidate both the run details AND the runs list so UI updates everywhere
                       qc.invalidateQueries({ queryKey: keys.testRunDetails(projectId!, runId!) });
+                      qc.invalidateQueries({ queryKey: keys.runs.all(projectId!) });
                       toast.success('Run completed');
                     },
                     onError:   (e) => toast.error(e.message),
