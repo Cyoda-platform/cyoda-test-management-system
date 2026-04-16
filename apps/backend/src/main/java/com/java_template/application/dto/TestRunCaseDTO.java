@@ -32,6 +32,17 @@ public class TestRunCaseDTO implements CyodaEntity {
 
     private String status;
     private String bugUrl;
+
+    // Snapshot fields — copied from TestCase at initialize_run time.
+    // These are immutable once set and allow historical reporting even after
+    // the original TestCase or TestStep is soft-deleted.
+    private String title;
+    private String description;
+    private String preconditions;
+    private Priority priority;
+    private String displayId;
+    private UUID suiteId;
+
     private String startedAt;
     private String completedAt;
 

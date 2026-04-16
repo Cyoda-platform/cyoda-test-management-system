@@ -30,6 +30,11 @@ public class TestRunStepDTO implements CyodaEntity {
     private UUID testRunCaseId;
     private UUID testStepId;
 
+    // Snapshot fields — copied from TestStep at initialize_run time.
+    private Integer stepNumber;
+    private String action;
+    private String expectedResult;
+
     private String status;
 
     @Size(max = 2000, message = "Actual result must not exceed 2000 characters")

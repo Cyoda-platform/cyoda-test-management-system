@@ -6,6 +6,11 @@
   "status": "UNTESTED",
   "bugUrl": null,
   "startedAt": "2026-04-14T00:00:00Z",
-  "completedAt": "2026-04-14T00:00:00Z"
+  "completedAt": "2026-04-14T00:00:00Z",
+  "title": "Sample test case title",
+  "description": "Sample test case description",
+  "preconditions": "User is logged in",
+  "priority": "MEDIUM",
+  "displayId": "TC-001",
+  "suiteId": "550e8400-e29b-41d4-a716-446655440044"
 }
-

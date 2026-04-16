@@ -15,7 +15,7 @@
           "processors": [
             {
               "name": "SnapshotProcessor",
-              "executionMode": "SYNC",
+              "executionMode": "ASYNC_NEW_TX",
               "config": {
                 "calculationNodesTags": "cyoda_application",
                 "responseTimeoutMs": 60000

@@ -100,8 +100,9 @@ public class TestRunService {
             log.warn("===== CREATETESTRUN UPDATING WITH CASE IDS AND STEP STATUSES =====");
         }
 
-        // Update with data but WITHOUT transition. TestRun stays in 'initial' state.
-        // It will transition to 'active' on the first status update (when user starts executing).
+        // Mark as 'initial' so updateTestRun can detect it and send initialize_run
+        // on the first status update (when the user starts executing).
+        created.setStatus("initial");
         entityService.update(created.getId(), created, null);
         return created;
     }
@@ -169,43 +170,49 @@ public class TestRunService {
      * Note: stepStatuses is stored as JSON string, so merging happens via Map conversion.</p>
      */
     public TestRunDTO updateTestRun(UUID id, TestRunDTO testRun) {
-        boolean needsCaseIdsMerge   = testRun.getCaseIds() == null || testRun.getCaseIds().isEmpty();
-        boolean needsStatusMerge    = testRun.getStepStatuses() == null || testRun.getStepStatuses().isEmpty() || testRun.getStepStatuses().equals("{}");
+        boolean needsCaseIdsMerge = testRun.getCaseIds() == null || testRun.getCaseIds().isEmpty();
+        boolean needsStatusMerge  = testRun.getStepStatuses() == null
+                || testRun.getStepStatuses().isEmpty()
+                || testRun.getStepStatuses().equals("{}");
 
         log.warn("===== UPDATETESTRUN ENTRY ===== id={}, incomingStatus={}, incomingStepStatusesEmpty={}",
                 id, testRun.getStatus(), needsStatusMerge);
 
-        final String[] operationName = new String[]{null};  // No transition by default - use array to allow mutation in lambda
+        final String[] operationName = new String[]{null};
 
-        // Check existing run state FIRST, before any merge logic
+        // Single fetch — reused for BOTH transition detection AND merge logic.
+        // Previously two separate getTestRunById() calls caused concurrent threads to
+        // each see status=initial and each send initialize_run, flooding Cyoda with
+        // conflicting transactions that timed out after 60 s.
         Optional<TestRunDTO> existingOpt = getTestRunById(id);
-        if (existingOpt.isPresent()) {
-            TestRunDTO existing = existingOpt.get();
-            // If the run is in 'initial' state, transition to 'active' on ANY update
+
+        existingOpt.ifPresent(existing -> {
             if ("initial".equals(existing.getStatus())) {
                 operationName[0] = "initialize_run";
                 log.warn("===== UPDATETESTRUN DETECTED INITIAL STATE - transitioning to active =====");
             }
-        }
+        });
 
         if (needsCaseIdsMerge || needsStatusMerge) {
-            getTestRunById(id).ifPresent(existing -> {
+            existingOpt.ifPresent(existing -> {
                 log.warn("===== UPDATETESTRUN MERGE ===== existingStatus={}, existingStepStatusesEmpty={}",
-                        existing.getStatus(), (existing.getStepStatuses() == null || existing.getStepStatuses().isEmpty() || existing.getStepStatuses().equals("{}")));
+                        existing.getStatus(),
+                        (existing.getStepStatuses() == null
+                                || existing.getStepStatuses().isEmpty()
+                                || existing.getStepStatuses().equals("{}")));
 
                 if (needsCaseIdsMerge
                         && existing.getCaseIds() != null
                         && !existing.getCaseIds().isEmpty()) {
                     testRun.setCaseIds(existing.getCaseIds());
                 }
-                if (needsStatusMerge && existing.getStepStatuses() != null && !existing.getStepStatuses().equals("{}")) {
+                if (needsStatusMerge
+                        && existing.getStepStatuses() != null
+                        && !existing.getStepStatuses().equals("{}")) {
                     testRun.setStepStatuses(existing.getStepStatuses());
                 } else if (!needsStatusMerge
                         && existing.getStepStatuses() != null
                         && !existing.getStepStatuses().equals("{}")) {
-                    // Merge: convert both JSON strings to maps, merge them, then convert back.
-                    // This prevents a concurrent save from the second browser tab from wiping
-                    // step progress saved by the first tab.
                     java.util.Map<String, String> existingMap = existing.getStepStatusesAsMap();
                     java.util.Map<String, String> incomingMap = testRun.getStepStatusesAsMap();
                     existingMap.putAll(incomingMap);
@@ -216,9 +223,26 @@ public class TestRunService {
         }
 
         log.warn("===== UPDATETESTRUN CALLING entityService.update() with status={}, stepStatusesEmpty={}, operationName={}",
-                testRun.getStatus(), (testRun.getStepStatuses() == null || testRun.getStepStatuses().isEmpty() || testRun.getStepStatuses().equals("{}")), operationName[0]);
+                testRun.getStatus(),
+                (testRun.getStepStatuses() == null
+                        || testRun.getStepStatuses().isEmpty()
+                        || testRun.getStepStatuses().equals("{}")),
+                operationName[0]);
 
-        return withId(entityService.update(id, testRun, operationName[0]));
+        try {
+            return withId(entityService.update(id, testRun, operationName[0]));
+        } catch (Exception e) {
+            // If initialize_run fails because another concurrent request already sent it,
+            // Cyoda returns "State machine failed". Retry as a plain update so the
+            // step-status data is still persisted.
+            if ("initialize_run".equals(operationName[0])
+                    && e.getMessage() != null
+                    && e.getMessage().contains("State machine failed")) {
+                log.warn("===== UPDATETESTRUN concurrent initialize_run detected for {}, retrying as plain update =====", id);
+                return withId(entityService.update(id, testRun, null));
+            }
+            throw e;
+        }
     }
 
     public Optional<TestRunDTO> completeTestRun(UUID id) {

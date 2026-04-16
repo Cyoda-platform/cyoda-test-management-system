@@ -5,6 +5,8 @@
   "status": "UNTESTED",
   "actualResult": null,
   "startedAt": "2026-04-14T00:00:00Z",
-  "completedAt": "2026-04-14T00:00:00Z"
+  "completedAt": "2026-04-14T00:00:00Z",
+  "stepNumber": 1,
+  "action": "Open the login page and enter valid credentials",
+  "expectedResult": "User is redirected to the dashboard"
 }
-

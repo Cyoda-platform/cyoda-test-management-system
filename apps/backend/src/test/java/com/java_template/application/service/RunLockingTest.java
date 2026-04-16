@@ -83,7 +83,7 @@ class RunLockingTest {
         // Given: a test run being completed (from US 3.4 AC)
         LocalDateTime completionTime = LocalDateTime.now();
         testRun.setStatus("completed");
-        testRun.setCompletedAt(completionTime);
+        testRun.setCompletedAt(completionTime.toString());
         
         when(entityService.update(eq(runId), any(TestRunDTO.class), any()))
                 .thenReturn(entityWithMetadata(testRun, runId));
