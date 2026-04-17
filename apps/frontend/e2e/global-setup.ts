@@ -22,8 +22,10 @@ export default async function globalSetup() {
   await page.getByRole('button', { name: 'Sign In' }).click();
   await page.waitForURL('**/projects**', { timeout: 15_000 });
 
-  await page.context().storageState({ path: 'e2e/.auth/user.json' });
+  await page.context().storageState({
+    path: path.resolve(__dirname, '../.auth/user.json'),
+  });
   await browser.close();
 
-  console.log('[global-setup] Auth state saved to e2e/.auth/user.json');
+  console.log('[global-setup] Auth state saved to', path.resolve(__dirname, '../.auth/user.json'));
 }

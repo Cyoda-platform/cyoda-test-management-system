@@ -31,6 +31,11 @@ export async function getAuthHeaders(
 
 // ── Projects ─────────────────────────────────────────────────────────────────
 
+/**
+ * Creates a project.
+ * NOTE: requires the TEST_USERNAME account to have ADMIN role.
+ * A non-admin token will receive HTTP 403.
+ */
 export async function createProject(
   api: APIRequestContext,
   headers: Record<string, string>,
@@ -45,12 +50,14 @@ export async function createProject(
   return { id: body.id, name: body.name };
 }
 
+/** Deletes a project. NOTE: requires ADMIN role. */
 export async function deleteProject(
   api: APIRequestContext,
   headers: Record<string, string>,
   projectId: string,
 ): Promise<void> {
-  await api.delete(`${BASE}/projects/${projectId}`, { headers });
+  const res = await api.delete(`${BASE}/projects/${projectId}`, { headers });
+  assertOk(res.status(), null, 'deleteProject');
 }
 
 // ── Suites ────────────────────────────────────────────────────────────────────
@@ -75,7 +82,8 @@ export async function deleteSuite(
   projectId: string,
   suiteId: string,
 ): Promise<void> {
-  await api.delete(`${BASE}/projects/${projectId}/suites/${suiteId}`, { headers });
+  const res = await api.delete(`${BASE}/projects/${projectId}/suites/${suiteId}`, { headers });
+  assertOk(res.status(), null, 'deleteSuite');
 }
 
 // ── Cases ─────────────────────────────────────────────────────────────────────
@@ -128,10 +136,11 @@ export async function deleteCase(
   suiteId: string,
   caseId: string,
 ): Promise<void> {
-  await api.delete(
+  const res = await api.delete(
     `${BASE}/projects/${projectId}/suites/${suiteId}/cases/${caseId}`,
     { headers },
   );
+  assertOk(res.status(), null, 'deleteCase');
 }
 
 // ── Test Runs ─────────────────────────────────────────────────────────────────
@@ -163,7 +172,8 @@ export async function deleteTestRun(
   projectId: string,
   runId: string,
 ): Promise<void> {
-  await api.delete(`${BASE}/projects/${projectId}/runs/${runId}`, { headers });
+  const res = await api.delete(`${BASE}/projects/${projectId}/runs/${runId}`, { headers });
+  assertOk(res.status(), null, 'deleteTestRun');
 }
 
 // ── Defects ───────────────────────────────────────────────────────────────────
@@ -206,5 +216,6 @@ export async function deleteDefect(
   projectId: string,
   defectId: string,
 ): Promise<void> {
-  await api.delete(`${BASE}/projects/${projectId}/defects/${defectId}`, { headers });
+  const res = await api.delete(`${BASE}/projects/${projectId}/defects/${defectId}`, { headers });
+  assertOk(res.status(), null, 'deleteDefect');
 }
