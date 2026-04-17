@@ -677,6 +677,31 @@ export function useDeleteDefect() {
   return useMutation({
     mutationFn: ({ projectId, id }: { projectId: string; id: string }) =>
       defectsApi.delete(projectId, id),
+    onMutate: async ({ projectId, id }) => {
+      await qc.cancelQueries({ queryKey: keys.defects.all(projectId) });
+      const previousQueries = qc.getQueriesData<{ data: Defect[] }>({
+        queryKey: keys.defects.all(projectId),
+      });
+      // Optimistically remove the deleted item from every cached list page
+      qc.setQueriesData<{ data: Defect[] }>(
+        { queryKey: keys.defects.all(projectId) },
+        (old) => {
+          if (!old) return old;
+          const typed = old as { data?: Defect[] };
+          if (!Array.isArray(typed.data)) return old;
+          return { ...old, data: typed.data.filter((d) => d.id !== id) };
+        },
+      );
+      return { previousQueries };
+    },
+    onError: (_err, { projectId }, context) => {
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) =>
+          qc.setQueryData(queryKey, data),
+        );
+      }
+      qc.invalidateQueries({ queryKey: keys.defects.all(projectId) });
+    },
     onSuccess: (_data, { projectId }) =>
       qc.invalidateQueries({ queryKey: keys.defects.all(projectId) }),
   });

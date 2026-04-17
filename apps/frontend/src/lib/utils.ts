@@ -6,12 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Returns a sequential display ID with a prefix, matching the REP-01 / IMP-1 patterns.
- * e.g. listDisplayId("TR", 0) → "TR-01"
- *      listDisplayId("DEF", 2) → "DEF-03"
+ * Returns a sequential display ID with a prefix, matching the backend format (no zero-padding).
+ * e.g. listDisplayId("TR", 0) → "TR-1"
+ *      listDisplayId("DEF", 2) → "DEF-3"
  */
 export function listDisplayId(prefix: string, index: number): string {
-  return `${prefix}-${String(index + 1).padStart(2, "0")}`;
+  return `${prefix}-${index + 1}`;
 }
 
 

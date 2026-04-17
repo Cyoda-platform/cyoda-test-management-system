@@ -183,7 +183,7 @@ const Defects = () => {
       const matchStatus = statusFilter === 'all' || d.status === statusFilter;
       return matchSearch && matchStatus;
     })
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
   const resetForm = () => {
     setFormTitle('');

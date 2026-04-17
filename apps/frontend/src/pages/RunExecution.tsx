@@ -33,7 +33,7 @@ import {
   type Attachment,
   type TestRunCase,
 } from '@/lib/api';
-import { isUuid } from '@/lib/utils';
+import { isUuid, formatDate } from '@/lib/utils';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -112,6 +112,39 @@ function getFileIcon(type: string) {
   return File;
 }
 
+const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
+
+const DefectAttachmentsList = ({ projectId, defectId }: { projectId: string; defectId: string }) => {
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsLoading(true);
+    attachmentsApi.listByDefect(projectId, defectId)
+      .then((atts) => setAttachments(atts || []))
+      .catch(() => setAttachments([]))
+      .finally(() => setIsLoading(false));
+  }, [projectId, defectId]);
+
+  if (isLoading) return <div className="text-sm text-muted-foreground">Loading...</div>;
+  if (!attachments || attachments.length === 0) return <p className="text-sm text-muted-foreground mt-1.5">No attachments</p>;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      {attachments.map((att) => {
+        const IconComp = getFileIcon(att.fileType || att.type || '');
+        return (
+          <div key={att.id} className="flex items-center gap-2.5 px-3 py-2 bg-secondary rounded-md">
+            <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+            <span className="text-sm text-foreground truncate flex-1">{att.fileName || att.name}</span>
+            <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(att.fileSize || att.size || 0)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const RunExecution = () => {
   const { projectId, runId } = useParams<{ projectId: string; runId: string }>();
 
@@ -135,10 +168,10 @@ const RunExecution = () => {
   // Single aggregate call: all suites + cases in one round-trip (no more 1+N waterfall)
   const { data: repositoryData, isLoading: suitesLoading } = useRepository(projectId!);
 
-  const suitesWithCases = (repositoryData?.suites ?? []).map((suite) => ({
-    ...suite,
-    cases: suite.cases,
-  }));
+  const suitesWithCases = useMemo(
+    () => (repositoryData?.suites ?? []).map((suite) => ({ ...suite, cases: suite.cases })),
+    [repositoryData?.suites],
+  );
 
   const getRunCaseTestCaseId = useCallback((runCase: TestRunCase & { originalTestCaseId?: unknown }) => {
     if (runCase.testCaseId) return runCase.testCaseId;
@@ -534,7 +567,11 @@ const RunExecution = () => {
         return {
           id:          d.id,
           displayId:   d.displayId ?? previous?.displayId ?? d.id.slice(0, 8).toUpperCase(),
-          caseId:      d.testRunCaseId ?? previous?.caseId ?? '',
+          caseId:      (() => {
+            // Map testRunCaseId → original testCaseId so getCaseSourceLabel works.
+            const rc = d.testRunCaseId ? runCases.find((r) => r.id === d.testRunCaseId) : undefined;
+            return rc ? getRunCaseTestCaseId(rc) : (previous?.caseId ?? '');
+          })(),
           caseTitle:   previous?.caseTitle ?? (d.testRunCaseId ? runCaseIdToCaseTitle.get(d.testRunCaseId) ?? '' : ''),
           stepIdx:     previous?.stepIdx,
           title:       d.title,
@@ -870,7 +907,7 @@ const RunExecution = () => {
         {
           id:          created.id,
           displayId:   created.displayId,
-          caseId:      runCaseId,
+          caseId:      defect.caseId,
           caseTitle:   allCases.find((item) => item.id === defect.caseId)?.title ?? activeCase.title,
           stepIdx:     defectContext.stepIdx,
           title:       created.title,
@@ -906,13 +943,12 @@ const RunExecution = () => {
   };
 
   /**
-   * Only show defects that were raised against the currently active test-run case.
-   * `createdDefects[n].caseId` is populated from `Defect.testRunCaseId` (the
-   * TestRunCase.id, NOT the original TestCase.id) — see the seeding effect above.
-   * Filtering here prevents defects created for TC-10 from appearing under TC-11.
+   * Only show defects that were raised against the currently active test case.
+   * `createdDefects[n].caseId` stores the original TestCase.id (not testRunCaseId)
+   * so we compare directly with activeCase.id.
    */
   const activeCaseDefects = createdDefects.filter(
-    (d) => d.caseId === activeCaseRunCaseId,
+    (d) => d.caseId === activeCase?.id,
   );
 
   const progressStats = useMemo(() => {
@@ -1015,7 +1051,7 @@ const RunExecution = () => {
                   {
                     onSuccess: () => {
                       // Invalidate both the run details AND the runs list so UI updates everywhere
-                      qc.invalidateQueries({ queryKey: keys.testRunDetails(projectId!, runId!) });
+                      qc.invalidateQueries({ queryKey: keys.runs.detail(projectId!, runId!) });
                       qc.invalidateQueries({ queryKey: keys.runs.all(projectId!) });
                       toast.success('Run unlocked');
                     },
@@ -1038,7 +1074,7 @@ const RunExecution = () => {
                   {
                     onSuccess: () => {
                       // Invalidate both the run details AND the runs list so UI updates everywhere
-                      qc.invalidateQueries({ queryKey: keys.testRunDetails(projectId!, runId!) });
+                      qc.invalidateQueries({ queryKey: keys.runs.detail(projectId!, runId!) });
                       qc.invalidateQueries({ queryKey: keys.runs.all(projectId!) });
                       toast.success('Run completed');
                     },
@@ -1293,7 +1329,7 @@ const RunExecution = () => {
                           const updated = createdDefects.map(x => x.id === d.id ? { ...x, severity: val as any } : x);
                           setCreatedDefects(updated);
                         }}>
-                          <SelectTrigger className={`h-7 w-auto border-0 text-[10px] font-semibold font-mono uppercase tracking-widest rounded-md px-2.5 ${severityBadge[d.severity] || ''}`}>
+                          <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${severityBadge[d.severity] || ''}`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1319,8 +1355,8 @@ const RunExecution = () => {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={d.stepIdx === undefined ? d.caseId : ''}>
-                        {d.stepIdx !== undefined ? `Step ${d.stepIdx + 1}` : getCaseSourceLabel(d.caseId)}
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">
+                        {getCaseSourceLabel(d.caseId)}{d.stepIdx !== undefined ? ` · Step ${d.stepIdx + 1}` : ''}
                       </td>
                       <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{d.createdAt}</td>
                       <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -1438,49 +1474,61 @@ const RunExecution = () => {
 
       {/* View Defect Modal */}
       <Dialog open={viewDefectOpen} onOpenChange={setViewDefectOpen}>
-        <DialogContent className="sm:max-w-lg bg-card">
+        <DialogContent className="sm:max-w-3xl bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
-              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm">{viewDefect?.displayId}</span>
+              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm" title={viewDefect?.id}>{viewDefect?.displayId}</span>
               {viewDefect?.title}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">Defect details</DialogDescription>
           </DialogHeader>
           {viewDefect && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <span className={`inline-block px-2 py-0.5 text-[10px] uppercase tracking-wider font-mono ${severityBadge[viewDefect.severity] || 'text-muted-foreground'}`}>
-                  {viewDefect.severity}
-                </span>
-                <span className={`inline-block px-2 py-0.5 text-[10px] uppercase tracking-wider font-mono ${statusBadge[viewDefect.status] || 'text-muted-foreground'}`}>
-                  {viewDefect.status}
-                </span>
-              </div>
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Description</p>
-                <p className="text-sm text-foreground">{viewDefect.description}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Case</p>
-                <p className="text-sm text-foreground">{viewDefect.caseTitle}</p>
-              </div>
-              {viewDefect.stepIdx !== undefined && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Step</p>
-                  <p className="text-sm text-foreground">Step {viewDefect.stepIdx + 1}</p>
+                <label className={labelCls}>Description</label>
+                <div className="mt-0 px-3 py-2 bg-white border border-input rounded-md text-sm text-foreground min-h-[140px] leading-relaxed overflow-y-auto max-h-[200px]">
+                  {viewDefect.description || 'No description provided.'}
                 </div>
-              )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Severity</label>
+                  <div className={`mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm font-mono flex items-center uppercase tracking-wider ${severityBadge[viewDefect.severity] || 'text-foreground'}`}>
+                    {viewDefect.severity}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Status</label>
+                  <div className={`mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm font-mono flex items-center uppercase tracking-wider ${statusBadge[viewDefect.status] || 'text-foreground'}`}>
+                    {viewDefect.status}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Source</label>
+                  <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground font-mono flex items-center">
+                    {getCaseSourceLabel(viewDefect.caseId)}{viewDefect.stepIdx !== undefined ? ` · Step ${viewDefect.stepIdx + 1}` : ''}
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Created</label>
+                  <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground flex items-center">
+                    {formatDate(viewDefect.createdAt)}
+                  </div>
+                </div>
+              </div>
               {viewDefect.link && (
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">External Link</p>
-                  <a href={viewDefect.link} target="_blank" rel="noopener noreferrer" className="text-sm text-accent hover:underline">
-                    {viewDefect.link}
+                  <label className={labelCls}>External Link</label>
+                  <a href={viewDefect.link} target="_blank" rel="noopener noreferrer" className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1 hover:underline">
+                    {viewDefect.link} <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
               )}
               <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Created</p>
-                <p className="text-sm text-foreground">{viewDefect.createdAt}</p>
+                <label className={labelCls}>Attachments</label>
+                <DefectAttachmentsList projectId={projectId!} defectId={viewDefect.id} />
               </div>
             </div>
           )}
@@ -1558,12 +1606,29 @@ const RunExecution = () => {
               </div>
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="ghost" onClick={() => setEditDefectOpen(false)}>Cancel</Button>
-                <Button onClick={() => {
-                  setCreatedDefects((prev) =>
-                    prev.map((x) => x.id === editDefect.id ? { ...editDefect } : x)
-                  );
-                  toast.success('Defect updated');
-                  setEditDefectOpen(false);
+                <Button onClick={async () => {
+                  const orig = serverRunDefects.find((d) => d.id === editDefect.id);
+                  try {
+                    await defectsApi.update(projectId!, editDefect.id, {
+                      title:         editDefect.title,
+                      description:   editDefect.description,
+                      severity:      editDefect.severity,
+                      status:        editDefect.status,
+                      link:          editDefect.link,
+                      source:        orig?.source ?? '',
+                      testRunId:     orig?.testRunId,
+                      testRunCaseId: orig?.testRunCaseId,
+                    });
+                    qc.invalidateQueries({ queryKey: keys.runDefects.all(projectId!, runId!) });
+                    qc.invalidateQueries({ queryKey: keys.defects.all(projectId!) });
+                    setCreatedDefects((prev) =>
+                      prev.map((x) => x.id === editDefect.id ? { ...editDefect } : x)
+                    );
+                    toast.success('Defect updated');
+                    setEditDefectOpen(false);
+                  } catch {
+                    toast.error('Failed to save defect');
+                  }
                 }}>Save Changes</Button>
               </div>
             </div>

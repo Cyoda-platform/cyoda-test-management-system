@@ -117,7 +117,9 @@ Business logic belongs exclusively in `application/`.
 ### Workflow Configurations
 
 - FSM JSON files go in `apps/backend/src/main/resources/workflow/$entity_name/version_$version/$entity_name.json`.
-- Import with `WorkflowImportTool` or `./gradlew :apps:backend:runApp -PmainClass=com.java_template.common.tool.WorkflowImportTool`.
+- **Do NOT use `WorkflowImportTool`** — it is superseded by the HTTP curl import script.
+- Import schemas + workflows with `./import-schemas.sh` (run from `apps/backend/`).
+- **Before re-importing**, you MUST delete all tenant entities (bottom-up) and unlock/delete all models first. See **`apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md`** for the exact deletion order and commands. Skipping this causes orphaned entities and broken imports.
 - Avoid cyclic FSM states. Processor/criterion `supports()` return values must match the operation names in the JSON.
 
 ### Frontend (`apps/frontend/`)

@@ -68,11 +68,16 @@ public class AttachmentController {
     public ResponseEntity<List<AttachmentMetadataDTO>> getAttachmentsByDefect(
             @PathVariable UUID projectId,
             @PathVariable UUID defectId) {
-        List<AttachmentMetadataDTO> result = attachmentService.getAttachmentsByDefectId(defectId)
-                .stream()
-                .map(AttachmentMetadataDTO::from)
-                .toList();
-        return ResponseEntity.ok(result);
+        try {
+            List<AttachmentMetadataDTO> result = attachmentService.getAttachmentsByDefectId(defectId)
+                    .stream()
+                    .map(AttachmentMetadataDTO::from)
+                    .toList();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.warn("Failed to fetch attachments for defect {}: {}", defectId, e.getMessage());
+            return ResponseEntity.ok(List.of());
+        }
     }
 
     @PostMapping(consumes = "application/json")
