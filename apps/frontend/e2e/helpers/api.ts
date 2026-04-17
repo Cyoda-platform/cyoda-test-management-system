@@ -21,8 +21,11 @@ function assertOk(status: number, body: unknown, label: string) {
 export async function getAuthHeaders(
   api: APIRequestContext,
 ): Promise<Record<string, string>> {
-  const username = process.env.TEST_USERNAME!;
-  const password = process.env.TEST_PASSWORD!;
+  const username = process.env.TEST_USERNAME;
+  const password = process.env.TEST_PASSWORD;
+  if (!username || !password) {
+    throw new Error('TEST_USERNAME and TEST_PASSWORD must be set in .env.test');
+  }
 
   const res = await api.post(`${BASE}/auth/login`, {
     data: { username, password },
