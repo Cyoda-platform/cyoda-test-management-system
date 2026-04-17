@@ -769,7 +769,7 @@ const RunExecution = () => {
       setDefectContext({
         caseId,
         stepIdx:   stepNumber - 1,
-        source:    getCaseSourceLabel(caseId),
+        source:    `${getCaseSourceLabel(caseId)} · Step ${stepNumber}`,
         runCaseId: knownRunCaseId,
       });
       setDefectModalOpen(true);
@@ -828,7 +828,9 @@ const RunExecution = () => {
     setDefectContext({
       caseId,
       stepIdx,
-      source:    getCaseSourceLabel(caseId),
+      source:    stepIdx !== undefined
+        ? `${getCaseSourceLabel(caseId)} · Step ${stepIdx + 1}`
+        : getCaseSourceLabel(caseId),
       runCaseId: knownRunCaseId,
     });
     setDefectModalOpen(true);
@@ -1280,6 +1282,7 @@ const RunExecution = () => {
                             </div>
                             {/* Bug - Defect */}
                             <Button
+                              data-testid="step-bug-btn"
                               variant="ghost"
                               size="icon"
                               className={`h-7 w-7 text-muted-foreground hover:text-destructive ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1362,18 +1365,21 @@ const RunExecution = () => {
                       <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <button
+                            data-testid="defect-view-btn"
                             onClick={() => { setViewDefect(d); setViewDefectOpen(true); }}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           >
                             <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
                           </button>
                           <button
+                            data-testid="defect-edit-btn"
                             onClick={() => { setEditDefect(d); setEditDefectOpen(true); }}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           >
                             <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                           </button>
                           <button
+                            data-testid="defect-delete-btn"
                             onClick={() => {
                               setCreatedDefects(createdDefects.filter(x => x.id !== d.id));
                               toast.success('Defect deleted');

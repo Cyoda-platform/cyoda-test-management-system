@@ -459,18 +459,21 @@ const Defects = () => {
                       <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <button
+                            data-testid="defect-view-btn"
                             onClick={() => { setViewTarget(d); setViewOpen(true); }}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           >
                             <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
                           </button>
                           <button
+                            data-testid="defect-edit-btn"
                             onClick={() => openEdit(d)}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           >
                             <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                           </button>
                           <button
+                            data-testid="defect-delete-btn"
                             onClick={() => { setDeleteTarget({ id: d.id, displayId: defectDisplayIdMap[d.id] ?? d.id }); setDeleteOpen(true); }}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
                           >
