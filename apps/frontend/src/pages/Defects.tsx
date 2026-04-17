@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { useProject, useDefects, useCreateDefect, useUpdateDefect, useDeleteDefect } from '@/hooks/useApi';
+import { useProject, useDefects, useCreateDefect, useUpdateDefect, useDeleteDefect, useTestRuns } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
 import { attachmentsApi } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
@@ -88,6 +88,7 @@ const Defects = () => {
   // Live data
   const { data: project } = useProject(projectId!);
   const { data: defects = [], isLoading, isError, error } = useDefects(projectId!);
+  const { data: runs = [] } = useTestRuns(projectId!);
   const createDefect  = useCreateDefect();
   const updateDefect  = useUpdateDefect();
   const deleteDefect  = useDeleteDefect();
@@ -172,6 +173,13 @@ const Defects = () => {
     sorted.forEach((d, i) => { map[d.id] = d.displayId || listDisplayId('DEF', i); });
     return map;
   }, [defects]);
+
+  const runDisplayIdMap = useMemo(() => {
+    const sorted = [...runs].filter(Boolean).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    const map: Record<string, string> = {};
+    sorted.forEach((r, i) => { map[r.id] = r.displayId || listDisplayId('TR', i); });
+    return map;
+  }, [runs]);
 
   const openCount = defects.filter((d) => d.status === 'Open').length;
 
@@ -436,8 +444,16 @@ const Defects = () => {
                           </Select>
                         )}
                       </td>
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={d.source || undefined}>
-                        {d.source ? (isUuid(d.source) ? d.source.slice(0, 8) : d.source) : '—'}
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">
+                        {(() => {
+                          const parts: string[] = [];
+                          if (d.testRunId) {
+                            const trLabel = runDisplayIdMap[d.testRunId];
+                            if (trLabel) parts.push(trLabel);
+                          }
+                          if (d.source && !isUuid(d.source)) parts.push(d.source);
+                          return parts.length > 0 ? parts.join(' · ') : '—';
+                        })()}
                       </td>
                       <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(d.createdAt)}</td>
                       <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
