@@ -7,6 +7,7 @@
 .env*
 !.env.template
 !.env.example
+!apps/frontend/.env.test.example
 
 **/build/
 !src/**/build/
@@ -53,3 +54,6 @@ apps/frontend/.vite/
 .sandbox/
 
 application-*.yml
+
+# Playwright auth state
+apps/frontend/e2e/.auth/*.json
