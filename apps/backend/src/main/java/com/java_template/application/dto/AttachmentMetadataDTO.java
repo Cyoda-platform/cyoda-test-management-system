@@ -4,7 +4,21 @@ import java.util.UUID;
 
 /**
  * Lightweight response DTO for attachment list and metadata endpoints.
- * Omits {@code content} to avoid bloating responses with base64 data.
+ *
+ * <p>Intentionally omits the {@code content} field from {@link AttachmentDTO}.
+ * That field may contain the full base64-encoded file as an inline fallback
+ * for when the Cyoda EdgeMessage system is unavailable — returning it on every
+ * list or metadata request would bloat responses by megabytes per attachment.
+ *
+ * <p>File content is only ever served through the dedicated
+ * {@code GET /attachments/{id}/content} and {@code GET /attachments/{id}/view}
+ * download endpoints, which read directly from EdgeMessage (or the inline
+ * fallback) and stream bytes back — they never go through this DTO.
+ *
+ * <p>The {@code attachmentType}, {@code runId}, and {@code stepKey} fields mirror
+ * their counterparts in {@link AttachmentDTO}. They are populated only when the
+ * source DTO carries them (null for legacy records created before type discrimination
+ * was introduced).
  */
 public record AttachmentMetadataDTO(
         UUID id,
@@ -20,6 +34,7 @@ public record AttachmentMetadataDTO(
         UUID runId,
         String stepKey
 ) {
+    /** Maps a full {@link AttachmentDTO} to its metadata-only projection. */
     public static AttachmentMetadataDTO from(AttachmentDTO dto) {
         return new AttachmentMetadataDTO(
                 dto.getId(),

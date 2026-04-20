@@ -182,6 +182,7 @@ public class AttachmentService {
         return entityService.search(MODEL_SPEC, condition, AttachmentDTO.class).data()
                 .stream()
                 .map(this::withId)
+                .filter(a -> a.getAttachmentType() == null || "CASE".equals(a.getAttachmentType()))
                 .toList();
     }
 
@@ -226,6 +227,9 @@ public class AttachmentService {
         copy.setFileType(source.getFileType());
         copy.setFileSize(source.getFileSize());
         copy.setUploadedAt(Instant.now().toString());
+        copy.setAttachmentType(source.getAttachmentType());
+        copy.setRunId(source.getRunId());
+        copy.setStepKey(source.getStepKey());
 
         // Try to copy content via a new EdgeMessage
         if (source.getMessageId() != null) {
