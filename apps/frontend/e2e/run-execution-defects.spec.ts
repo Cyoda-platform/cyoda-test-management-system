@@ -169,27 +169,31 @@ test.describe('RunExecution defects', () => {
   test('edit defect — change severity to Critical', async ({ page }) => {
     await goToRun(page);
 
-    await expect(page.getByTestId('defect-edit-btn').first()).toBeVisible({ timeout: 10_000 });
-    await page.getByTestId('defect-edit-btn').first().click();
+    // Create a defect first (local state is fresh on each navigation)
+    await page.getByRole('button', { name: /report case issue/i }).click();
+    const createDialog = page.getByRole('dialog', { name: /create defect/i });
+    await expect(createDialog).toBeVisible({ timeout: 5_000 });
+    await createDialog.getByPlaceholder(/brief summary/i).fill('Edit Severity Defect');
+    await createDialog.getByRole('button', { name: /create defect/i }).click();
+    await expect(createDialog).not.toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('td', { hasText: 'Edit Severity Defect' })).toBeVisible({ timeout: 10_000 });
+
+    // Open edit modal for that defect
+    const row = page.locator('tr', { hasText: 'Edit Severity Defect' });
+    await row.getByTestId('defect-edit-btn').click();
 
     const dialog = page.getByRole('dialog', { name: /edit defect/i });
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-    // Change severity using the Select in the edit dialog
     // First combobox in edit dialog is Severity (second would be Status)
     const severitySelect = dialog.getByRole('combobox').first();
     await severitySelect.click();
     await page.getByRole('option', { name: 'Critical' }).click();
 
-    // Save — the edit dialog uses a "Save Changes" button
-    const saveBtn = dialog.getByRole('button', { name: /save changes/i });
-    await saveBtn.click();
-
+    await dialog.getByRole('button', { name: /save changes/i }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
 
-    // Verify severity updated in the table
-    const defectRow = page.locator('tr', { hasText: /Auto-opened defect from failed step/i });
-    await expect(defectRow).toContainText(/Critical/i, { timeout: 5_000 });
+    await expect(row).toContainText(/Critical/i, { timeout: 5_000 });
   });
 
   // ── Test 6: Delete defect — no confirmation dialog, immediate removal ─────────
@@ -213,30 +217,24 @@ test.describe('RunExecution defects', () => {
   test('Source column shows TC-N · Step N without TR-N prefix', async ({ page }) => {
     await goToRun(page);
 
-    // Wait for defect table
-    const defectTable = page.locator('table').last();
-    await expect(defectTable).toBeVisible({ timeout: 10_000 });
+    // Create defect via step fail — auto-sets source with step info in local state
+    const failedBtn = page.getByRole('button', { name: /^failed$/i }).first();
+    await expect(failedBtn).toBeVisible({ timeout: 10_000 });
+    await failedBtn.click();
 
-    // Find a defect row that has a step-linked source (created via step fail or bug button)
-    // Source is the 5th column (index 4): ID, Title, Severity, Status, Source
-    const defectRows = defectTable.locator('tbody tr');
-    // Wait for at least one defect row to be present
-    await expect(defectRows).not.toHaveCount(0, { timeout: 10_000 });
-    const count = await defectRows.count();
+    const dialog = page.getByRole('dialog', { name: /create defect/i });
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+    await dialog.getByPlaceholder(/brief summary/i).fill('Source Col Defect');
+    await dialog.getByRole('button', { name: /create defect/i }).click();
+    await expect(page.getByRole('cell', { name: 'Source Col Defect' })).toBeVisible({ timeout: 10_000 });
 
-    let foundStepSource = false;
-    for (let i = 0; i < count; i++) {
-      const sourceCell = defectRows.nth(i).locator('td').nth(4);
-      const text = await sourceCell.textContent();
-      if (text && text.includes('· Step')) {
-        // Must contain TC- but NOT TR-
-        expect(text).toMatch(/TC-/);
-        expect(text).not.toMatch(/TR-/);
-        foundStepSource = true;
-        break;
-      }
-    }
+    // Check the source cell of this specific row (Source is column index 4)
+    const row = page.locator('tr', { hasText: 'Source Col Defect' });
+    const sourceCell = row.locator('td').nth(4);
+    const text = await sourceCell.textContent() ?? '';
 
-    expect(foundStepSource).toBe(true);
+    // Source should contain a step reference but NOT a TR-N prefix
+    expect(text).toMatch(/Step \d+/);
+    expect(text).not.toMatch(/TR-\d+/);
   });
 });

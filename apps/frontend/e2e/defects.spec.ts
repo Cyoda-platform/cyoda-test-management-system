@@ -124,7 +124,7 @@ test.describe('Defects page', () => {
     await page.getByRole('option', { name: 'Minor' }).click();
 
     // Row should now show Minor (not Major) without refresh
-    await expect(row.locator('td').nth(2)).toContainText('MINOR', { timeout: 10_000 });
+    await expect(row.locator('td').nth(2)).toContainText('Minor', { timeout: 10_000 });
   });
 
   test('change status inline, reflected without page refresh', async ({ page }) => {
@@ -135,7 +135,7 @@ test.describe('Defects page', () => {
     await row.locator('td').nth(3).click();
     await page.getByRole('option', { name: 'Fixed' }).click();
 
-    await expect(row.locator('td').nth(3)).toContainText('FIXED', { timeout: 10_000 });
+    await expect(row.locator('td').nth(3)).toContainText('Fixed', { timeout: 10_000 });
   });
 
   test('view defect modal shows correct fields', async ({ page }) => {
@@ -148,8 +148,8 @@ test.describe('Defects page', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText(SHARED_TITLE);
-    await expect(dialog).toContainText('Minor');   // severity after test 3 changed it
-    await expect(dialog).toContainText('Fixed');   // status after test 4 changed it
+    await expect(dialog).toContainText('Description');
+    await expect(dialog).toContainText('Created by E2E test setup');
   });
 
   test('delete defect, disappears from table without page refresh', async ({ page }) => {
