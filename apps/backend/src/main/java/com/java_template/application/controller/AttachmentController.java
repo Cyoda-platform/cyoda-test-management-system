@@ -40,10 +40,14 @@ public class AttachmentController {
     public ResponseEntity<?> uploadAttachment(
             @PathVariable UUID projectId,
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "caseId", required = false) UUID caseId,
-            @RequestParam(value = "defectId", required = false) UUID defectId) {
+            @RequestParam(value = "caseId",          required = false) UUID caseId,
+            @RequestParam(value = "defectId",         required = false) UUID defectId,
+            @RequestParam(value = "attachmentType",   required = false) String attachmentType,
+            @RequestParam(value = "runId",            required = false) UUID runId,
+            @RequestParam(value = "stepKey",          required = false) String stepKey) {
         try {
-            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, defectId, file, null, null, null);
+            AttachmentDTO uploaded = attachmentService.uploadAttachment(
+                    projectId, caseId, defectId, file, attachmentType, runId, stepKey);
             return ResponseEntity.status(HttpStatus.CREATED).body(AttachmentMetadataDTO.from(uploaded));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -76,6 +80,27 @@ public class AttachmentController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             logger.warn("Failed to fetch attachments for defect {}: {}", defectId, e.getMessage());
+            return ResponseEntity.ok(List.of());
+        }
+    }
+
+    @GetMapping("/by-run/{runId}/case/{caseId}/step/{stepKey}")
+    @Operation(summary = "Get Evidence attachments for a specific step in a test run")
+    public ResponseEntity<List<AttachmentMetadataDTO>> getEvidenceByRunCaseStep(
+            @PathVariable UUID projectId,
+            @PathVariable UUID runId,
+            @PathVariable UUID caseId,
+            @PathVariable String stepKey) {
+        try {
+            List<AttachmentMetadataDTO> result = attachmentService
+                    .getEvidenceByRunCaseStep(runId, caseId, stepKey)
+                    .stream()
+                    .map(AttachmentMetadataDTO::from)
+                    .toList();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.warn("Failed to fetch evidence for run={} case={} step={}: {}",
+                    runId, caseId, stepKey, e.getMessage());
             return ResponseEntity.ok(List.of());
         }
     }

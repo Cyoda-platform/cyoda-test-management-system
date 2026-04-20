@@ -98,9 +98,11 @@ public class TestRunStepController {
             @PathVariable UUID runId,
             @PathVariable UUID caseId,
             @PathVariable UUID id,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "stepKey", required = false) String stepKey) {
         try {
-            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, null, file, null, null, null);
+            AttachmentDTO uploaded = attachmentService.uploadAttachment(
+                    projectId, caseId, null, file, "EVIDENCE", runId, stepKey);
             return ResponseEntity.status(HttpStatus.CREATED).body(uploaded);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
