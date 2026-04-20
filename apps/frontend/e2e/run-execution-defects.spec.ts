@@ -1,4 +1,4 @@
-import { test, expect, APIRequestContext } from '@playwright/test';
+import { test, expect, APIRequestContext, type Page } from '@playwright/test';
 import {
   getAuthHeaders,
   createProject,
@@ -58,7 +58,7 @@ test.describe('RunExecution defects', () => {
     }
   });
 
-  async function goToRun(page: import('@playwright/test').Page) {
+  async function goToRun(page: Page) {
     await page.goto(`/projects/${projectId}/runs/${runId}`);
     // Wait for the steps table (first case auto-selected on load)
     await expect(page.locator('table').first()).toBeVisible({ timeout: 15_000 });
@@ -150,8 +150,17 @@ test.describe('RunExecution defects', () => {
     // Status should be present (default Open)
     await expect(dialog).toContainText(/Open|In Progress|Fixed|Closed/i);
 
-    // Close the dialog
-    await page.keyboard.press('Escape');
+    // Source field (if present) must not contain TR-N prefix
+    const dialogText = await dialog.textContent() ?? '';
+    expect(dialogText).not.toMatch(/TR-\d+/);
+
+    // Close the dialog — prefer a close button over Escape (which can be intercepted)
+    const closeBtn = dialog.getByRole('button', { name: /close/i });
+    if (await closeBtn.count() > 0) {
+      await closeBtn.click();
+    } else {
+      await page.keyboard.press('Escape');
+    }
     await expect(dialog).not.toBeVisible({ timeout: 5_000 });
   });
 
@@ -167,6 +176,7 @@ test.describe('RunExecution defects', () => {
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
     // Change severity using the Select in the edit dialog
+    // First combobox in edit dialog is Severity (second would be Status)
     const severitySelect = dialog.getByRole('combobox').first();
     await severitySelect.click();
     await page.getByRole('option', { name: 'Critical' }).click();
@@ -210,8 +220,9 @@ test.describe('RunExecution defects', () => {
     // Find a defect row that has a step-linked source (created via step fail or bug button)
     // Source is the 5th column (index 4): ID, Title, Severity, Status, Source
     const defectRows = defectTable.locator('tbody tr');
+    // Wait for at least one defect row to be present
+    await expect(defectRows).not.toHaveCount(0, { timeout: 10_000 });
     const count = await defectRows.count();
-    expect(count).toBeGreaterThan(0);
 
     let foundStepSource = false;
     for (let i = 0; i < count; i++) {
