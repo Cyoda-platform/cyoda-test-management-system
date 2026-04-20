@@ -870,10 +870,23 @@ const RunExecution = () => {
     }));
     try {
       await Promise.all(
-        fileArray.map((f) => attachmentsApi.upload(projectId!, f, evidenceTarget.caseId))
+        fileArray.map((f) =>
+          attachmentsApi.upload(
+            projectId!,
+            f,
+            evidenceTarget.caseId,
+            undefined,
+            'EVIDENCE',
+            runId!,
+            String(evidenceTarget.stepIdx + 1),
+          )
+        )
       );
       // Refresh server-side attachment list so they survive a page reload
       qc.invalidateQueries({ queryKey: ['attachments', projectId!, 'case', evidenceTarget.caseId] });
+      qc.invalidateQueries({
+        queryKey: ['attachments', projectId!, 'run', runId!, 'case', evidenceTarget.caseId, 'step', String(evidenceTarget.stepIdx + 1)],
+      });
       toast.success(`${fileArray.length} file(s) uploaded`);
     } catch {
       toast.error('Upload failed — files saved locally but not persisted');
@@ -929,11 +942,11 @@ const RunExecution = () => {
         ...prev.filter((item) => item.id !== created.id),
       ]);
 
-      // Upload any attached files, linked to the test case
+      // Upload any attached files, linked to the defect
       if (defect.files && (defect.files as File[]).length > 0) {
         await Promise.all(
           (defect.files as File[]).map((f) =>
-            attachmentsApi.upload(projectId!, f, defect.caseId)
+            attachmentsApi.upload(projectId!, f, undefined, created.id, 'DEFECT')
           )
         );
       }
@@ -1259,39 +1272,43 @@ const RunExecution = () => {
             )}
           </div>
 
-          {/* Attachments Section — loaded from server so they survive page refresh */}
-          {serverAttachments.length > 0 && (
+          {/* Attachments Section — CASE type only; Evidence stays in Evidence modal */}
+          {serverAttachments.filter(
+            (att: Attachment) => !att.attachmentType || att.attachmentType === 'CASE'
+          ).length > 0 && (
             <div className="bg-muted/40 rounded-lg p-4 mb-6">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Attachments</h3>
               <div className="space-y-2">
-                {serverAttachments.map((item: Attachment) => {
-                  const IconComp = getFileIcon(item.fileType ?? '');
-                  return (
-                    <div key={item.id} className="flex items-center gap-2.5 px-3 py-2 bg-card rounded-md border border-border/40">
-                      <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-foreground truncate">{item.fileName}</p>
+                {serverAttachments
+                  .filter((att: Attachment) => !att.attachmentType || att.attachmentType === 'CASE')
+                  .map((item: Attachment) => {
+                    const IconComp = getFileIcon(item.fileType ?? '');
+                    return (
+                      <div key={item.id} className="flex items-center gap-2.5 px-3 py-2 bg-card rounded-md border border-border/40">
+                        <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground truncate">{item.fileName}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(item.fileSize)}</span>
+                        {!isReadOnly && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await attachmentsApi.delete(projectId!, item.id);
+                                qc.invalidateQueries({ queryKey: ['attachments', projectId!, 'case', activeCase.id] });
+                                toast.success('File removed');
+                              } catch {
+                                toast.error('Failed to remove file');
+                              }
+                            }}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          </button>
+                        )}
                       </div>
-                      <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(item.fileSize)}</span>
-                      {!isReadOnly && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await attachmentsApi.delete(projectId!, item.id);
-                              qc.invalidateQueries({ queryKey: ['attachments', projectId!, 'case', activeCase.id] });
-                              toast.success('File removed');
-                            } catch {
-                              toast.error('Failed to remove file');
-                            }
-                          }}
-                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </div>
           )}
