@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import CreateDefectModal from '@/components/CreateDefectModal';
+import EditDefectModal from '@/components/EditDefectModal';
+import ViewDefectModal from '@/components/ViewDefectModal';
 import {
   useTestRunDetails,
   useRepository,
@@ -322,8 +324,12 @@ const RunExecution = () => {
   const [createdDefects, setCreatedDefects] = useState<CreatedDefect[]>([]);
   const [viewDefectOpen, setViewDefectOpen] = useState(false);
   const [viewDefect, setViewDefect] = useState<CreatedDefect | null>(null);
+  const [viewDefectAttachments, setViewDefectAttachments] = useState<any[]>([]);
+  const [isLoadingViewDefectAttachments, setIsLoadingViewDefectAttachments] = useState(false);
   const [editDefectOpen, setEditDefectOpen] = useState(false);
   const [editDefect, setEditDefect] = useState<CreatedDefect | null>(null);
+  const [editDefectAttachments, setEditDefectAttachments] = useState<any[]>([]);
+  const [isLoadingEditDefectAttachments, setIsLoadingEditDefectAttachments] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isReadOnly = run?.status === 'completed';
   const qc = useQueryClient();
@@ -944,6 +950,77 @@ const RunExecution = () => {
     }
   };
 
+  const openViewDefect = (defect: CreatedDefect) => {
+    setViewDefect(defect);
+    setIsLoadingViewDefectAttachments(true);
+    attachmentsApi.listByDefect(projectId!, defect.id)
+      .then(atts => setViewDefectAttachments(atts || []))
+      .catch(() => setViewDefectAttachments([]))
+      .finally(() => setIsLoadingViewDefectAttachments(false));
+    setViewDefectOpen(true);
+  };
+
+  const openEditDefect = (defect: CreatedDefect) => {
+    setEditDefect(defect);
+    setIsLoadingEditDefectAttachments(true);
+    attachmentsApi.listByDefect(projectId!, defect.id)
+      .then(atts => setEditDefectAttachments(atts || []))
+      .catch(() => setEditDefectAttachments([]))
+      .finally(() => setIsLoadingEditDefectAttachments(false));
+    setEditDefectOpen(true);
+  };
+
+  const handleEditDefectSave = async (updatedDefect: CreatedDefect, newFiles: File[], removedAttachmentIds: string[]) => {
+    if (!projectId) return;
+
+    try {
+      // Update defect via API
+      await defectsApi.update(projectId!, updatedDefect.id, {
+        title: updatedDefect.title,
+        description: updatedDefect.description,
+        severity: updatedDefect.severity,
+        status: updatedDefect.status,
+        source: updatedDefect.source,
+        link: updatedDefect.link,
+      });
+
+      // Upload new files
+      for (const file of newFiles) {
+        try {
+          await attachmentsApi.upload(projectId!, file, undefined, updatedDefect.id);
+        } catch (error) {
+          toast.warning(`Failed to upload ${file.name}`);
+        }
+      }
+
+      // Delete removed attachments
+      for (const attachmentId of removedAttachmentIds) {
+        try {
+          await attachmentsApi.delete(projectId!, updatedDefect.id, attachmentId);
+        } catch (error) {
+          toast.warning(`Failed to delete attachment`);
+        }
+      }
+
+      // Update createdDefects list
+      setCreatedDefects((prev) =>
+        prev.map((d) =>
+          d.id === updatedDefect.id ? { ...d, ...updatedDefect } : d
+        )
+      );
+
+      // Refetch defects from server
+      qc.invalidateQueries({ queryKey: keys.runDefects.all(projectId!, runId!) });
+
+      toast.success('Defect updated');
+      setEditDefectOpen(false);
+      setEditDefect(null);
+      setEditDefectAttachments([]);
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update defect');
+    }
+  };
+
   /**
    * Only show defects that were raised against the currently active test case.
    * `createdDefects[n].caseId` stores the original TestCase.id (not testRunCaseId)
@@ -1479,168 +1556,24 @@ const RunExecution = () => {
       )}
 
       {/* View Defect Modal */}
-      <Dialog open={viewDefectOpen} onOpenChange={setViewDefectOpen}>
-        <DialogContent className="sm:max-w-3xl bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm" title={viewDefect?.id}>{viewDefect?.displayId}</span>
-              {viewDefect?.title}
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">Defect details</DialogDescription>
-          </DialogHeader>
-          {viewDefect && (
-            <div className="space-y-4">
-              <div>
-                <label className={labelCls}>Description</label>
-                <div className="mt-0 px-3 py-2 bg-white border border-input rounded-md text-sm text-foreground min-h-[140px] leading-relaxed overflow-y-auto max-h-[200px]">
-                  {viewDefect.description || 'No description provided.'}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Severity</label>
-                  <div className={`mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm font-mono flex items-center uppercase tracking-wider ${severityBadge[viewDefect.severity] || 'text-foreground'}`}>
-                    {viewDefect.severity}
-                  </div>
-                </div>
-                <div>
-                  <label className={labelCls}>Status</label>
-                  <div className={`mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm font-mono flex items-center uppercase tracking-wider ${statusBadge[viewDefect.status] || 'text-foreground'}`}>
-                    {viewDefect.status}
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Source</label>
-                  <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground font-mono flex items-center">
-                    {getCaseSourceLabel(viewDefect.caseId)}{viewDefect.stepIdx !== undefined ? ` · Step ${viewDefect.stepIdx + 1}` : ''}
-                  </div>
-                </div>
-                <div>
-                  <label className={labelCls}>Created</label>
-                  <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground flex items-center">
-                    {formatDate(viewDefect.createdAt)}
-                  </div>
-                </div>
-              </div>
-              {viewDefect.link && (
-                <div>
-                  <label className={labelCls}>External Link</label>
-                  <a href={viewDefect.link} target="_blank" rel="noopener noreferrer" className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1 hover:underline">
-                    {viewDefect.link} <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
-              <div>
-                <label className={labelCls}>Attachments</label>
-                <DefectAttachmentsList projectId={projectId!} defectId={viewDefect.id} />
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ViewDefectModal
+        open={viewDefectOpen}
+        onOpenChange={setViewDefectOpen}
+        defect={viewDefect as any}
+        displayId={viewDefect?.displayId}
+        existingAttachments={viewDefectAttachments}
+        formatDate={formatDate}
+      />
 
       {/* Edit Defect Modal */}
-      <Dialog open={editDefectOpen} onOpenChange={setEditDefectOpen}>
-        <DialogContent className="sm:max-w-lg bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-foreground">Edit Defect</DialogTitle>
-            <DialogDescription className="text-muted-foreground">{editDefect?.displayId}</DialogDescription>
-          </DialogHeader>
-          {editDefect && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">ID</label>
-                <input
-                  type="text"
-                  value={editDefect.displayId}
-                  onChange={(e) => setEditDefect({ ...editDefect, displayId: e.target.value })}
-                  className="mt-1.5 w-full h-9 px-3 bg-secondary border-0 rounded-md text-sm text-foreground font-mono"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Title</label>
-                <input
-                  type="text"
-                  value={editDefect.title}
-                  onChange={(e) => setEditDefect({ ...editDefect, title: e.target.value })}
-                  className="mt-1.5 w-full h-9 px-3 bg-secondary border-0 rounded-md text-sm text-foreground"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Description</label>
-                <Textarea
-                  value={editDefect.description}
-                  onChange={(e) => setEditDefect({ ...editDefect, description: e.target.value })}
-                  className="mt-1.5 min-h-[80px] bg-secondary border-0 text-sm"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Severity</label>
-                  <Select value={editDefect.severity} onValueChange={(val) => setEditDefect({ ...editDefect, severity: val as any })}>
-                    <SelectTrigger className="mt-1.5 h-9 bg-secondary border-0"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Critical">Critical</SelectItem>
-                      <SelectItem value="Major">Major</SelectItem>
-                      <SelectItem value="Minor">Minor</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</label>
-                  <Select value={editDefect.status} onValueChange={(val) => setEditDefect({ ...editDefect, status: val as any })}>
-                    <SelectTrigger className="mt-1.5 h-9 bg-secondary border-0"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Open">Open</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="Fixed">Fixed</SelectItem>
-                      <SelectItem value="Closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">External Link</label>
-                <input
-                  type="text"
-                  value={editDefect.link}
-                  onChange={(e) => setEditDefect({ ...editDefect, link: e.target.value })}
-                  className="mt-1.5 w-full h-9 px-3 bg-secondary border-0 rounded-md text-sm text-foreground"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button variant="ghost" onClick={() => setEditDefectOpen(false)}>Cancel</Button>
-                <Button onClick={async () => {
-                  const orig = serverRunDefects.find((d) => d.id === editDefect.id);
-                  try {
-                    await defectsApi.update(projectId!, editDefect.id, {
-                      title:         editDefect.title,
-                      description:   editDefect.description,
-                      severity:      editDefect.severity,
-                      status:        editDefect.status,
-                      link:          editDefect.link,
-                      source:        orig?.source ?? '',
-                      testRunId:     orig?.testRunId,
-                      testRunCaseId: orig?.testRunCaseId,
-                    });
-                    qc.invalidateQueries({ queryKey: keys.runDefects.all(projectId!, runId!) });
-                    qc.invalidateQueries({ queryKey: keys.defects.all(projectId!) });
-                    setCreatedDefects((prev) =>
-                      prev.map((x) => x.id === editDefect.id ? { ...editDefect } : x)
-                    );
-                    toast.success('Defect updated');
-                    setEditDefectOpen(false);
-                  } catch {
-                    toast.error('Failed to save defect');
-                  }
-                }}>Save Changes</Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <EditDefectModal
+        open={editDefectOpen}
+        onOpenChange={setEditDefectOpen}
+        defect={editDefect as any}
+        displayId={editDefect?.displayId}
+        existingAttachments={editDefectAttachments}
+        onSave={handleEditDefectSave}
+      />
     </div>
   );
 };

@@ -13,6 +13,8 @@ import type { Defect } from '@/lib/api';
 import { attachmentsApi } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
+import EditDefectModal from '@/components/EditDefectModal';
+import ViewDefectModal from '@/components/ViewDefectModal';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -111,6 +113,14 @@ const Defects = () => {
   // Edit modal
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Defect | null>(null);
+  const [editAttachments, setEditAttachments] = useState<any[]>([]);
+  const [isLoadingEditAttachments, setIsLoadingEditAttachments] = useState(false);
+
+  // View modal
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewTarget, setViewTarget] = useState<Defect | null>(null);
+  const [viewAttachments, setViewAttachments] = useState<any[]>([]);
+  const [isLoadingViewAttachments, setIsLoadingViewAttachments] = useState(false);
 
   // Delete modal
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -160,10 +170,6 @@ const Defects = () => {
       }
     );
   };
-
-  // View modal
-  const [viewOpen, setViewOpen] = useState(false);
-  const [viewTarget, setViewTarget] = useState<Defect | null>(null);
 
   // Build a stable display-ID map: prefer the persisted displayId, fall back to
   // position-based generation only for legacy records that predate the fix.
@@ -270,26 +276,68 @@ const Defects = () => {
 
   const openEdit = (d: Defect) => {
     setEditTarget({ ...d });
+    setIsLoadingEditAttachments(true);
+    attachmentsApi.listByDefect(projectId!, d.id)
+      .then(atts => setEditAttachments(atts || []))
+      .catch(() => setEditAttachments([]))
+      .finally(() => setIsLoadingEditAttachments(false));
     setEditOpen(true);
   };
 
-  const handleEdit = () => {
-    if (!editTarget) return;
-    updateDefect.mutate(
-      {
-        projectId: projectId!,
-        id: editTarget.id,
-        body: buildUpdateBody(editTarget, {}),
-      },
-      {
-        onSuccess: () => {
-          toast.success('Defect updated');
-          setEditOpen(false);
-          setEditTarget(null);
-        },
-        onError: (e) => toast.error(e.message),
+  const openView = (d: Defect) => {
+    setViewTarget(d);
+    setIsLoadingViewAttachments(true);
+    attachmentsApi.listByDefect(projectId!, d.id)
+      .then(atts => setViewAttachments(atts || []))
+      .catch(() => setViewAttachments([]))
+      .finally(() => setIsLoadingViewAttachments(false));
+    setViewOpen(true);
+  };
+
+  const handleEditDefectSave = async (updatedDefect: Defect, newFiles: File[], removedAttachmentIds: string[]) => {
+    if (!projectId) return;
+
+    try {
+      // Update defect
+      await new Promise<void>((resolve, reject) => {
+        updateDefect.mutate(
+          {
+            projectId: projectId!,
+            id: updatedDefect.id,
+            body: buildUpdateBody(updatedDefect, {}),
+          },
+          {
+            onSuccess: () => resolve(),
+            onError: (e) => reject(e),
+          }
+        );
+      });
+
+      // Upload new files
+      for (const file of newFiles) {
+        try {
+          await attachmentsApi.upload(projectId!, file, undefined, updatedDefect.id);
+        } catch (error) {
+          toast.warning(`Failed to upload ${file.name}`);
+        }
       }
-    );
+
+      // Delete removed attachments
+      for (const attachmentId of removedAttachmentIds) {
+        try {
+          await attachmentsApi.delete(projectId!, updatedDefect.id, attachmentId);
+        } catch (error) {
+          toast.warning(`Failed to delete attachment`);
+        }
+      }
+
+      toast.success('Defect updated');
+      setEditOpen(false);
+      setEditTarget(null);
+      setEditAttachments([]);
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update defect');
+    }
   };
 
   const handleDelete = () => {
@@ -403,7 +451,7 @@ const Defects = () => {
                     <tr
                       key={d.id}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"
-                      onClick={() => { setViewTarget(d); setViewOpen(true); }}
+                      onClick={() => openView(d)}
                     >
                       <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>{defectDisplayIdMap[d.id] ?? '-'}</td>
                       <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
@@ -460,7 +508,7 @@ const Defects = () => {
                         <div className="flex items-center gap-1">
                           <button
                             data-testid="defect-view-btn"
-                            onClick={() => { setViewTarget(d); setViewOpen(true); }}
+                            onClick={() => openView(d)}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           >
                             <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -591,116 +639,24 @@ const Defects = () => {
       </Dialog>
 
       {/* Edit Defect Modal */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-3xl bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-foreground">Edit Defect</DialogTitle>
-            <DialogDescription className="text-muted-foreground font-mono" title={editTarget?.id}>{editTarget ? (defectDisplayIdMap[editTarget.id] ?? '-') : '-'}</DialogDescription>
-          </DialogHeader>
-          {editTarget && (
-            <div className="space-y-4">
-              <div>
-                <label className={labelCls}>Title</label>
-                <Input value={editTarget.title} onChange={(e) => setEditTarget({ ...editTarget, title: e.target.value })} className="mt-0 h-9 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
-              </div>
-              <div>
-                <label className={labelCls}>Description</label>
-                <Textarea value={editTarget.description} onChange={(e) => setEditTarget({ ...editTarget, description: e.target.value })} className="mt-0 min-h-[140px] bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring text-sm resize-none" />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className={labelCls}>Severity</label>
-                  <Select value={editTarget.severity} onValueChange={(v) => setEditTarget({ ...editTarget, severity: v as 'Critical' | 'Major' | 'Minor' })}>
-                    <SelectTrigger className="mt-0 h-9 bg-white border border-input"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Critical">Critical</SelectItem>
-                      <SelectItem value="Major">Major</SelectItem>
-                      <SelectItem value="Minor">Minor</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className={labelCls}>Status</label>
-                  <Select value={editTarget.status} onValueChange={(v) => setEditTarget({ ...editTarget, status: v as Defect['status'] })}>
-                    <SelectTrigger className="mt-0 h-9 bg-white border border-input"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Open">Open</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="Fixed">Fixed</SelectItem>
-                      <SelectItem value="Closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className={labelCls}>Source</label>
-                  <Input value={editTarget.source || ''} onChange={(e) => setEditTarget({ ...editTarget, source: e.target.value })} placeholder="TR-01 or AS-1" className="mt-0 h-9 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
-                </div>
-              </div>
-              <div>
-                <label className={labelCls}>External Link</label>
-                <Input value={editTarget.link} onChange={(e) => setEditTarget({ ...editTarget, link: e.target.value })} className="mt-0 h-9 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
-              </div>
-              <div>
-                <label className={labelCls}>Attachments</label>
-                <DefectAttachmentsList projectId={projectId!} defectId={editTarget.id} />
-              </div>
-            </div>
-          )}
-          <DialogFooter className="mt-4">
-            <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleEdit}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditDefectModal
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        defect={editTarget}
+        displayId={editTarget ? defectDisplayIdMap[editTarget.id] : undefined}
+        existingAttachments={editAttachments}
+        onSave={handleEditDefectSave}
+      />
 
       {/* View Defect Modal */}
-      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="sm:max-w-3xl bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm" title={viewTarget?.id}>{viewTarget ? (defectDisplayIdMap[viewTarget.id] ?? '-') : '-'}</span>
-              {viewTarget?.title}
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">Defect details</DialogDescription>
-          </DialogHeader>
-          {viewTarget && (
-            <div className="space-y-4">
-              <div>
-                <label className={labelCls}>Description</label>
-                <div className="mt-0 px-3 py-2 bg-white border border-input rounded-md text-sm text-foreground min-h-[140px] resize-none leading-relaxed overflow-y-auto max-h-[200px]">
-                  {viewTarget.description || 'No description provided.'}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Source</label>
-                  <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground font-mono flex items-center">
-                    {viewTarget.source ? (isUuid(viewTarget.source) ? viewTarget.source.slice(0, 8) : viewTarget.source) : '—'}
-                  </div>
-                </div>
-                <div>
-                  <label className={labelCls}>Created</label>
-                  <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground flex items-center">
-                    {formatDate(viewTarget.createdAt)}
-                  </div>
-                </div>
-              </div>
-              {viewTarget.link && (
-                <div>
-                  <label className={labelCls}>External Link</label>
-                  <a href={viewTarget.link} target="_blank" rel="noopener noreferrer" className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1 hover:underline">
-                    {viewTarget.link} <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
-              <div>
-                <label className={labelCls}>Attachments</label>
-                <DefectAttachmentsList projectId={projectId!} defectId={viewTarget.id} />
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ViewDefectModal
+        open={viewOpen}
+        onOpenChange={setViewOpen}
+        defect={viewTarget}
+        displayId={viewTarget ? defectDisplayIdMap[viewTarget.id] : undefined}
+        existingAttachments={viewAttachments}
+        formatDate={formatDate}
+      />
 
       {/* Delete Confirmation */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
