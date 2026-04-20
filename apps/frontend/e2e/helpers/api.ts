@@ -226,3 +226,131 @@ export async function deleteDefect(
   const res = await api.delete(`${BASE}/projects/${projectId}/defects/${defectId}`, { headers });
   assertOk(res.status(), null, 'deleteDefect');
 }
+
+// ── Attachments ───────────────────────────────────────────────────────────────
+
+export async function uploadAttachmentToCase(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  caseId: string,
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType: string,
+): Promise<{ id: string; attachmentType: string }> {
+  const res = await api.post(`${BASE}/projects/${projectId}/attachments`, {
+    headers,
+    multipart: {
+      file: { name: fileName, mimeType, buffer: fileBuffer },
+      caseId,
+      attachmentType: 'CASE',
+    },
+  });
+  const body = await res.json();
+  assertOk(res.status(), body, 'uploadAttachmentToCase');
+  return { id: body.id, attachmentType: body.attachmentType };
+}
+
+export async function uploadAttachmentToDefect(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  defectId: string,
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType: string,
+): Promise<{ id: string; attachmentType: string }> {
+  const res = await api.post(`${BASE}/projects/${projectId}/attachments`, {
+    headers,
+    multipart: {
+      file: { name: fileName, mimeType, buffer: fileBuffer },
+      defectId,
+      attachmentType: 'DEFECT',
+    },
+  });
+  const body = await res.json();
+  assertOk(res.status(), body, 'uploadAttachmentToDefect');
+  return { id: body.id, attachmentType: body.attachmentType };
+}
+
+export async function uploadEvidence(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  caseId: string,
+  runId: string,
+  stepKey: string,
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType: string,
+): Promise<{ id: string; attachmentType: string; runId: string; stepKey: string }> {
+  const res = await api.post(`${BASE}/projects/${projectId}/attachments`, {
+    headers,
+    multipart: {
+      file: { name: fileName, mimeType, buffer: fileBuffer },
+      caseId,
+      attachmentType: 'EVIDENCE',
+      runId,
+      stepKey,
+    },
+  });
+  const body = await res.json();
+  assertOk(res.status(), body, 'uploadEvidence');
+  return { id: body.id, attachmentType: body.attachmentType, runId: body.runId, stepKey: body.stepKey };
+}
+
+export async function listAttachmentsByCase(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  caseId: string,
+): Promise<Array<{ id: string; attachmentType: string; fileName: string }>> {
+  const res = await api.get(`${BASE}/projects/${projectId}/attachments/by-case/${caseId}`, { headers });
+  const body = await res.json();
+  assertOk(res.status(), body, 'listAttachmentsByCase');
+  return Array.isArray(body) ? body : [];
+}
+
+export async function listAttachmentsByDefect(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  defectId: string,
+): Promise<Array<{ id: string; attachmentType: string; fileName: string }>> {
+  const res = await api.get(`${BASE}/projects/${projectId}/attachments/by-defect/${defectId}`, { headers });
+  const body = await res.json();
+  assertOk(res.status(), body, 'listAttachmentsByDefect');
+  return Array.isArray(body) ? body : [];
+}
+
+export async function listEvidenceByStep(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  runId: string,
+  caseId: string,
+  stepKey: string,
+): Promise<Array<{ id: string; attachmentType: string; stepKey: string; runId: string }>> {
+  const res = await api.get(
+    `${BASE}/projects/${projectId}/attachments/by-run/${runId}/case/${caseId}/step/${stepKey}`,
+    { headers },
+  );
+  const body = await res.json();
+  assertOk(res.status(), body, 'listEvidenceByStep');
+  return Array.isArray(body) ? body : [];
+}
+
+export async function deleteAttachment(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  attachmentId: string,
+): Promise<void> {
+  const res = await api.delete(
+    `${BASE}/projects/${projectId}/attachments/${attachmentId}`,
+    { headers },
+  );
+  if (res.status() !== 204 && res.status() !== 404) {
+    assertOk(res.status(), null, 'deleteAttachment');
+  }
+}
