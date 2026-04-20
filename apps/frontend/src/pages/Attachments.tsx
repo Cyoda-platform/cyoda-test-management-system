@@ -12,6 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
 import { formatDate } from '@/lib/utils';
+import { useAuthenticatedImageUrl } from '@/hooks/useAuthenticatedImageUrl';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,16 @@ function isPreviewable(mimeType: string | null | undefined): boolean {
 }
 
 // ── component ──────────────────────────────────────────────────────────────────
+
+const AuthenticatedImage = ({ url, alt, className }: { url: string; alt: string; className?: string }) => {
+  const blobUrl = useAuthenticatedImageUrl(url);
+  if (!blobUrl) return (
+    <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+      Loading…
+    </div>
+  );
+  return <img src={blobUrl} alt={alt} className={className} />;
+};
 
 const Attachments = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -202,7 +213,7 @@ const Attachments = () => {
                     >
                       <div className="aspect-[4/3] bg-muted/30 flex items-center justify-center overflow-hidden">
                         {preview ? (
-                          <img src={downloadUrl(f)} alt={f.fileName} className="w-full h-full object-cover" />
+                          <AuthenticatedImage url={downloadUrl(f)} alt={f.fileName} className="w-full h-full object-cover" />
                         ) : (
                           <Icon className="h-12 w-12 text-muted-foreground/40" strokeWidth={1} />
                         )}
@@ -244,12 +255,10 @@ const Attachments = () => {
           </DialogHeader>
           <div className="flex items-center justify-center min-h-[300px] bg-muted/20 rounded-lg overflow-hidden">
             {previewFile && isPreviewable(previewFile.fileType) ? (
-              <img
-                src={viewUrl(previewFile)}
+              <AuthenticatedImage
+                url={viewUrl(previewFile)}
                 alt={previewFile.fileName}
                 className="max-w-full max-h-[60vh] object-contain"
-                onLoad={() => console.log('✅ Image loaded successfully:', viewUrl(previewFile))}
-                onError={(e) => console.error('❌ Image load error:', { src: (e.target as HTMLImageElement).src, error: e })}
               />
             ) : (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
