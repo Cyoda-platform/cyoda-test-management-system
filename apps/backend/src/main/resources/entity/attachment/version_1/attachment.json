@@ -2,11 +2,14 @@
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "projectId": "550e8400-e29b-41d4-a716-446655440001",
   "caseId": "550e8400-e29b-41d4-a716-446655440003",
-  "defectId": null,
+  "defectId": "550e8400-e29b-41d4-a716-446655440009",
   "fileName": "checkout_screenshot.png",
   "fileType": "image/png",
   "fileSize": 256000,
   "uploadedAt": "2024-02-15T09:45:30",
+  "attachmentType": "CASE",
+  "runId": "550e8400-e29b-41d4-a716-446655440010",
+  "stepKey": "2",
   "messageId": "550e8400-e29b-41d4-a716-446655440002",
   "content": null
 }

@@ -30,6 +30,9 @@ public class AttachmentDTO implements CyodaEntity {
     private String fileType;
     private long fileSize;
     private String uploadedAt;
+    private String attachmentType;  // "CASE" | "EVIDENCE" | "DEFECT"
+    private UUID runId;             // non-null only for EVIDENCE
+    private String stepKey;         // step number string, e.g. "2" — non-null only for EVIDENCE
     /** ID of the corresponding EdgeMessage in Cyoda that holds the file content */
     private UUID messageId;
     /** Base64-encoded file content — used as fallback when EdgeMessage is unavailable */
