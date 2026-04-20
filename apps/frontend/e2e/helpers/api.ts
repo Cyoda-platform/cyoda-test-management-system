@@ -46,10 +46,12 @@ export async function getAuthHeaders(
 export async function createProject(
   api: APIRequestContext,
   headers: Record<string, string>,
+  name?: string,
+  description = 'Created by Playwright E2E tests',
 ): Promise<{ id: string; name: string }> {
-  const name = `E2E Defects ${Date.now()}`;
+  const projectName = name ?? `E2E Project ${Date.now()}`;
   const res = await api.post(`${BASE}/projects`, {
-    data: { name, description: 'Created by Playwright E2E tests' },
+    data: { name: projectName, description },
     headers: { ...headers, 'Content-Type': 'application/json' },
   });
   const body = await res.json();
