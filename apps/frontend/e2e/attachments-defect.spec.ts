@@ -64,9 +64,14 @@ test.describe('Defect attachments', () => {
     expect(list.find(a => a.id === defectAttachmentId)).toBeUndefined();
   });
 
-  test('API: delete defect attachment removes it', async () => {
+  test('API: delete defect attachment — GET by ID returns 404', async () => {
     await deleteAttachment(apiCtx, authHeaders, projectId, defectAttachmentId);
-    const list = await listAttachmentsByDefect(apiCtx, authHeaders, projectId, defectId);
-    expect(list.find(a => a.id === defectAttachmentId)).toBeUndefined();
+    // Verify via direct GET — more reliable than search (search is eventually consistent in Cyoda)
+    const BASE = process.env.TEST_API_URL ?? 'http://localhost:8080/api';
+    const res = await apiCtx.get(
+      `${BASE}/projects/${projectId}/attachments/${defectAttachmentId}`,
+      { headers: authHeaders },
+    );
+    expect(res.status()).toBe(404);
   });
 });

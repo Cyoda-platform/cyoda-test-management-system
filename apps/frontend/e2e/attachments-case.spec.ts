@@ -60,9 +60,13 @@ test.describe('Case attachments', () => {
     expect(found!.attachmentType).toBe('CASE');
   });
 
-  test('API: delete attachment removes it from list', async () => {
+  test('API: delete attachment — GET by ID returns 404', async () => {
     await deleteAttachment(apiCtx, authHeaders, projectId, uploadedAttachmentId);
-    const list = await listAttachmentsByCase(apiCtx, authHeaders, projectId, caseId);
-    expect(list.find(a => a.id === uploadedAttachmentId)).toBeUndefined();
+    const BASE = process.env.TEST_API_URL ?? 'http://localhost:8080/api';
+    const res = await apiCtx.get(
+      `${BASE}/projects/${projectId}/attachments/${uploadedAttachmentId}`,
+      { headers: authHeaders },
+    );
+    expect(res.status()).toBe(404);
   });
 });
