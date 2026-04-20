@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -118,7 +119,8 @@ class AttachmentServiceTest {
         PageResult<EntityWithMetadata<AttachmentDTO>> page =
                 PageResult.of(null, List.of(wrap(evidence, attId)), 0, 20, 1L);
 
-        when(entityService.search(any(), any(GroupConditionDto.class), eq(AttachmentDTO.class)))
+        ArgumentCaptor<GroupConditionDto> conditionCaptor = ArgumentCaptor.forClass(GroupConditionDto.class);
+        when(entityService.search(any(), conditionCaptor.capture(), eq(AttachmentDTO.class)))
                 .thenReturn(page);
 
         List<AttachmentDTO> result = attachmentService.getEvidenceByRunCaseStep(runId, caseId, stepKey);
@@ -126,6 +128,19 @@ class AttachmentServiceTest {
         assertEquals(1, result.size());
         assertEquals("EVIDENCE", result.get(0).getAttachmentType());
         assertEquals(stepKey, result.get(0).getStepKey());
-        verify(entityService).search(any(), any(GroupConditionDto.class), eq(AttachmentDTO.class));
+
+        // Verify the compound condition has exactly 4 leaf conditions
+        GroupConditionDto capturedGroup = conditionCaptor.getValue();
+        assertNotNull(capturedGroup);
+        assertEquals(4, capturedGroup.getConditions().size(), "Expected 4 conditions in AND group");
+
+        // Verify the JSON paths covered — attachmentType, runId, caseId, stepKey
+        List<String> paths = capturedGroup.getConditions().stream()
+                .map(c -> ((org.cyoda.cloud.api.common.model.SimpleConditionDto) c).getJsonPath())
+                .toList();
+        assertTrue(paths.contains("$.attachmentType"), "Missing $.attachmentType condition");
+        assertTrue(paths.contains("$.runId"),           "Missing $.runId condition");
+        assertTrue(paths.contains("$.caseId"),          "Missing $.caseId condition");
+        assertTrue(paths.contains("$.stepKey"),         "Missing $.stepKey condition");
     }
 }
