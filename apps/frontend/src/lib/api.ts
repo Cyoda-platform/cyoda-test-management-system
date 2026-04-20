@@ -395,12 +395,17 @@ export const reportsApi = {
 
 export interface Attachment {
   id: string;
-  projectId: string;
-  caseId?: string;
+  projectId: string | null;
+  caseId: string | null;
+  defectId: string | null;
   fileName: string;
   fileType: string;
   fileSize: number;
   uploadedAt: string;
+  messageId: string | null;
+  attachmentType: 'CASE' | 'EVIDENCE' | 'DEFECT' | null;
+  runId: string | null;
+  stepKey: string | null;
 }
 
 export const attachmentsApi = {
@@ -410,15 +415,30 @@ export const attachmentsApi = {
     api.get<Attachment[]>(`/projects/${projectId}/attachments/by-case/${caseId}`),
   listByDefect: (projectId: string, defectId: string) =>
     api.get<Attachment[]>(`/projects/${projectId}/attachments/by-defect/${defectId}`),
+  listByRunCaseStep: (projectId: string, runId: string, caseId: string, stepKey: string) =>
+    api.get<Attachment[]>(
+      `/projects/${projectId}/attachments/by-run/${runId}/case/${caseId}/step/${stepKey}`
+    ),
   delete: (projectId: string, id: string) =>
     api.delete<void>(`/projects/${projectId}/attachments/${id}`),
   copy: (projectId: string, id: string, toCaseId: string) =>
     api.post<Attachment>(`/projects/${projectId}/attachments/${id}/copy?toCaseId=${toCaseId}`, {}),
-  upload: (projectId: string, file: File, caseId?: string, defectId?: string) => {
+  upload: (
+    projectId: string,
+    file: File,
+    caseId?: string,
+    defectId?: string,
+    attachmentType?: 'CASE' | 'EVIDENCE' | 'DEFECT',
+    runId?: string,
+    stepKey?: string,
+  ) => {
     const form = new FormData();
     form.append('file', file);
-    if (caseId) form.append('caseId', caseId);
-    if (defectId) form.append('defectId', defectId);
+    if (caseId)          form.append('caseId', caseId);
+    if (defectId)        form.append('defectId', defectId);
+    if (attachmentType)  form.append('attachmentType', attachmentType);
+    if (runId)           form.append('runId', runId);
+    if (stepKey)         form.append('stepKey', stepKey);
     const token = getAuthToken();
     const headers: HeadersInit = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -427,7 +447,6 @@ export const attachmentsApi = {
       credentials: 'include',
       headers,
       body: form,
-      // no Content-Type header — browser sets multipart boundary automatically
     }).then(async r => {
       if (!r.ok) {
         const body = await r.text().catch(() => '');
