@@ -79,9 +79,12 @@ public class AttachmentService {
      * Uploads a file. Stores metadata in EdgeMessage (NOT the file content!).
      * File content stays in memory temporarily, then entity references the EdgeMessage.
      */
-    public AttachmentDTO uploadAttachment(UUID projectId, UUID caseId, UUID defectId, MultipartFile file) throws IOException {
-        long fileSizeBytes = file.getSize();
+    public AttachmentDTO uploadAttachment(UUID projectId, UUID caseId, UUID defectId,
+                                          MultipartFile file,
+                                          String attachmentType, UUID runId, String stepKey)
+            throws IOException {
 
+        long fileSizeBytes = file.getSize();
         logger.info("📤 Starting attachment upload: fileName='{}', size={}KB",
                 file.getOriginalFilename(), fileSizeBytes / 1024);
 
@@ -93,6 +96,9 @@ public class AttachmentService {
         attachment.setFileType(file.getContentType());
         attachment.setFileSize(fileSizeBytes);
         attachment.setUploadedAt(Instant.now().toString());
+        attachment.setAttachmentType(attachmentType != null ? attachmentType : "CASE");
+        attachment.setRunId(runId);
+        attachment.setStepKey(stepKey);
 
         // Store file content + metadata in EdgeMessage.
         // Nginx is configured with proxy-body-size: 150m and Spring Boot multipart limits are 100MB,
@@ -104,23 +110,22 @@ public class AttachmentService {
             content.put("fileName", file.getOriginalFilename());
             content.put("fileType", file.getContentType());
             content.put("fileSize", fileSizeBytes);
-            content.put("uploadedAt", attachment.getUploadedAt().toString());
+            content.put("uploadedAt", attachment.getUploadedAt());
             // Base64-encode file bytes so the binary content travels safely as JSON through gRPC
             content.put("data", Base64.getEncoder().encodeToString(file.getBytes()));
 
             ObjectNode metadata = objectMapper.createObjectNode();
             metadata.put("projectId", projectId.toString());
             if (caseId != null) metadata.put("caseId", caseId.toString());
+            if (defectId != null) metadata.put("defectId", defectId.toString());
             metadata.put("contentType", file.getContentType());
 
             UUID messageId = edgeMessageService.createMessage(EDGE_MESSAGE_SUBJECT, content, metadata);
             attachment.setMessageId(messageId);
-            logger.info("✅ EdgeMessage created for file '{}': messageId={} (size: {}KB)",
-                    file.getOriginalFilename(), messageId, fileSizeBytes / 1024);
+            logger.info("✅ EdgeMessage created for file '{}': messageId={}", file.getOriginalFilename(), messageId);
         } catch (Exception e) {
-            logger.error("❌ EdgeMessage creation failed for file '{}': {}",
-                    file.getOriginalFilename(), e.getMessage());
-            logger.warn("⚠️  Will proceed without EdgeMessage reference (metadata stored in entity only — view/download will not work)");
+            logger.error("❌ EdgeMessage creation failed for file '{}': {}", file.getOriginalFilename(), e.getMessage());
+            logger.warn("⚠️  Will proceed without EdgeMessage reference");
         }
 
         logger.info("💾 Creating Attachment entity in Cyoda...");
@@ -195,6 +200,40 @@ public class AttachmentService {
                 .stream()
                 .map(this::withId)
                 .toList();
+    }
+
+    /**
+     * Retrieves Evidence attachments for a specific step in a specific test run.
+     * Filters by attachmentType=EVIDENCE, runId, caseId, and stepKey.
+     */
+    public List<AttachmentDTO> getEvidenceByRunCaseStep(UUID runId, UUID caseId, String stepKey) {
+        SimpleConditionDto c1 = new SimpleConditionDto()
+                .jsonPath("$.attachmentType").operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree("EVIDENCE"));
+        c1.setType(QueryConditionTypeDto.SIMPLE);
+
+        SimpleConditionDto c2 = new SimpleConditionDto()
+                .jsonPath("$.runId").operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(runId.toString()));
+        c2.setType(QueryConditionTypeDto.SIMPLE);
+
+        SimpleConditionDto c3 = new SimpleConditionDto()
+                .jsonPath("$.caseId").operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(caseId.toString()));
+        c3.setType(QueryConditionTypeDto.SIMPLE);
+
+        SimpleConditionDto c4 = new SimpleConditionDto()
+                .jsonPath("$.stepKey").operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(stepKey));
+        c4.setType(QueryConditionTypeDto.SIMPLE);
+
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(c1, c2, c3, c4));
+        group.setType(QueryConditionTypeDto.GROUP);
+
+        return entityService.search(MODEL_SPEC, group, AttachmentDTO.class).data()
+                .stream().map(this::withId).toList();
     }
 
     /**

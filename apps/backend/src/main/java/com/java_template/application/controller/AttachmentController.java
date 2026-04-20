@@ -43,7 +43,7 @@ public class AttachmentController {
             @RequestParam(value = "caseId", required = false) UUID caseId,
             @RequestParam(value = "defectId", required = false) UUID defectId) {
         try {
-            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, defectId, file);
+            AttachmentDTO uploaded = attachmentService.uploadAttachment(projectId, caseId, defectId, file, null, null, null);
             return ResponseEntity.status(HttpStatus.CREATED).body(AttachmentMetadataDTO.from(uploaded));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
