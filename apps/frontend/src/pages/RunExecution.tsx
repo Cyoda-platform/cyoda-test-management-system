@@ -338,6 +338,9 @@ const RunExecution = () => {
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus[]>>({});
   const [stepEvidence, setStepEvidence] = useState<Record<string, EvidenceFile[]>>({});
   const [serverEvidence, setServerEvidence] = useState<Record<string, Attachment[]>>({});
+  // Server-side evidence counts per step, keyed "caseId::stepNumber".
+  // Populated via listByRunCaseStep (not listByCase, which excludes EVIDENCE type).
+  const [stepEvidenceCounts, setStepEvidenceCounts] = useState<Record<string, number>>({});
   const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
   const [evidenceTarget, setEvidenceTarget] = useState<{ caseId: string; stepIdx: number } | null>(null);
   const [evidencePreview, setEvidencePreview] = useState<{ name: string; url: string; type: string; isLocal?: boolean } | null>(null);
@@ -743,6 +746,33 @@ const RunExecution = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCase?.id, sortedSteps.length]);
 
+  // Pre-load evidence counts for every step of the active case.
+  // Must use listByRunCaseStep (not listByCase) because the backend's /by-case
+  // endpoint explicitly filters out EVIDENCE-type attachments.
+  useEffect(() => {
+    if (!activeCase || sortedSteps.length === 0 || !projectId || !runId) return;
+    const caseId = activeCase.id;
+    void Promise.all(
+      sortedSteps.map(async (step) => {
+        try {
+          const atts = await attachmentsApi.listByRunCaseStep(
+            projectId, runId, caseId, String(step.stepNumber),
+          );
+          return [`${caseId}::${step.stepNumber}`, (atts ?? []).length] as const;
+        } catch {
+          return [`${caseId}::${step.stepNumber}`, 0] as const;
+        }
+      }),
+    ).then((results) => {
+      setStepEvidenceCounts((prev) => {
+        const next = { ...prev };
+        results.forEach(([key, count]) => { next[key] = count; });
+        return next;
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCase?.id, sortedSteps.length, projectId, runId]);
+
   const getStepStatuses = (caseId: string): StepStatus[] => {
     return stepStatuses[caseId] || [];
   };
@@ -946,6 +976,9 @@ const RunExecution = () => {
           )
         )
       );
+      // Optimistically update the badge count so it shows immediately
+      const evidKey = `${evidenceTarget.caseId}::${evidenceTarget.stepIdx + 1}`;
+      setStepEvidenceCounts((prev) => ({ ...prev, [evidKey]: (prev[evidKey] ?? 0) + fileArray.length }));
       // Refresh server-side attachment list so they survive a page reload
       qc.invalidateQueries({ queryKey: ['attachments', projectId!, 'case', evidenceTarget.caseId] });
       qc.invalidateQueries({
@@ -1421,14 +1454,7 @@ const RunExecution = () => {
                       (stepStatuses[activeCase.id] || [])[sIdx]
                       ?? persistedStepStatusByKey[`${activeCase.id}::${step.stepNumber}`]
                       ?? 'untested';
-                    const localEvidenceFiles = getEvidenceFiles(activeCase.id, sIdx);
-                    const serverEvidenceForStep = serverAttachments.filter(
-                      (att: Attachment) => att.attachmentType === 'EVIDENCE' && att.stepKey === String(step.stepNumber),
-                    );
-                    const extraLocalEvidence = localEvidenceFiles.filter(
-                      (ef) => !serverEvidenceForStep.some((s) => s.fileName === ef.name && s.fileSize === ef.size),
-                    );
-                    const totalEvidenceCount = serverEvidenceForStep.length + extraLocalEvidence.length;
+                    const totalEvidenceCount = stepEvidenceCounts[`${activeCase.id}::${step.stepNumber}`] ?? 0;
                     const stepDefectCount = createdDefects.filter(
                       (d) => d.caseId === activeCase.id && d.stepIdx === sIdx,
                     ).length;
