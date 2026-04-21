@@ -75,14 +75,15 @@ export async function createSuite(
   api: APIRequestContext,
   headers: Record<string, string>,
   projectId: string,
-): Promise<{ id: string }> {
+  name = 'E2E Suite',
+): Promise<{ id: string; name: string }> {
   const res = await api.post(`${BASE}/projects/${projectId}/suites`, {
-    data: { name: 'E2E Suite', description: '', projectId },
+    data: { name, description: '', projectId },
     headers: { ...headers, 'Content-Type': 'application/json' },
   });
   const body = await res.json();
   assertOk(res.status(), body, 'createSuite');
-  return { id: body.id };
+  return { id: body.id, name: body.name };
 }
 
 export async function deleteSuite(
