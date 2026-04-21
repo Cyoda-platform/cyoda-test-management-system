@@ -574,6 +574,26 @@ const RunExecution = () => {
   }, [allCases, getRunCaseTestCaseId, run?.stepStatuses, runCases]);
 
   /**
+   * Flat per-step status map derived synchronously from run.stepStatuses.
+   * Used as a fallback when stepStatuses state hasn't been initialised yet
+   * (e.g. Effect 3 hasn't fired or step IDs drifted between sessions).
+   * Keys: "caseId::stepNumber" → StepStatus.
+   */
+  const persistedStepStatusByKey = useMemo(() => {
+    if (!run?.stepStatuses) return {} as Record<string, StepStatus>;
+    try {
+      const map: Record<string, string> = typeof run.stepStatuses === 'string'
+        ? JSON.parse(run.stepStatuses)
+        : run.stepStatuses as unknown as Record<string, string>;
+      return Object.fromEntries(
+        Object.entries(map).map(([k, v]) => [k, normalizeStepStatus(v)]),
+      ) as Record<string, StepStatus>;
+    } catch {
+      return {} as Record<string, StepStatus>;
+    }
+  }, [run?.stepStatuses]);
+
+  /**
    * Compute run-level aggregate counts from a step-status map.
    * Uses the provided cases list so it works inside cleanup refs too.
    */
@@ -710,7 +730,7 @@ const RunExecution = () => {
         }
       }
       const initial: StepStatus[] = sortedSteps.map((s) => {
-        const key = `${activeCase.id}::${s.id}`;
+        const key = `${activeCase.id}::${s.stepNumber}`;
         return normalizeStepStatus(runStepStatuses[key]);
       });
       return { ...prev, [activeCase.id]: initial };
@@ -737,7 +757,7 @@ const RunExecution = () => {
     // Between rapid clicks the server may not have responded yet, so the second
     // click's body would overwrite the first click's key. fullStepStatusesRef is
     // always up to date regardless of in-flight requests.
-    const runKey = `${caseId}::${globalStepId}`;
+    const runKey = `${caseId}::${stepNumber}`;
     fullStepStatusesRef.current = { ...fullStepStatusesRef.current, [runKey]: status.toUpperCase() };
 
     // ── 3. Persist aggregates + step map to the run entity ───────────────────
@@ -1393,8 +1413,21 @@ const RunExecution = () => {
                 </thead>
                 <tbody>
                   {sortedSteps.map((step, sIdx) => {
-                    const currentStatus = (stepStatuses[activeCase.id] || [])[sIdx] ?? 'untested';
-                    const evidenceFiles = getEvidenceFiles(activeCase.id, sIdx);
+                    const currentStatus =
+                      (stepStatuses[activeCase.id] || [])[sIdx]
+                      ?? persistedStepStatusByKey[`${activeCase.id}::${step.stepNumber}`]
+                      ?? 'untested';
+                    const localEvidenceFiles = getEvidenceFiles(activeCase.id, sIdx);
+                    const serverEvidenceForStep = serverAttachments.filter(
+                      (att: Attachment) => att.attachmentType === 'EVIDENCE' && att.stepKey === String(sIdx + 1),
+                    );
+                    const extraLocalEvidence = localEvidenceFiles.filter(
+                      (ef) => !serverEvidenceForStep.some((s) => s.fileName === ef.name && s.fileSize === ef.size),
+                    );
+                    const totalEvidenceCount = serverEvidenceForStep.length + extraLocalEvidence.length;
+                    const stepDefectCount = createdDefects.filter(
+                      (d) => d.caseId === activeCase.id && d.stepIdx === sIdx,
+                    ).length;
                     return (
                       <tr key={sIdx} className="ghost-border border-t">
                         <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{step.stepNumber}</td>
@@ -1423,29 +1456,36 @@ const RunExecution = () => {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className={`h-7 w-7 ${evidenceFiles.length > 0 ? 'text-primary' : 'text-muted-foreground'} ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`h-7 w-7 ${totalEvidenceCount > 0 ? 'text-primary' : 'text-muted-foreground'} ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={() => handleEvidenceClick(activeCase.id, step.stepNumber - 1)}
                                 disabled={isReadOnly}
                               >
                                 <Paperclip className="h-3.5 w-3.5" strokeWidth={1.5} />
                               </Button>
-                              {evidenceFiles.length > 0 && (
+                              {totalEvidenceCount > 0 && (
                                 <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
-                                  {evidenceFiles.length}
+                                  {totalEvidenceCount}
                                 </span>
                               )}
                             </div>
                             {/* Bug - Defect */}
-                            <Button
-                              data-testid="step-bug-btn"
-                              variant="ghost"
-                              size="icon"
-                              className={`h-7 w-7 text-muted-foreground hover:text-destructive ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                              onClick={() => handleBugClick(activeCase.id, step.stepNumber - 1)}
-                              disabled={isReadOnly}
-                            >
-                              <Bug className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            </Button>
+                            <div className="relative">
+                              <Button
+                                data-testid="step-bug-btn"
+                                variant="ghost"
+                                size="icon"
+                                className={`h-7 w-7 ${stepDefectCount > 0 ? 'text-destructive' : 'text-muted-foreground hover:text-destructive'} ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                onClick={() => handleBugClick(activeCase.id, step.stepNumber - 1)}
+                                disabled={isReadOnly}
+                              >
+                                <Bug className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              </Button>
+                              {stepDefectCount > 0 && (
+                                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
+                                  {stepDefectCount}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
