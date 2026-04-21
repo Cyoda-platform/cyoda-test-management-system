@@ -1493,7 +1493,7 @@ const RunExecution = () => {
                                 <Paperclip className="h-3.5 w-3.5" strokeWidth={1.5} />
                               </Button>
                               {totalEvidenceCount > 0 && (
-                                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
+                                <span data-testid="step-evidence-badge" className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
                                   {totalEvidenceCount}
                                 </span>
                               )}
@@ -1511,7 +1511,7 @@ const RunExecution = () => {
                                 <Bug className="h-3.5 w-3.5" strokeWidth={1.5} />
                               </Button>
                               {stepDefectCount > 0 && (
-                                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
+                                <span data-testid="step-defect-badge" className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
                                   {stepDefectCount}
                                 </span>
                               )}
