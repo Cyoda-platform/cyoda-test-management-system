@@ -632,7 +632,11 @@ const RunExecution = () => {
             return rc ? getRunCaseTestCaseId(rc) : (previous?.caseId ?? '');
           })(),
           caseTitle:   previous?.caseTitle ?? (d.testRunCaseId ? runCaseIdToCaseTitleRef.current.get(d.testRunCaseId) ?? '' : ''),
-          stepIdx:     previous?.stepIdx,
+          stepIdx:     (() => {
+            if (previous?.stepIdx !== undefined) return previous.stepIdx;
+            const m = d.source?.match(/·\s*Step\s*(\d+)/i);
+            return m ? parseInt(m[1], 10) - 1 : undefined;
+          })(),
           title:       d.title,
           description: d.description,
           severity:    (d.severity as CreatedDefect['severity']) ?? previous?.severity ?? 'Minor',
@@ -1419,7 +1423,7 @@ const RunExecution = () => {
                       ?? 'untested';
                     const localEvidenceFiles = getEvidenceFiles(activeCase.id, sIdx);
                     const serverEvidenceForStep = serverAttachments.filter(
-                      (att: Attachment) => att.attachmentType === 'EVIDENCE' && att.stepKey === String(sIdx + 1),
+                      (att: Attachment) => att.attachmentType === 'EVIDENCE' && att.stepKey === String(step.stepNumber),
                     );
                     const extraLocalEvidence = localEvidenceFiles.filter(
                       (ef) => !serverEvidenceForStep.some((s) => s.fileName === ef.name && s.fileSize === ef.size),
