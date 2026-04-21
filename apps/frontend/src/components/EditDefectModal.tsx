@@ -34,6 +34,7 @@ interface EditDefectModalProps {
   displayId?: string;
   existingAttachments?: AttachmentFile[];
   onSave: (defect: Defect, newFiles: File[], removedAttachmentIds: string[]) => Promise<void>;
+  projectId?: string;
 }
 
 const EditDefectModal = ({
@@ -43,6 +44,7 @@ const EditDefectModal = ({
   displayId,
   existingAttachments = [],
   onSave,
+  projectId,
 }: EditDefectModalProps) => {
   const [editData, setEditData] = useState<Defect | null>(null);
   const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
@@ -173,6 +175,7 @@ const EditDefectModal = ({
             <label className={labelCls}>Attachments</label>
             <DefectAttachmentsUpload
               files={attachments}
+              projectId={projectId}
               onFilesChange={(newFiles) => {
                 // Track removed attachments
                 const newIds = new Set(newFiles.map((f) => f.id).filter((id) => id));

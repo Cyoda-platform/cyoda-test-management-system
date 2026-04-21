@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { attachmentsApi, type Attachment } from '@/lib/api';
+import { attachmentsApi, type Attachment, getAuthToken } from '@/lib/api';
 import { useProject } from '@/hooks/useApi';
 import { toast } from 'sonner';
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { formatDate } from '@/lib/utils';
 import { useAuthenticatedImageUrl } from '@/hooks/useAuthenticatedImageUrl';
+import { AuthenticatedPdf, isPdfType } from '@/components/AttachmentPreview';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -33,13 +34,18 @@ function fileIconComponent(mimeType: string | null | undefined) {
 }
 
 function isPreviewable(mimeType: string | null | undefined): boolean {
-  return !!mimeType && mimeType.startsWith('image/');
+  return !!mimeType && (mimeType.startsWith('image/') || mimeType === 'application/pdf');
 }
 
 // ── component ──────────────────────────────────────────────────────────────────
 
 const AuthenticatedImage = ({ url, alt, className }: { url: string; alt: string; className?: string }) => {
-  const blobUrl = useAuthenticatedImageUrl(url);
+  const { blobUrl, error } = useAuthenticatedImageUrl(url);
+  if (error) return (
+    <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+      <Image className="h-8 w-8 opacity-30" strokeWidth={1} />
+    </div>
+  );
   if (!blobUrl) return (
     <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
       Loading…
@@ -47,6 +53,21 @@ const AuthenticatedImage = ({ url, alt, className }: { url: string; alt: string;
   );
   return <img src={blobUrl} alt={alt} className={className} />;
 };
+
+function downloadWithAuth(url: string, fileName: string) {
+  const token = getAuthToken();
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+  fetch(url, { credentials: 'include', headers })
+    .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(() => {});
+}
 
 const Attachments = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -170,7 +191,7 @@ const Attachments = () => {
                         <td className="px-5 py-3.5">
                           <button
                             className="flex items-center gap-2 cursor-pointer text-left w-full"
-                            onClick={() => isPreviewable(f.fileType) ? setPreviewFile(f) : window.open(downloadUrl(f), '_blank')}
+                            onClick={() => isPreviewable(f.fileType) ? setPreviewFile(f) : downloadWithAuth(downloadUrl(f), f.fileName)}
                           >
                             <Icon className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
                             <span className="font-medium text-foreground hover:text-primary transition-colors">{f.fileName}</span>
@@ -181,11 +202,9 @@ const Attachments = () => {
                         <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(f.uploadedAt)}</td>
                         <td className="px-5 py-3.5 w-px whitespace-nowrap">
                           <div className="flex items-center gap-1">
-                            <a href={downloadUrl(f)} download={f.fileName} onClick={e => e.stopPropagation()}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7">
-                                <Download className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />
-                              </Button>
-                            </a>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => { e.stopPropagation(); downloadWithAuth(downloadUrl(f), f.fileName); }}>
+                              <Download className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />
+                            </Button>
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteTarget(f)}>
                               <Trash2 className="h-3.5 w-3.5 text-destructive" strokeWidth={1.5} />
                             </Button>
@@ -209,7 +228,7 @@ const Attachments = () => {
                   <div key={f.id} className="rounded-lg border border-border bg-card overflow-hidden group">
                     <button
                       className="block w-full cursor-pointer"
-                      onClick={() => preview ? setPreviewFile(f) : window.open(downloadUrl(f), '_blank')}
+                      onClick={() => preview ? setPreviewFile(f) : downloadWithAuth(downloadUrl(f), f.fileName)}
                     >
                       <div className="aspect-[4/3] bg-muted/30 flex items-center justify-center overflow-hidden">
                         {preview ? (
@@ -225,11 +244,9 @@ const Attachments = () => {
                       <div className="flex items-center justify-between pt-1">
                         <span className="text-xs text-muted-foreground">{formatDate(f.uploadedAt)}</span>
                         <div className="flex items-center gap-0.5">
-                          <a href={downloadUrl(f)} download={f.fileName} onClick={e => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
-                              <Download className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} />
-                            </Button>
-                          </a>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={e => { e.stopPropagation(); downloadWithAuth(downloadUrl(f), f.fileName); }}>
+                            <Download className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} />
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(f)}>
                             <Trash2 className="h-3 w-3 text-destructive" strokeWidth={1.5} />
                           </Button>
@@ -254,7 +271,9 @@ const Attachments = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-center min-h-[300px] bg-muted/20 rounded-lg overflow-hidden">
-            {previewFile && isPreviewable(previewFile.fileType) ? (
+            {previewFile && isPdfType(previewFile.fileType) ? (
+              <AuthenticatedPdf url={viewUrl(previewFile)} className="w-full h-[60vh]" />
+            ) : previewFile && isPreviewable(previewFile.fileType) ? (
               <AuthenticatedImage
                 url={viewUrl(previewFile)}
                 alt={previewFile.fileName}
@@ -270,11 +289,9 @@ const Attachments = () => {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setPreviewFile(null)}>Close</Button>
             {previewFile && (
-              <a href={downloadUrl(previewFile)} download={previewFile.fileName}>
-                <Button className="gap-1.5">
-                  <Download className="h-3.5 w-3.5" /> Download
-                </Button>
-              </a>
+              <Button className="gap-1.5" onClick={() => downloadWithAuth(downloadUrl(previewFile), previewFile.fileName)}>
+                <Download className="h-3.5 w-3.5" /> Download
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

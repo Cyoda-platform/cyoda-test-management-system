@@ -44,6 +44,7 @@ interface ViewDefectModalProps {
   displayId?: string;
   existingAttachments?: AttachmentFile[];
   formatDate?: (date: string) => string;
+  projectId?: string;
 }
 
 const ViewDefectModal = ({
@@ -53,6 +54,7 @@ const ViewDefectModal = ({
   displayId,
   existingAttachments = [],
   formatDate = (d) => d,
+  projectId,
 }: ViewDefectModalProps) => {
   if (!defect) return null;
 
@@ -130,7 +132,7 @@ const ViewDefectModal = ({
           {/* Attachments (Read-only) */}
           <div>
             <label className={labelCls}>Attachments</label>
-            <DefectAttachmentsUpload files={existingAttachments} onFilesChange={() => {}} readonly={true} />
+            <DefectAttachmentsUpload files={existingAttachments} onFilesChange={() => {}} readonly={true} projectId={projectId} />
           </div>
         </div>
 

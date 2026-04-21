@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { useVirtualList } from '@/hooks/useVirtualList';
 import Breadcrumbs from '@/components/Breadcrumbs';
-import { Search, Paperclip, Lock, CheckCircle2, XCircle, MinusCircle, AlertCircle, Upload, FileText, Image, File, Bug, Trash2, ExternalLink, Eye, Pencil, Loader2 } from 'lucide-react';
+import { Search, Paperclip, Lock, CheckCircle2, XCircle, MinusCircle, AlertCircle, Upload, FileText, Image, File, Download, Bug, Trash2, ExternalLink, Eye, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -32,10 +32,30 @@ import {
   attachmentsApi,
   testRunCasesApi,
   testRunsApi,
+  getAuthToken,
   type Attachment,
   type TestRunCase,
 } from '@/lib/api';
+
+const BASE_URL = import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api');
+
+function downloadWithAuth(url: string, fileName: string) {
+  const token = getAuthToken();
+  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+  fetch(url, { credentials: 'include', headers })
+    .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    })
+    .catch(() => {});
+}
 import { isUuid, formatDate } from '@/lib/utils';
+import { AuthenticatedImage, AuthenticatedPdf, isImageType, isPdfType, isPreviewableType } from '@/components/AttachmentPreview';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -243,6 +263,12 @@ const RunExecution = () => {
     return map;
   }, [allCases, getRunCaseTestCaseId, runCases]);
 
+  // Stable ref so the seeding effect can read the latest map without it being a dep
+  // (the Map object changes reference on every runCases update, which would cause an
+  // infinite re-render loop if included directly in the effect dependency array).
+  const runCaseIdToCaseTitleRef = useRef(runCaseIdToCaseTitle);
+  runCaseIdToCaseTitleRef.current = runCaseIdToCaseTitle;
+
   // ── Virtual list for the left case panel ──────────────────────────────────
   type RunItem =
     | { type: 'suite-header'; suiteName: string }
@@ -311,8 +337,15 @@ const RunExecution = () => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [stepStatuses, setStepStatuses] = useState<Record<string, StepStatus[]>>({});
   const [stepEvidence, setStepEvidence] = useState<Record<string, EvidenceFile[]>>({});
+  const [serverEvidence, setServerEvidence] = useState<Record<string, Attachment[]>>({});
   const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
   const [evidenceTarget, setEvidenceTarget] = useState<{ caseId: string; stepIdx: number } | null>(null);
+  const [evidencePreview, setEvidencePreview] = useState<{ name: string; url: string; type: string; isLocal?: boolean } | null>(null);
+
+  const closeEvidencePreview = () => {
+    if (evidencePreview?.isLocal) URL.revokeObjectURL(evidencePreview.url);
+    setEvidencePreview(null);
+  };
   const [defectModalOpen, setDefectModalOpen] = useState(false);
   const [defectContext, setDefectContext] = useState<{
     caseId: string;
@@ -578,7 +611,7 @@ const RunExecution = () => {
             const rc = d.testRunCaseId ? runCases.find((r) => r.id === d.testRunCaseId) : undefined;
             return rc ? getRunCaseTestCaseId(rc) : (previous?.caseId ?? '');
           })(),
-          caseTitle:   previous?.caseTitle ?? (d.testRunCaseId ? runCaseIdToCaseTitle.get(d.testRunCaseId) ?? '' : ''),
+          caseTitle:   previous?.caseTitle ?? (d.testRunCaseId ? runCaseIdToCaseTitleRef.current.get(d.testRunCaseId) ?? '' : ''),
           stepIdx:     previous?.stepIdx,
           title:       d.title,
           description: d.description,
@@ -597,10 +630,10 @@ const RunExecution = () => {
 
       return [...optimisticOnly, ...hydrated];
     });
-  // Re-run whenever the server data changes (e.g. after a fresh defect is created
-  // and the query is invalidated in handleCreateDefect).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runCaseIdToCaseTitle, serverRunDefects]);
+  // Re-run only when server data changes. runCaseIdToCaseTitleRef is accessed via
+  // ref to avoid including the Map in deps (new Map reference on every runCases update
+  // caused an infinite setState→render→Map→setState loop).
+  }, [serverRunDefects]);
 
   // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
@@ -814,8 +847,15 @@ const RunExecution = () => {
 
   const handleEvidenceClick = (caseId: string, stepIdx: number) => {
     if (isReadOnly) return;
+    const stepKey = String(stepIdx + 1);
     setEvidenceTarget({ caseId, stepIdx });
     setEvidenceModalOpen(true);
+    attachmentsApi.listByRunCaseStep(projectId!, runId!, caseId, stepKey)
+      .then(atts => {
+        const key = `${caseId}::${stepIdx}`;
+        setServerEvidence(prev => ({ ...prev, [key]: atts || [] }));
+      })
+      .catch(() => {});
   };
 
   /**
@@ -967,7 +1007,7 @@ const RunExecution = () => {
     setViewDefect(defect);
     setIsLoadingViewDefectAttachments(true);
     attachmentsApi.listByDefect(projectId!, defect.id)
-      .then(atts => setViewDefectAttachments(atts || []))
+      .then(atts => setViewDefectAttachments((atts || []).map(a => ({ id: a.id, name: a.fileName, size: a.fileSize, type: a.fileType ?? '' }))))
       .catch(() => setViewDefectAttachments([]))
       .finally(() => setIsLoadingViewDefectAttachments(false));
     setViewDefectOpen(true);
@@ -977,7 +1017,7 @@ const RunExecution = () => {
     setEditDefect(defect);
     setIsLoadingEditDefectAttachments(true);
     attachmentsApi.listByDefect(projectId!, defect.id)
-      .then(atts => setEditDefectAttachments(atts || []))
+      .then(atts => setEditDefectAttachments((atts || []).map(a => ({ id: a.id, name: a.fileName, size: a.fileSize, type: a.fileType ?? '' }))))
       .catch(() => setEditDefectAttachments([]))
       .finally(() => setIsLoadingEditDefectAttachments(false));
     setEditDefectOpen(true);
@@ -1000,7 +1040,7 @@ const RunExecution = () => {
       // Upload new files
       for (const file of newFiles) {
         try {
-          await attachmentsApi.upload(projectId!, file, undefined, updatedDefect.id);
+          await attachmentsApi.upload(projectId!, file, undefined, updatedDefect.id, 'DEFECT');
         } catch (error) {
           toast.warning(`Failed to upload ${file.name}`);
         }
@@ -1009,7 +1049,7 @@ const RunExecution = () => {
       // Delete removed attachments
       for (const attachmentId of removedAttachmentIds) {
         try {
-          await attachmentsApi.delete(projectId!, updatedDefect.id, attachmentId);
+          await attachmentsApi.delete(projectId!, attachmentId);
         } catch (error) {
           toast.warning(`Failed to delete attachment`);
         }
@@ -1283,13 +1323,34 @@ const RunExecution = () => {
                   .filter((att: Attachment) => !att.attachmentType || att.attachmentType === 'CASE')
                   .map((item: Attachment) => {
                     const IconComp = getFileIcon(item.fileType ?? '');
+                    const url = `${BASE_URL}/projects/${projectId}/attachments/${item.id}/content`;
+                    const canPreview = isPreviewableType(item.fileType);
                     return (
                       <div key={item.id} className="flex items-center gap-2.5 px-3 py-2 bg-card rounded-md border border-border/40">
                         <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-foreground truncate">{item.fileName}</p>
-                        </div>
+                        <button
+                          className={`text-sm text-foreground truncate flex-1 text-left ${canPreview ? 'hover:underline cursor-pointer' : ''}`}
+                          onClick={() => canPreview ? setEvidencePreview({ name: item.fileName, url, type: item.fileType || '' }) : undefined}
+                        >
+                          {item.fileName}
+                        </button>
                         <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(item.fileSize)}</span>
+                        {canPreview && (
+                          <button
+                            onClick={() => setEvidencePreview({ name: item.fileName, url, type: item.fileType || '' })}
+                            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                            title="Preview"
+                          >
+                            <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => downloadWithAuth(url, item.fileName)}
+                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          title="Download"
+                        >
+                          <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        </button>
                         {!isReadOnly && (
                           <button
                             onClick={async () => {
@@ -1417,7 +1478,7 @@ const RunExecution = () => {
                     <tr
                       key={d.id}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"
-                      onClick={() => { setViewDefect(d); setViewDefectOpen(true); }}
+                      onClick={() => openViewDefect(d)}
                     >
                       <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider">{d.displayId}</td>
                       <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
@@ -1460,14 +1521,14 @@ const RunExecution = () => {
                         <div className="flex items-center gap-1">
                           <button
                             data-testid="defect-view-btn"
-                            onClick={() => { setViewDefect(d); setViewDefectOpen(true); }}
+                            onClick={() => openViewDefect(d)}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           >
                             <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
                           </button>
                           <button
                             data-testid="defect-edit-btn"
-                            onClick={() => { setEditDefect(d); setEditDefectOpen(true); }}
+                            onClick={() => openEditDefect(d)}
                             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                           >
                             <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -1537,24 +1598,126 @@ const RunExecution = () => {
             />
           </div>
 
-          {evidenceTarget && getEvidenceFiles(evidenceTarget.caseId, evidenceTarget.stepIdx).length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Uploaded Files</p>
-              {getEvidenceFiles(evidenceTarget.caseId, evidenceTarget.stepIdx).map((file, i) => {
-                const IconComp = getFileIcon(file.type);
-                return (
-                  <div key={i} className="flex items-center gap-2.5 px-3 py-2 bg-secondary rounded-md">
-                    <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                    <span className="text-sm text-foreground truncate flex-1">{file.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {evidenceTarget && (() => {
+            const inMemory = getEvidenceFiles(evidenceTarget.caseId, evidenceTarget.stepIdx);
+            const key = `${evidenceTarget.caseId}::${evidenceTarget.stepIdx}`;
+            const fromServer = (serverEvidence[key] || []).filter(
+              srv => !inMemory.some(m => m.name === srv.fileName && m.size === srv.fileSize)
+            );
+            const allFiles = [...inMemory, ...fromServer];
+            if (allFiles.length === 0) return null;
+            return (
+              <div className="mt-3 space-y-1.5">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Uploaded Files</p>
+                {inMemory.map((file, i) => {
+                  const IconComp = getFileIcon(file.type);
+                  const canPreview = isPreviewableType(file.type);
+                  return (
+                    <div key={`mem-${i}`} className="flex items-center gap-2.5 px-3 py-2 bg-secondary rounded-md">
+                      <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+                      <button
+                        className={`text-sm text-foreground truncate flex-1 text-left ${canPreview ? 'hover:underline cursor-pointer' : ''}`}
+                        onClick={() => {
+                          if (!canPreview) return;
+                          const url = URL.createObjectURL(file.file);
+                          setEvidencePreview({ name: file.name, url, type: file.type, isLocal: true });
+                        }}
+                      >
+                        {file.name}
+                      </button>
+                      <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(file.size)}</span>
+                      {canPreview && (
+                        <button
+                          onClick={() => {
+                            const url = URL.createObjectURL(file.file);
+                            setEvidencePreview({ name: file.name, url, type: file.type, isLocal: true });
+                          }}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          title="Preview"
+                        >
+                          <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                {fromServer.map((att) => {
+                  const IconComp = getFileIcon(att.fileType || '');
+                  const url = `${BASE_URL}/projects/${projectId}/attachments/${att.id}/content`;
+                  const canPreview = isPreviewableType(att.fileType);
+                  return (
+                    <div key={att.id} className="flex items-center gap-2.5 px-3 py-2 bg-secondary rounded-md">
+                      <IconComp className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
+                      <button
+                        className={`text-sm text-foreground truncate flex-1 text-left ${canPreview ? 'hover:underline cursor-pointer' : ''}`}
+                        onClick={() => canPreview ? setEvidencePreview({ name: att.fileName, url, type: att.fileType || '' }) : undefined}
+                      >
+                        {att.fileName}
+                      </button>
+                      <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(att.fileSize)}</span>
+                      {canPreview && (
+                        <button
+                          onClick={() => setEvidencePreview({ name: att.fileName, url, type: att.fileType || '' })}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          title="Preview"
+                        >
+                          <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => downloadWithAuth(url, att.fileName)}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        title="Download"
+                      >
+                        <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           <div className="flex justify-end mt-4">
             <Button variant="ghost" onClick={() => setEvidenceModalOpen(false)}>Done</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Evidence / Case Attachment Image Preview */}
+      <Dialog open={!!evidencePreview} onOpenChange={(open) => { if (!open) closeEvidencePreview(); }}>
+        <DialogContent className="sm:max-w-2xl bg-background">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold truncate">{evidencePreview?.name}</DialogTitle>
+            <DialogDescription className="sr-only">File preview</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-center min-h-[300px] bg-muted/20 rounded-lg overflow-hidden">
+            {evidencePreview && isPdfType(evidencePreview.type) ? (
+              evidencePreview.isLocal
+                ? <iframe src={evidencePreview.url} className="w-full h-[60vh]" title="PDF preview" />
+                : <AuthenticatedPdf url={evidencePreview.url} className="w-full h-[60vh]" />
+            ) : evidencePreview && evidencePreview.isLocal ? (
+              <img src={evidencePreview.url} alt={evidencePreview.name} className="max-w-full max-h-[60vh] object-contain" />
+            ) : evidencePreview ? (
+              <AuthenticatedImage url={evidencePreview.url} alt={evidencePreview.name} className="max-w-full max-h-[60vh] object-contain" />
+            ) : null}
+          </div>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="ghost" onClick={closeEvidencePreview}>Close</Button>
+            {evidencePreview && (
+              <Button className="gap-1.5" onClick={() => {
+                if (evidencePreview.isLocal) {
+                  const a = document.createElement('a');
+                  a.href = evidencePreview.url;
+                  a.download = evidencePreview.name;
+                  a.click();
+                } else {
+                  downloadWithAuth(evidencePreview.url, evidencePreview.name);
+                }
+              }}>
+                <Download className="h-3.5 w-3.5" /> Download
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -1580,6 +1743,7 @@ const RunExecution = () => {
         displayId={viewDefect?.displayId}
         existingAttachments={viewDefectAttachments}
         formatDate={formatDate}
+        projectId={projectId!}
       />
 
       {/* Edit Defect Modal */}
@@ -1590,6 +1754,7 @@ const RunExecution = () => {
         displayId={editDefect?.displayId}
         existingAttachments={editDefectAttachments}
         onSave={handleEditDefectSave}
+        projectId={projectId!}
       />
     </div>
   );

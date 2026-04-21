@@ -25,6 +25,7 @@ import {
   keys,
 } from '@/hooks/useApi';
 import { suitesApi, testCasesApi, testStepsApi, attachmentsApi } from '@/lib/api';
+import { AuthenticatedImage, AuthenticatedPdf, attachmentContentUrl, downloadWithAuth, isImageType, isPdfType, isPreviewableType } from '@/components/AttachmentPreview';
 import type { LocalCase as TestCase, LocalStep, LocalSuite as Suite } from '@/lib/localTypes';
 // TestRun type only needed for legacy Create Run handler shape — removed, using API directly
 
@@ -1608,7 +1609,7 @@ const Repository = () => {
                                 onClick={() => {
                                   setPreviewAttachment({
                                     name: att.fileName,
-                                    url: `/api/projects/${projectId}/attachments/${att.id}/view`,
+                                    url: attachmentContentUrl(projectId!, att.id),
                                     type: att.fileType || 'application/octet-stream',
                                   });
                                 }}
@@ -1808,26 +1809,27 @@ const Repository = () => {
             <DialogDescription className="sr-only">File preview</DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-center min-h-[300px] rounded-md border border-input bg-muted/30 p-4">
-            {previewAttachment?.type?.startsWith('image/') ? (
-              <img src={previewAttachment.url} alt={previewAttachment.name} className="max-w-full max-h-[60vh] object-contain rounded" />
+            {previewAttachment && isPdfType(previewAttachment.type) ? (
+              <AuthenticatedPdf url={previewAttachment.url} className="w-full h-[60vh]" />
+            ) : previewAttachment && isImageType(previewAttachment.type) ? (
+              <AuthenticatedImage
+                url={previewAttachment.url}
+                alt={previewAttachment.name}
+                className="max-w-full max-h-[60vh] object-contain rounded"
+              />
             ) : (
               <div className="text-center space-y-3">
                 <FileText className="h-16 w-16 text-muted-foreground mx-auto" strokeWidth={1} />
                 <p className="text-sm text-muted-foreground">Preview not available for this file type.</p>
-                <a href={previewAttachment?.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                  Open in new tab
-                </a>
               </div>
             )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setPreviewAttachment(null)}>Close</Button>
             {previewAttachment && (
-              <a href={previewAttachment.url} download={previewAttachment.name}>
-                <Button className="gap-1.5">
-                  <Download className="h-3.5 w-3.5" /> Download
-                </Button>
-              </a>
+              <Button className="gap-1.5" onClick={() => downloadWithAuth(previewAttachment.url, previewAttachment.name)}>
+                <Download className="h-3.5 w-3.5" /> Download
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

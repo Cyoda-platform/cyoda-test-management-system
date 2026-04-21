@@ -3,20 +3,24 @@ import { getAuthToken } from '../lib/api';
 
 /**
  * Fetches a protected URL with the Bearer token and returns a blob: object URL.
- * Returns null while loading or on error.
+ * Returns { blobUrl, error } — blobUrl is null while loading; error is true if fetch failed.
  * Automatically revokes the blob URL on unmount to prevent memory leaks.
  */
-export function useAuthenticatedImageUrl(url: string | null | undefined): string | null {
+export function useAuthenticatedImageUrl(url: string | null | undefined): { blobUrl: string | null; error: boolean } {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!url) {
       setBlobUrl(null);
+      setError(false);
       return;
     }
 
     let revoked = false;
     let objectUrl: string | null = null;
+    setBlobUrl(null);
+    setError(false);
 
     const token = getAuthToken();
     const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
@@ -32,7 +36,7 @@ export function useAuthenticatedImageUrl(url: string | null | undefined): string
         setBlobUrl(objectUrl);
       })
       .catch(() => {
-        if (!revoked) setBlobUrl(null);
+        if (!revoked) setError(true);
       });
 
     return () => {
@@ -41,5 +45,5 @@ export function useAuthenticatedImageUrl(url: string | null | undefined): string
     };
   }, [url]);
 
-  return blobUrl;
+  return { blobUrl, error };
 }

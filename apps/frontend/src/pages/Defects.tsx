@@ -174,7 +174,7 @@ const Defects = () => {
   // Build a stable display-ID map: prefer the persisted displayId, fall back to
   // position-based generation only for legacy records that predate the fix.
   const defectDisplayIdMap = useMemo(() => {
-    const sorted = [...defects].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const sorted = [...defects].sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
     const map: Record<string, string> = {};
     sorted.forEach((d, i) => { map[d.id] = d.displayId || listDisplayId('DEF', i); });
     return map;
@@ -248,7 +248,7 @@ const Defects = () => {
               if (formFiles && formFiles.length > 0) {
                 const defectId = createdDefect?.id;
                 for (const file of formFiles) {
-                  await attachmentsApi.upload(projectId!, file, undefined, defectId);
+                  await attachmentsApi.upload(projectId!, file, undefined, defectId, 'DEFECT');
                 }
                 toast.success(`Defect created with ${formFiles.length} file(s)`);
               } else {
@@ -278,7 +278,7 @@ const Defects = () => {
     setEditTarget({ ...d });
     setIsLoadingEditAttachments(true);
     attachmentsApi.listByDefect(projectId!, d.id)
-      .then(atts => setEditAttachments(atts || []))
+      .then(atts => setEditAttachments((atts || []).map(a => ({ id: a.id, name: a.fileName, size: a.fileSize, type: a.fileType ?? '' }))))
       .catch(() => setEditAttachments([]))
       .finally(() => setIsLoadingEditAttachments(false));
     setEditOpen(true);
@@ -288,7 +288,7 @@ const Defects = () => {
     setViewTarget(d);
     setIsLoadingViewAttachments(true);
     attachmentsApi.listByDefect(projectId!, d.id)
-      .then(atts => setViewAttachments(atts || []))
+      .then(atts => setViewAttachments((atts || []).map(a => ({ id: a.id, name: a.fileName, size: a.fileSize, type: a.fileType ?? '' }))))
       .catch(() => setViewAttachments([]))
       .finally(() => setIsLoadingViewAttachments(false));
     setViewOpen(true);
@@ -316,7 +316,7 @@ const Defects = () => {
       // Upload new files
       for (const file of newFiles) {
         try {
-          await attachmentsApi.upload(projectId!, file, undefined, updatedDefect.id);
+          await attachmentsApi.upload(projectId!, file, undefined, updatedDefect.id, 'DEFECT');
         } catch (error) {
           toast.warning(`Failed to upload ${file.name}`);
         }
@@ -325,7 +325,7 @@ const Defects = () => {
       // Delete removed attachments
       for (const attachmentId of removedAttachmentIds) {
         try {
-          await attachmentsApi.delete(projectId!, updatedDefect.id, attachmentId);
+          await attachmentsApi.delete(projectId!, attachmentId);
         } catch (error) {
           toast.warning(`Failed to delete attachment`);
         }
@@ -646,6 +646,7 @@ const Defects = () => {
         displayId={editTarget ? defectDisplayIdMap[editTarget.id] : undefined}
         existingAttachments={editAttachments}
         onSave={handleEditDefectSave}
+        projectId={projectId}
       />
 
       {/* View Defect Modal */}
@@ -656,6 +657,7 @@ const Defects = () => {
         displayId={viewTarget ? defectDisplayIdMap[viewTarget.id] : undefined}
         existingAttachments={viewAttachments}
         formatDate={formatDate}
+        projectId={projectId}
       />
 
       {/* Delete Confirmation */}
