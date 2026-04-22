@@ -161,3 +161,20 @@
     background-color: hsl(var(--surface-high));
   }
 }
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body, html {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .h-screen, .h-full {
+    height: auto !important;
+  }
+  .overflow-hidden, .overflow-auto {
+    overflow: visible !important;
+  }
+}

@@ -46,11 +46,9 @@ public class ReportService {
         String now = Instant.now().toString();
         report.setCreatedAt(now);
         report.setUpdatedAt(now);
-        // Always override any client-supplied displayId with a server-generated REP-N
         String displayId = projectCounterService.nextReportDisplayId(report.getProjectId());
         report.setDisplayId(displayId);
         ReportDTO created = withId(entityService.create(report));
-        // Persist displayId explicitly — Cyoda's create reload may not return it
         created.setDisplayId(displayId);
         entityService.update(created.getId(), created, null);
         return created;

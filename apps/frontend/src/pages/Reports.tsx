@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { Plus, Eye, Download, Trash2, AlertTriangle, FileText, Table2, Loader2 } from 'lucide-react';
+import { Plus, Eye, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -27,8 +27,6 @@ const Reports = () => {
 
   const [deleteOpen,   setDeleteOpen]   = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Report | null>(null);
-  const [downloadOpen,   setDownloadOpen]   = useState(false);
-  const [downloadTarget, setDownloadTarget] = useState<Report | null>(null);
 
   // Stable display-ID map: prefer the persisted displayId, fall back to
   // position-based generation only for legacy records that predate the fix.
@@ -54,19 +52,6 @@ const Reports = () => {
         onError: (e) => toast.error(e.message),
       }
     );
-  };
-
-  const handleDownload = (format: string) => {
-    if (!downloadTarget) return;
-    const blob = new Blob([`${downloadTarget.name} — exported as ${format}`], { type: 'text/plain' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `${downloadTarget.name.replace(/\s+/g, '_')}.${format.toLowerCase()}`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setDownloadOpen(false);
-    setDownloadTarget(null);
   };
 
   const sorted = [...reports].sort((a, b) =>
@@ -128,7 +113,7 @@ const Reports = () => {
               {/* Sticky column headers */}
               <div
                 className="grid bg-slate-200 dark:bg-slate-700 shrink-0"
-                style={{ gridTemplateColumns: '96px 1fr 110px 150px 120px 108px' }}
+                style={{ gridTemplateColumns: '80px 2fr 1fr 1fr 1fr 80px' }}
               >
                 {['ID', 'Report Name', 'Type', 'Created By', 'Created', 'Actions'].map((label) => (
                   <div key={label} className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
@@ -157,7 +142,7 @@ const Reports = () => {
                           key={r.id}
                           className="grid hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card items-center"
                           style={{
-                            gridTemplateColumns: '96px 1fr 110px 150px 120px 108px',
+                            gridTemplateColumns: '80px 2fr 1fr 1fr 1fr 80px',
                             position: 'absolute',
                             top: vi.start,
                             left: 0,
@@ -176,8 +161,8 @@ const Reports = () => {
                               {r.name}
                             </Link>
                           </div>
-                          <div className="px-5">
-                            <span className={`${typeBadge[r.type] || 'text-muted-foreground'} text-[10px] px-2.5 py-0.5 font-mono uppercase tracking-widest`}>
+                          <div className="px-5 flex items-center">
+                            <span className={`${typeBadge[r.type] || 'text-muted-foreground'} text-[10px] font-mono uppercase tracking-widest`}>
                               {r.type}
                             </span>
                           </div>
@@ -187,21 +172,14 @@ const Reports = () => {
                           <div className="px-5 text-muted-foreground font-mono text-[10px] tracking-wider">
                             {formatDate(r.createdAt)}
                           </div>
-                          <div className="px-5">
-                            <div className="flex items-center gap-1">
+                          <div className="px-3">
+                            <div className="flex items-center gap-0.5">
                               <Button
                                 variant="ghost" size="icon"
                                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                 onClick={() => navigate(`/projects/${projectId}/reports/${r.id}`)}
                               >
                                 <Eye className="h-4 w-4" strokeWidth={1.5} />
-                              </Button>
-                              <Button
-                                variant="ghost" size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                onClick={() => { setDownloadTarget(r); setDownloadOpen(true); }}
-                              >
-                                <Download className="h-4 w-4" strokeWidth={1.5} />
                               </Button>
                               <Button
                                 variant="ghost" size="icon"
@@ -242,29 +220,6 @@ const Reports = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Export format picker */}
-      <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}>
-        <DialogContent className="sm:max-w-sm bg-card rounded-xl">
-          <DialogHeader>
-            <DialogTitle className="text-base">Export Report</DialogTitle>
-            <DialogDescription>Choose a format for <span className="font-semibold text-foreground">{downloadTarget?.name}</span></DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <button onClick={() => handleDownload('pdf')}
-              className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors">
-              <FileText className="h-8 w-8 text-accent" strokeWidth={1.5} />
-              <span className="text-sm font-medium text-foreground">PDF</span>
-              <span className="text-[10px] text-muted-foreground">Visual summary with charts</span>
-            </button>
-            <button onClick={() => handleDownload('csv')}
-              className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors">
-              <Table2 className="h-8 w-8 text-accent" strokeWidth={1.5} />
-              <span className="text-sm font-medium text-foreground">Excel / CSV</span>
-              <span className="text-[10px] text-muted-foreground">Raw data table export</span>
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

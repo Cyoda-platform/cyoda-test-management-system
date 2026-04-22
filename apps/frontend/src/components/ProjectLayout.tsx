@@ -34,17 +34,19 @@ const ProjectLayout = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      <AppHeader />
-      <div className="flex flex-1 overflow-hidden">
-        <AppSidebar
-          projectName={project.name}
-          projectId={project.id}
-          projectInitials={project.name.substring(0, 2).toUpperCase()}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-        />
-        <main className="flex-1 overflow-auto surface-base">
+    <div className="h-screen flex flex-col print:h-auto">
+      <div className="print:hidden"><AppHeader /></div>
+      <div className="flex flex-1 overflow-hidden print:block print:overflow-visible">
+        <div className="print:hidden">
+          <AppSidebar
+            projectName={project.name}
+            projectId={project.id}
+            projectInitials={project.name.substring(0, 2).toUpperCase()}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+          />
+        </div>
+        <main className="flex-1 overflow-auto surface-base print:overflow-visible print:flex-none">
           <Outlet />
         </main>
       </div>

@@ -10,6 +10,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PieChart, BarChart3, Bug, Server } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProject, useTestRuns, useReports, useCreateReport } from '@/hooks/useApi';
+import { useAuth } from '@/contexts/AuthContext';
+import { useMemo } from 'react';
+import { listDisplayId } from '@/lib/utils';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -23,10 +26,18 @@ const sectionOptions = [
 const CreateReport = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const { user }                   = useAuth();
   const { data: project }          = useProject(projectId!);
   const { data: runs = [] }        = useTestRuns(projectId!);
   const { data: existingReports = [] } = useReports(projectId!);
   const createReport               = useCreateReport();
+
+  const runDisplayIdMap = useMemo(() => {
+    const sorted = [...runs].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    const map: Record<string, string> = {};
+    sorted.forEach((r, i) => { map[r.id] = r.displayId || listDisplayId('TR', i); });
+    return map;
+  }, [runs]);
 
   const [reportName, setReportName] = useState('');
   const [reportType, setReportType] = useState<string>('Summary');
@@ -67,7 +78,7 @@ const CreateReport = () => {
           // displayId is assigned server-side (REP-N via ProjectCounterService)
           type:                    reportType as 'Summary' | 'Regression' | 'Sprint' | 'Custom',
           description,
-          createdBy:               'current_user',
+          createdBy:               user?.username || 'unknown',
           dateFrom:                dateFrom || undefined,
           dateTo:                  dateTo   || undefined,
           selectedRuns:            Array.from(selectedRuns),
@@ -156,7 +167,7 @@ const CreateReport = () => {
                     checked={selectedRuns.has(run.id)}
                     onCheckedChange={() => toggleRun(run.id)}
                   />
-                  <span className="font-mono text-[10px] text-muted-foreground tracking-wider w-14">{run.id}</span>
+                  <span className="font-mono text-[10px] text-accent tracking-wider w-12">{runDisplayIdMap[run.id] ?? '—'}</span>
                   <span className="text-sm text-foreground">{run.name}</span>
                   <span className="ml-auto text-[10px] text-muted-foreground font-mono">{run.environment}</span>
                 </label>
