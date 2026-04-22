@@ -1,12 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Download, FileText, Table2, ExternalLink, Trash2, AlertTriangle, Eye, Pencil } from 'lucide-react';
+import { ArrowLeft, Download, ExternalLink, Trash2, AlertTriangle, Eye, Pencil, Loader2 } from 'lucide-react';
 import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useSuites, useReport, keys } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
-import { testCasesApi, testStepsApi } from '@/lib/api';
+import { testCasesApi, testStepsApi, attachmentsApi } from '@/lib/api';
 import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
 import { useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
@@ -16,6 +14,9 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
 } from 'recharts';
+import { toast } from 'sonner';
+import ViewDefectModal from '@/components/ViewDefectModal';
+import EditDefectModal from '@/components/EditDefectModal';
 
 import type { Report } from '@/lib/api';
 
@@ -46,9 +47,6 @@ const defectSeverityStyles: Record<string, string> = {
   Minor: 'text-accent',
 };
 
-const DEFECT_STATUSES = ['Open', 'In Progress', 'Fixed', 'Closed'] as const;
-const DEFECT_SEVERITIES = ['Critical', 'Major', 'Minor'] as const;
-
 /** Derive a single case's overall status from its step statuses. */
 function computeCaseStatus(steps: Array<{ status?: string }>): 'passed' | 'failed' | 'skipped' | 'untested' {
   if (!steps || steps.length === 0) return 'untested';
@@ -69,10 +67,8 @@ const ReportDetail = () => {
   const { data: defects  = [] } = useDefects(projectId!);
 
   // ── Suite Analysis — real data pipeline ─────────────────────────────────────
-  // 1. All suites for this project
   const { data: suites = [] } = useSuites(projectId!);
 
-  // 2. All cases for each suite (parallel)
   const casesQueries = useQueries({
     queries: suites.map((suite) => ({
       queryKey: keys.cases.all(projectId!, suite.id),
@@ -82,12 +78,10 @@ const ReportDetail = () => {
     })),
   });
 
-  // 3. Flat list of (suiteId, caseId) pairs in suite order
   const casePairs = suites.flatMap((suite, i) =>
     (casesQueries[i]?.data ?? []).map((c) => ({ suiteId: suite.id, caseId: c.id }))
   );
 
-  // 4. All steps for each case (parallel)
   const stepsQueries = useQueries({
     queries: casePairs.map(({ suiteId, caseId }) => ({
       queryKey: keys.steps.all(projectId!, suiteId, caseId),
@@ -99,24 +93,61 @@ const ReportDetail = () => {
   const updateDefect = useUpdateDefect();
   const deleteDefect = useDeleteDefect();
 
-  // Build a stable display-ID map: prefer the persisted displayId, fall back to
-  // position-based generation only for legacy records that predate the fix.
+  // Stable display-ID maps
   const defectDisplayIdMap = useMemo(() => {
-    const sorted = [...defects].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const sorted = [...defects].sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
     const map: Record<string, string> = {};
     sorted.forEach((d, i) => { map[d.id] = d.displayId || listDisplayId('DEF', i); });
     return map;
   }, [defects]);
 
+  const runDisplayIdMap = useMemo(() => {
+    const sorted = [...allRuns].filter(Boolean).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+    const map: Record<string, string> = {};
+    sorted.forEach((r, i) => { map[r.id] = r.displayId || listDisplayId('TR', i); });
+    return map;
+  }, [allRuns]);
+
   // Load report from API
   const { data: report, isLoading: reportLoading } = useReport(projectId!, reportId!);
 
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [viewTarget, setViewTarget] = useState<Defect | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; displayId: string } | null>(null);
+
+  // View modal
   const [viewOpen, setViewOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Defect | null>(null);
+  const [viewTarget, setViewTarget] = useState<Defect | null>(null);
+  const [viewAttachments, setViewAttachments] = useState<any[]>([]);
+
+  // Edit modal
   const [editOpen, setEditOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Defect | null>(null);
+  const [editAttachments, setEditAttachments] = useState<any[]>([]);
+
+  // Tracks in-flight inline severity/status update
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Suite breakdown — must be before early returns to satisfy Rules of Hooks
+  const suiteData = useMemo(() => {
+    if (!suites.length) return [];
+    let pairIdx = 0;
+    return suites
+      .map((suite, i) => {
+        const cases = casesQueries[i]?.data ?? [];
+        let passed = 0, failed = 0, skipped = 0, untested = 0;
+        cases.forEach(() => {
+          const steps = (stepsQueries[pairIdx]?.data as Array<{ status?: string }> | undefined) ?? [];
+          pairIdx++;
+          const st = computeCaseStatus(steps);
+          if (st === 'passed')       passed++;
+          else if (st === 'failed')  failed++;
+          else if (st === 'skipped') skipped++;
+          else                       untested++;
+        });
+        return { suite: suite.name, passed, failed, skipped, untested };
+      })
+      .filter((s) => s.passed + s.failed + s.skipped + s.untested > 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suites, casesQueries, stepsQueries]);
 
   if (reportLoading) {
     return (
@@ -158,41 +189,6 @@ const ReportDetail = () => {
     { name: 'Untested', value: totalUntested, color: COLORS.untested },
   ].filter((d) => d.value > 0);
 
-  // Suite breakdown — computed from real step statuses (reflects most-recent execution state)
-  const suiteData = useMemo(() => {
-    if (!suites.length) return [];
-    let pairIdx = 0;
-    return suites
-      .map((suite, i) => {
-        const cases = casesQueries[i]?.data ?? [];
-        let passed = 0, failed = 0, skipped = 0, untested = 0;
-        cases.forEach(() => {
-          const steps = (stepsQueries[pairIdx]?.data as Array<{ status?: string }> | undefined) ?? [];
-          pairIdx++;
-          const st = computeCaseStatus(steps);
-          if (st === 'passed')       passed++;
-          else if (st === 'failed')  failed++;
-          else if (st === 'skipped') skipped++;
-          else                       untested++;
-        });
-        return { suite: suite.name, passed, failed, skipped, untested };
-      })
-      .filter((s) => s.passed + s.failed + s.skipped + s.untested > 0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suites, casesQueries, stepsQueries]);
-
-  const handleDownload = (format: string) => {
-    const blob = new Blob([`${report.name} — exported as ${format}`], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${report.name.replace(/\s+/g, '_')}.${format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setDownloadOpen(false);
-  };
-
-  // Build a full PUT body — backend uses full-replacement PUT, partial bodies cause HTTP 400
   const buildDefectUpdateBody = (d: Defect, overrides: Partial<Defect>): Partial<Defect> => ({
     title:       d.title,
     description: d.description,
@@ -204,45 +200,98 @@ const ReportDetail = () => {
     ...overrides,
   });
 
-  const handleStatusChange = (defectId: string, newStatus: string) => {
-    const d = defects.find((x) => x.id === defectId);
-    if (!d) return;
-    updateDefect.mutate({ projectId: projectId!, id: defectId, body: buildDefectUpdateBody(d, { status: newStatus as Defect['status'] }) });
-  };
-
   const handleSeverityChange = (defectId: string, newSeverity: string) => {
     const d = defects.find((x) => x.id === defectId);
-    if (!d) return;
-    updateDefect.mutate({ projectId: projectId!, id: defectId, body: buildDefectUpdateBody(d, { severity: newSeverity as Defect['severity'] }) });
+    if (!d || updatingId) return;
+    setUpdatingId(defectId);
+    updateDefect.mutate(
+      { projectId: projectId!, id: defectId, body: buildDefectUpdateBody(d, { severity: newSeverity as Defect['severity'] }) },
+      {
+        onSuccess: () => toast.success(`Severity updated to ${newSeverity}`),
+        onError:   (e) => toast.error(e.message),
+        onSettled: () => setUpdatingId(null),
+      }
+    );
+  };
+
+  const handleStatusChange = (defectId: string, newStatus: string) => {
+    const d = defects.find((x) => x.id === defectId);
+    if (!d || updatingId) return;
+    setUpdatingId(defectId);
+    updateDefect.mutate(
+      { projectId: projectId!, id: defectId, body: buildDefectUpdateBody(d, { status: newStatus as Defect['status'] }) },
+      {
+        onSuccess: () => toast.success(`Status updated to ${newStatus}`),
+        onError:   (e) => toast.error(e.message),
+        onSettled: () => setUpdatingId(null),
+      }
+    );
   };
 
   const handleDeleteDefect = () => {
-    if (deleteTarget) {
-      deleteDefect.mutate(
-        { projectId: projectId!, id: deleteTarget },
-        { onSuccess: () => setDeleteTarget(null), onError: () => setDeleteTarget(null) }
-      );
-    }
+    if (!deleteTarget) return;
+    deleteDefect.mutate(
+      { projectId: projectId!, id: deleteTarget.id },
+      {
+        onSuccess: () => {
+          toast.success('Defect deleted');
+          setDeleteTarget(null);
+        },
+        onError: (e) => toast.error(e.message),
+      }
+    );
+  };
+
+  const openView = (d: Defect) => {
+    setViewTarget(d);
+    setViewAttachments([]);
+    attachmentsApi.listByDefect(projectId!, d.id)
+      .then(atts => setViewAttachments((atts || []).map((a: any) => ({ id: a.id, name: a.fileName, size: a.fileSize, type: a.fileType ?? '' }))))
+      .catch(() => setViewAttachments([]));
+    setViewOpen(true);
   };
 
   const openEdit = (d: Defect) => {
     setEditTarget({ ...d });
+    setEditAttachments([]);
+    attachmentsApi.listByDefect(projectId!, d.id)
+      .then(atts => setEditAttachments((atts || []).map((a: any) => ({ id: a.id, name: a.fileName, size: a.fileSize, type: a.fileType ?? '' }))))
+      .catch(() => setEditAttachments([]));
     setEditOpen(true);
   };
 
-  const handleEdit = () => {
-    if (editTarget) {
-      updateDefect.mutate(
-        { projectId: projectId!, id: editTarget.id, body: buildDefectUpdateBody(editTarget, {}) },
-        { onSuccess: () => setEditOpen(false) }
-      );
+  const handleEditDefectSave = async (updatedDefect: Defect, newFiles: File[], removedAttachmentIds: string[]) => {
+    if (!projectId) return;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        updateDefect.mutate(
+          { projectId: projectId!, id: updatedDefect.id, body: buildDefectUpdateBody(updatedDefect, {}) },
+          { onSuccess: () => resolve(), onError: (e) => reject(e) }
+        );
+      });
+      for (const file of newFiles) {
+        try { await attachmentsApi.upload(projectId!, file, undefined, updatedDefect.id, 'DEFECT'); }
+        catch { toast.warning(`Failed to upload ${file.name}`); }
+      }
+      for (const attachmentId of removedAttachmentIds) {
+        try { await attachmentsApi.delete(projectId!, attachmentId); }
+        catch { toast.warning('Failed to delete attachment'); }
+      }
+      toast.success('Defect updated');
+      setEditOpen(false);
+      setEditTarget(null);
+      setEditAttachments([]);
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update defect');
     }
   };
+
+  const sortedDefects = [...defects].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-5 pb-4 bg-card border-b border-border/40">
+      <div className="px-6 pt-5 pb-4 bg-card border-b border-border/40 print:hidden">
         <div className="mb-2">
           <Breadcrumbs segments={[
             { label: 'Projects', href: '/projects' },
@@ -261,14 +310,14 @@ const ReportDetail = () => {
               {report.type}
             </span>
           </div>
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setDownloadOpen(true)}>
-            <Download className="h-3.5 w-3.5" strokeWidth={1.5} /> Export
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => window.print()}>
+            <Download className="h-3.5 w-3.5" strokeWidth={1.5} /> Export PDF
           </Button>
         </div>
       </div>
 
       {/* Content — centered canvas */}
-      <div className="flex-1 overflow-auto p-6 bg-background flex justify-center">
+      <div className="flex-1 overflow-auto p-6 bg-background flex justify-center print:block print:overflow-visible print:p-4">
         <div className="w-full max-w-[1200px] space-y-6 pb-20">
 
           {/* Executive Summary */}
@@ -294,52 +343,18 @@ const ReportDetail = () => {
                 </p>
               </div>
               <div className="p-5">
-                <div className="grid grid-cols-[1fr_auto] gap-6 items-stretch">
-                  {/* KPI Cards — 2 cols × 3 rows */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Row 1 */}
-                    <div className="bg-background rounded-lg border border-border/40 p-4 flex flex-col items-center justify-center">
-                      <p className="text-2xl font-bold text-foreground">{totalCases}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Total Cases</p>
-                    </div>
-                    <div className="bg-background rounded-lg border border-border/40 p-4 flex flex-col items-center justify-center">
-                      <p className="text-2xl font-bold text-success">{passRate}%</p>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Pass Rate</p>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">(of executed)</p>
-                    </div>
-                    {/* Row 2 */}
-                    <div className="bg-background rounded-lg border border-border/40 p-4 flex flex-col items-center justify-center">
-                      <p className="text-2xl font-bold text-destructive">{totalDefects}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Total Defects</p>
-                    </div>
-                    <div className="bg-background rounded-lg border border-border/40 p-4 flex flex-col items-center justify-center">
-                      <p className="text-2xl font-bold text-[hsl(215,60%,55%)]">{executionProgress.toFixed(1)}%</p>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Execution Progress</p>
-                      <div className="mt-2 h-1 w-full rounded-full bg-border/60 overflow-hidden">
-                        <div className="h-full rounded-full bg-[hsl(215,60%,55%)] transition-all duration-500" style={{ width: `${executionProgress}%` }} />
-                      </div>
-                    </div>
-                    {/* Row 3 */}
-                    <div className="bg-background rounded-lg border border-border/40 p-4 flex flex-col items-center justify-center">
-                      <p className="text-2xl font-bold" style={{ color: COLORS.untested }}>{totalUntested}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Untested</p>
-                    </div>
-                    <div className="bg-background rounded-lg border border-border/40 p-4 flex flex-col items-center justify-center">
-                      <p className="text-2xl font-bold text-muted-foreground">{remainingScope.toFixed(1)}%</p>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Remaining Scope</p>
-                    </div>
-                  </div>
-                  {/* Donut Chart + Legend — height matches card grid */}
-                  <div className="flex flex-col items-center justify-center gap-4 min-w-[220px]">
-                    <div className="w-56 h-56">
+                <div className="flex flex-col md:grid md:grid-cols-2 gap-5 items-stretch">
+                  {/* Donut Chart + Legend — 30% left, centered vertically */}
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="w-72 h-72">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
                             data={pieData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={52}
-                            outerRadius={88}
+                            innerRadius={62}
+                            outerRadius={108}
                             paddingAngle={3}
                             dataKey="value"
                             strokeWidth={0}
@@ -355,19 +370,51 @@ const ReportDetail = () => {
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    {/* Legend — 2 cols × 2 rows, compact */}
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
                       {pieData.map((d) => {
                         const pct = totalCases > 0 ? ((d.value / totalCases) * 100).toFixed(0) : '0';
                         return (
-                          <div key={d.name} className="flex items-center gap-2">
-                            <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: d.color }} />
-                            <span className="text-xs text-muted-foreground">
+                          <div key={d.name} className="flex items-center gap-1.5">
+                            <div className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
+                            <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                               {d.name}: <span className="font-semibold text-foreground">{d.value}</span>{' '}
-                              <span className="text-muted-foreground">({pct}%)</span>
+                              <span className="opacity-70">({pct}%)</span>
                             </span>
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                  {/* KPI Cards — 70% right, 2 cols × 3 rows, fills column height */}
+                  <div className="h-full grid grid-cols-2 grid-rows-3 gap-2.5">
+                    <div className="bg-background rounded-lg border border-border/40 p-3 flex flex-col items-center justify-center">
+                      <p className="text-2xl font-bold text-foreground">{totalCases}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Total Cases</p>
+                    </div>
+                    <div className="bg-background rounded-lg border border-border/40 p-3 flex flex-col items-center justify-center">
+                      <p className="text-2xl font-bold text-success">{passRate}%</p>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Pass Rate</p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">(of executed)</p>
+                    </div>
+                    <div className="bg-background rounded-lg border border-border/40 p-3 flex flex-col items-center justify-center">
+                      <p className="text-2xl font-bold text-destructive">{totalDefects}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Total Defects</p>
+                    </div>
+                    <div className="bg-background rounded-lg border border-border/40 p-3 flex flex-col items-center justify-center">
+                      <p className="text-2xl font-bold text-[hsl(215,60%,55%)]">{executionProgress.toFixed(1)}%</p>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Execution Progress</p>
+                      <div className="mt-2 h-1 w-full rounded-full bg-border/60 overflow-hidden">
+                        <div className="h-full rounded-full bg-[hsl(215,60%,55%)] transition-all duration-500" style={{ width: `${executionProgress}%` }} />
+                      </div>
+                    </div>
+                    <div className="bg-background rounded-lg border border-border/40 p-3 flex flex-col items-center justify-center">
+                      <p className="text-2xl font-bold" style={{ color: COLORS.untested }}>{totalUntested}</p>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Untested</p>
+                    </div>
+                    <div className="bg-background rounded-lg border border-border/40 p-3 flex flex-col items-center justify-center">
+                      <p className="text-2xl font-bold text-muted-foreground">{remainingScope.toFixed(1)}%</p>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mt-1">Remaining Scope</p>
                     </div>
                   </div>
                 </div>
@@ -381,9 +428,9 @@ const ReportDetail = () => {
               <div className="px-5 py-3.5 border-b border-border/40">
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Environment Details</h2>
               </div>
-              <div className="p-5">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-background rounded-lg border border-border/40 p-4">
+              <div className="px-5 py-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2.5">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Environment(s)</p>
                     <div className="flex flex-wrap gap-1.5">
                       {[...new Set(linkedRuns.map((r) => r.environment))].map((env) => (
@@ -391,7 +438,7 @@ const ReportDetail = () => {
                       ))}
                     </div>
                   </div>
-                  <div className="bg-background rounded-lg border border-border/40 p-4">
+                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2.5">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Build Version(s)</p>
                     <div className="flex flex-wrap gap-1.5">
                       {[...new Set(linkedRuns.map((r) => r.buildVersion).filter(Boolean))].map((v) => (
@@ -399,10 +446,10 @@ const ReportDetail = () => {
                       ))}
                     </div>
                   </div>
-                  <div className="bg-background rounded-lg border border-border/40 p-4">
+                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2.5">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Created By</p>
-                    <p className="text-sm font-medium text-foreground">{report.createdBy}</p>
-                    <p className="text-[10px] text-muted-foreground font-mono mt-1">{formatDate(report.createdAt)}</p>
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">{report.createdBy}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{formatDate(report.createdAt)}</p>
                   </div>
                 </div>
               </div>
@@ -453,7 +500,10 @@ const ReportDetail = () => {
 
           {/* Defect Table */}
           {report.sectionDefectTable && (
-            <div className="bg-card rounded-lg shadow-soft overflow-hidden">
+            <div className="bg-card rounded-xl border border-border/40 shadow-sm overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-border/40">
+                <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Defect Log</h2>
+              </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-200 dark:bg-slate-700 sticky top-0 z-10">
@@ -467,52 +517,72 @@ const ReportDetail = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {defects.length === 0 ? (
+                  {sortedDefects.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="text-center py-12 text-muted-foreground text-sm">No defects linked to this report</td>
                     </tr>
                   ) : (
-                    [...defects].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((d) => (
+                    sortedDefects.map((d) => (
                       <tr
                         key={d.id}
                         className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"
-                        onClick={() => { setViewTarget(d); setViewOpen(true); }}
+                        onClick={() => openView(d)}
                       >
                         <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>{defectDisplayIdMap[d.id] ?? '-'}</td>
                         <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
                         <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
-                          <Select value={d.severity} onValueChange={(val) => handleSeverityChange(d.id, val)}>
-                            <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${defectSeverityStyles[d.severity] || ''}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Critical">Critical</SelectItem>
-                              <SelectItem value="Major">Major</SelectItem>
-                              <SelectItem value="Minor">Minor</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          {updatingId === d.id ? (
+                            <span className="inline-flex items-center gap-1 h-7 px-2.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin" /> {d.severity}
+                            </span>
+                          ) : (
+                            <Select value={d.severity} onValueChange={(val) => handleSeverityChange(d.id, val)} disabled={!!updatingId}>
+                              <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${defectSeverityStyles[d.severity] || ''}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Critical">Critical</SelectItem>
+                                <SelectItem value="Major">Major</SelectItem>
+                                <SelectItem value="Minor">Minor</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
                         </td>
                         <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
-                          <Select value={d.status} onValueChange={(val) => handleStatusChange(d.id, val)}>
-                            <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${defectStatusStyles[d.status] || ''}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Open">Open</SelectItem>
-                              <SelectItem value="In Progress">In Progress</SelectItem>
-                              <SelectItem value="Fixed">Fixed</SelectItem>
-                              <SelectItem value="Closed">Closed</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          {updatingId === d.id ? (
+                            <span className="inline-flex items-center gap-1 h-7 px-2.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin" /> {d.status}
+                            </span>
+                          ) : (
+                            <Select value={d.status} onValueChange={(val) => handleStatusChange(d.id, val)} disabled={!!updatingId}>
+                              <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${defectStatusStyles[d.status] || ''}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Open">Open</SelectItem>
+                                <SelectItem value="In Progress">In Progress</SelectItem>
+                                <SelectItem value="Fixed">Fixed</SelectItem>
+                                <SelectItem value="Closed">Closed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
                         </td>
-                        <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={d.source || undefined}>
-                          {d.source ? (isUuid(d.source) ? d.source.slice(0, 8) : d.source) : '—'}
+                        <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">
+                          {(() => {
+                            const parts: string[] = [];
+                            if (d.testRunId) {
+                              const trLabel = runDisplayIdMap[d.testRunId];
+                              if (trLabel) parts.push(trLabel);
+                            }
+                            if (d.source && !isUuid(d.source)) parts.push(d.source);
+                            return parts.length > 0 ? parts.join(' · ') : '—';
+                          })()}
                         </td>
                         <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(d.createdAt)}</td>
                         <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => { setViewTarget(d); setViewOpen(true); }}
+                              onClick={() => openView(d)}
                               className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                             >
                               <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -524,7 +594,7 @@ const ReportDetail = () => {
                               <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                             </button>
                             <button
-                              onClick={() => { setDeleteTarget(d.id); }}
+                              onClick={() => setDeleteTarget({ id: d.id, displayId: defectDisplayIdMap[d.id] ?? d.id })}
                               className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
                             >
                               <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -552,112 +622,26 @@ const ReportDetail = () => {
       </div>
 
       {/* View Defect Modal */}
-      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-        <DialogContent className="sm:max-w-3xl bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              <span className="font-mono text-purple-600 dark:text-purple-400 text-sm" title={viewTarget?.id}>{viewTarget ? (defectDisplayIdMap[viewTarget.id] ?? '-') : '-'}</span>
-              {viewTarget?.title}
-            </DialogTitle>
-            <DialogDescription className="text-muted-foreground">Defect details</DialogDescription>
-          </DialogHeader>
-          {viewTarget && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Description</label>
-                <div className="mt-0 px-3 py-2 bg-white border border-input rounded-md text-sm text-foreground min-h-[140px] resize-none leading-relaxed overflow-y-auto max-h-[200px]">
-                  {viewTarget.description || 'No description provided.'}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Source</label>
-                  <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground font-mono flex items-center">
-                    {viewTarget.source || '—'}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Created</label>
-                  <div className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-foreground flex items-center">
-                    {formatDate(viewTarget.createdAt)}
-                  </div>
-                </div>
-              </div>
-              {viewTarget.link && (
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">External Link</label>
-                  <a href={viewTarget.link} target="_blank" rel="noopener noreferrer" className="mt-0 h-9 px-3 bg-white border border-input rounded-md text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1 hover:underline">
-                    {viewTarget.link} <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              )}
-              <div>
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Attachments</label>
-                <p className="text-sm text-muted-foreground mt-1.5">No attachments</p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ViewDefectModal
+        open={viewOpen}
+        onOpenChange={setViewOpen}
+        defect={viewTarget}
+        displayId={viewTarget ? defectDisplayIdMap[viewTarget.id] : undefined}
+        existingAttachments={viewAttachments}
+        formatDate={formatDate}
+        projectId={projectId}
+      />
 
       {/* Edit Defect Modal */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-3xl bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-foreground">Edit Defect</DialogTitle>
-            <DialogDescription className="text-muted-foreground font-mono" title={editTarget?.id}>{editTarget ? (defectDisplayIdMap[editTarget.id] ?? '-') : '-'}</DialogDescription>
-          </DialogHeader>
-          {editTarget && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Title</label>
-                <Input value={editTarget.title} onChange={(e) => setEditTarget({ ...editTarget, title: e.target.value })} className="mt-0 h-9 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Description</label>
-                <Textarea value={editTarget.description} onChange={(e) => setEditTarget({ ...editTarget, description: e.target.value })} className="mt-0 min-h-[140px] bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring text-sm resize-none" />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Severity</label>
-                  <Select value={editTarget.severity} onValueChange={(v) => setEditTarget({ ...editTarget, severity: v as 'Critical' | 'Major' | 'Minor' })}>
-                    <SelectTrigger className="mt-0 h-9 bg-white border border-input"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Critical">Critical</SelectItem>
-                      <SelectItem value="Major">Major</SelectItem>
-                      <SelectItem value="Minor">Minor</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Status</label>
-                  <Select value={editTarget.status} onValueChange={(v) => setEditTarget({ ...editTarget, status: v as Defect['status'] })}>
-                    <SelectTrigger className="mt-0 h-9 bg-white border border-input"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Open">Open</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="Fixed">Fixed</SelectItem>
-                      <SelectItem value="Closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Source</label>
-                  <Input value={editTarget.source || ''} onChange={(e) => setEditTarget({ ...editTarget, source: e.target.value })} placeholder="TR-01 or AS-1" className="mt-0 h-9 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">External Link</label>
-                <Input value={editTarget.link} onChange={(e) => setEditTarget({ ...editTarget, link: e.target.value })} className="mt-0 h-9 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
-              </div>
-            </div>
-          )}
-          <DialogFooter className="mt-4">
-            <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleEdit}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditDefectModal
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        defect={editTarget}
+        displayId={editTarget ? defectDisplayIdMap[editTarget.id] : undefined}
+        existingAttachments={editAttachments}
+        onSave={handleEditDefectSave}
+        projectId={projectId}
+      />
 
       {/* Delete Confirmation */}
       <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
@@ -668,35 +652,13 @@ const ReportDetail = () => {
               Remove Defect
             </DialogTitle>
             <DialogDescription className="text-sm text-foreground mt-3">
-              Are you sure you want to remove <span className="font-bold">{deleteTarget}</span> from this report? This will unlink it from the current view.
+              Are you sure you want to delete <span className="font-bold font-mono text-purple-600 dark:text-purple-400">{deleteTarget?.displayId}</span>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-6">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDeleteDefect}>Remove</Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Download modal */}
-      <Dialog open={downloadOpen} onOpenChange={setDownloadOpen}>
-        <DialogContent className="sm:max-w-sm bg-card rounded-xl">
-          <DialogHeader>
-            <DialogTitle className="text-base">Export Report</DialogTitle>
-            <DialogDescription>Choose a format</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <button onClick={() => handleDownload('pdf')} className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors">
-              <FileText className="h-8 w-8 text-accent" strokeWidth={1.5} />
-              <span className="text-sm font-medium text-foreground">PDF</span>
-              <span className="text-[10px] text-muted-foreground">Visual summary</span>
-            </button>
-            <button onClick={() => handleDownload('csv')} className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors">
-              <Table2 className="h-8 w-8 text-accent" strokeWidth={1.5} />
-              <span className="text-sm font-medium text-foreground">Excel / CSV</span>
-              <span className="text-[10px] text-muted-foreground">Raw data table</span>
-            </button>
-          </div>
         </DialogContent>
       </Dialog>
 
