@@ -76,13 +76,14 @@ test.describe('Step status persistence after reload', () => {
   test('non-active status buttons keep outline style after reload', async ({ page }) => {
     await goToRun(page);
 
-    // Step 1 active status is "passed" so "failed" button must not be filled
+    // Active state uses ring-* class; outline state does not.
+    // Step 1 active = "passed" → "failed" button must not have ring-destructive
     const row1FailedBtn = page.locator('tbody tr').first().getByRole('button', { name: /^failed$/i });
-    await expect(row1FailedBtn).not.toHaveClass(/bg-destructive/, { timeout: 5_000 });
+    await expect(row1FailedBtn).not.toHaveClass(/ring-destructive/, { timeout: 5_000 });
 
-    // Step 2 active status is "failed" so "passed" button must not be filled
+    // Step 2 active = "failed" → "passed" button must not have ring-success
     const row2PassedBtn = page.locator('tbody tr').nth(1).getByRole('button', { name: /^passed$/i });
-    await expect(row2PassedBtn).not.toHaveClass(/bg-success/, { timeout: 5_000 });
+    await expect(row2PassedBtn).not.toHaveClass(/ring-success/, { timeout: 5_000 });
   });
 });
 
@@ -204,6 +205,14 @@ test.describe('Defect badge persistence after reload', () => {
     const badge = page.locator('tbody tr').first().getByTestId('step-defect-badge');
     await expect(badge).toBeVisible({ timeout: 5_000 });
     await expect(badge).toHaveText('1');
+
+    // Wait for the background testRunCaseId patch (fired when ensureRunCaseId resolves)
+    // to complete before navigating in the next test, so the server record has
+    // testRunCaseId set and the badge can be recovered via hydration after reload.
+    await page.waitForResponse(
+      (resp) => resp.url().includes('/defects/') && resp.request().method() === 'PUT',
+      { timeout: 20_000 },
+    ).catch(() => { /* testRunCaseId was already available at create time — no patch needed */ });
   });
 
   test('defect badge persists after page reload (stepIdx recovered from source field)', async ({ page }) => {

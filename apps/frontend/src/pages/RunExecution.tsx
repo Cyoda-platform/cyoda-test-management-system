@@ -657,10 +657,12 @@ const RunExecution = () => {
 
       return [...optimisticOnly, ...hydrated];
     });
-  // Re-run only when server data changes. runCaseIdToCaseTitleRef is accessed via
-  // ref to avoid including the Map in deps (new Map reference on every runCases update
-  // caused an infinite setState→render→Map→setState loop).
-  }, [serverRunDefects]);
+  // runCases.length (not runCases itself) is included so the effect re-runs when
+  // runCases first loads after serverRunDefects — preventing the race where
+  // testRunCaseId→caseId resolution yields '' because runCases was still empty.
+  // Using .length avoids a new-array-reference loop (runDetails?.runCases ?? [] creates
+  // a new ref each render even when data is stable).
+  }, [serverRunDefects, runCases.length]);
 
   // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
@@ -993,16 +995,14 @@ const RunExecution = () => {
   const handleCreateDefect = async (defect: any) => {
     if (!defectContext) return;
 
-    // ── Resolve runCaseId without blocking defect creation ────────────────────
-    // Previously this called `await ensureRunCaseId(defect.caseId)` and would
-    // hard-block if the POST /cases request was pending (e.g. Cyoda slow under
-    // load).  Now we use whatever ID is already in the context or cache; if
-    // neither is available we proceed anyway — testRunCaseId is optional context
-    // for defect scoping and must never prevent the actual defect from being saved.
+    // ── Resolve runCaseId without blocking the modal close ────────────────────
+    // Use whatever is already available synchronously. If not available, the
+    // defect is still saved — we patch it in the background once ensureRunCaseId
+    // resolves (see the fire-and-forget block below the create call).
     const runCaseId =
       defectContext.runCaseId ??
       testCaseToRunCaseId.get(defectContext.caseId) ??
-      undefined;   // will be omitted from the payload when undefined
+      undefined;
 
     try {
       const created = await defectsApi.create(projectId!, {
@@ -1054,6 +1054,30 @@ const RunExecution = () => {
       qc.invalidateQueries({ queryKey: keys.runDefects.all(projectId!, runId!) });
       setDefectModalOpen(false);
       toast.success('Defect created');
+
+      // ── Background patch: add testRunCaseId once ensureRunCaseId resolves ───
+      // If testRunCaseId was not available at create time, patch the saved defect
+      // after ensureRunCaseId resolves (reusing the in-flight promise started by
+      // handleBugClick). This ensures the defect badge persists after page reload.
+      if (!runCaseId) {
+        void ensureRunCaseId(defectContext.caseId)
+          .then((resolvedId) => {
+            if (!resolvedId) return;
+            return defectsApi.update(projectId!, created.id, {
+              id:          created.id,
+              projectId:   projectId!,
+              title:       created.title,
+              description: created.description ?? '',
+              severity:    created.severity,
+              status:      created.status,
+              source:      created.source ?? '',
+              link:        created.link ?? '',
+              testRunId:   runId,
+              testRunCaseId: resolvedId,
+            });
+          })
+          .catch(() => {});
+      }
     } catch {
       toast.error('Failed to create defect — please try again');
       throw new Error('Failed to create defect');
