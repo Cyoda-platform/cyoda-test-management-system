@@ -2,12 +2,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Download, ExternalLink, Trash2, AlertTriangle, Eye, Pencil, Loader2 } from 'lucide-react';
-import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useSuites, useReport, keys } from '@/hooks/useApi';
+import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useReport, useTestRunCasesForRuns } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
-import { testCasesApi, testStepsApi, attachmentsApi } from '@/lib/api';
+import { attachmentsApi } from '@/lib/api';
 import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
 import { useMemo, useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { deduplicateRunCases, groupBySuite } from '@/lib/reportAggregation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -47,16 +47,6 @@ const defectSeverityStyles: Record<string, string> = {
   Minor: 'text-accent',
 };
 
-/** Derive a single case's overall status from its step statuses. */
-function computeCaseStatus(steps: Array<{ status?: string }>): 'passed' | 'failed' | 'skipped' | 'untested' {
-  if (!steps || steps.length === 0) return 'untested';
-  if (steps.some((s) => s.status === 'failed'))  return 'failed';
-  if (steps.every((s) => s.status === 'passed'))  return 'passed';
-  if (steps.some((s) => s.status === 'skipped') &&
-      !steps.some((s) => !s.status || s.status === 'untested')) return 'skipped';
-  return 'untested';
-}
-
 const ReportDetail = () => {
   const { projectId, reportId } = useParams<{ projectId: string; reportId: string }>();
   const navigate = useNavigate();
@@ -66,29 +56,13 @@ const ReportDetail = () => {
   const { data: allRuns  = [] } = useTestRuns(projectId!);
   const { data: defects  = [] } = useDefects(projectId!);
 
-  // ── Suite Analysis — real data pipeline ─────────────────────────────────────
-  const { data: suites = [] } = useSuites(projectId!);
+  // ── Suite Analysis — aggregate run case data ──────────────────────────────────
+  // Load report from API first to get the linked run IDs
+  const { data: report, isLoading: reportLoading } = useReport(projectId!, reportId!);
+  const linkedRunIds: string[] = report?.selectedRuns ?? [];
 
-  const casesQueries = useQueries({
-    queries: suites.map((suite) => ({
-      queryKey: keys.cases.all(projectId!, suite.id),
-      queryFn:  () => testCasesApi.list(projectId!, suite.id),
-      enabled:  !!projectId && suites.length > 0,
-      select:   (res: { data: Array<{ id: string; suiteId: string }> }) => res.data,
-    })),
-  });
-
-  const casePairs = suites.flatMap((suite, i) =>
-    (casesQueries[i]?.data ?? []).map((c) => ({ suiteId: suite.id, caseId: c.id }))
-  );
-
-  const stepsQueries = useQueries({
-    queries: casePairs.map(({ suiteId, caseId }) => ({
-      queryKey: keys.steps.all(projectId!, suiteId, caseId),
-      queryFn:  () => testStepsApi.list(projectId!, suiteId, caseId),
-      enabled:  !!projectId && casePairs.length > 0,
-    })),
-  });
+  // Fetch all test run cases for the linked runs
+  const { data: allRunCases = [] } = useTestRunCasesForRuns(projectId!, linkedRunIds);
 
   const updateDefect = useUpdateDefect();
   const deleteDefect = useDeleteDefect();
@@ -108,9 +82,6 @@ const ReportDetail = () => {
     return map;
   }, [allRuns]);
 
-  // Load report from API
-  const { data: report, isLoading: reportLoading } = useReport(projectId!, reportId!);
-
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; displayId: string } | null>(null);
 
   // View modal
@@ -126,28 +97,33 @@ const ReportDetail = () => {
   // Tracks in-flight inline severity/status update
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Suite breakdown — must be before early returns to satisfy Rules of Hooks
+  // Suite breakdown — aggregate run case data using reportAggregation utils
   const suiteData = useMemo(() => {
-    if (!suites.length) return [];
-    let pairIdx = 0;
-    return suites
-      .map((suite, i) => {
-        const cases = casesQueries[i]?.data ?? [];
-        let passed = 0, failed = 0, skipped = 0, untested = 0;
-        cases.forEach(() => {
-          const steps = (stepsQueries[pairIdx]?.data as Array<{ status?: string }> | undefined) ?? [];
-          pairIdx++;
-          const st = computeCaseStatus(steps);
-          if (st === 'passed')       passed++;
-          else if (st === 'failed')  failed++;
-          else if (st === 'skipped') skipped++;
-          else                       untested++;
-        });
-        return { suite: suite.name, passed, failed, skipped, untested };
-      })
-      .filter((s) => s.passed + s.failed + s.skipped + s.untested > 0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suites, casesQueries, stepsQueries]);
+    if (!allRunCases.length) return [];
+    // Build run createdAt map to resolve latest status by run timestamp
+    const runCreatedAtMap = new Map<string, string>();
+    linkedRuns.forEach(run => {
+      runCreatedAtMap.set(run.id, run.createdAt || '');
+    });
+    // Deduplicate by testCaseId, keeping the latest run's status
+    const deduped = deduplicateRunCases(allRunCases.map(rc => ({
+      testCaseId: rc.testCaseId,
+      suiteId: rc.suiteId,
+      testRunId: rc.testRunId,
+      status: rc.status,
+      runCreatedAt: runCreatedAtMap.get(rc.testRunId) || '',
+    })));
+    // Build suite name map from run cases (they have titles)
+    const suiteNameMap = new Map<string, string>();
+    allRunCases.forEach(rc => {
+      if (!suiteNameMap.has(rc.suiteId)) {
+        // Use suite ID as fallback; backend doesn't yet provide suite names on TestRunCase
+        suiteNameMap.set(rc.suiteId, rc.suiteId);
+      }
+    });
+    // Group by suite and count statuses
+    return groupBySuite(deduped, suiteNameMap);
+  }, [allRunCases, linkedRuns]);
 
   if (reportLoading) {
     return (
@@ -165,8 +141,7 @@ const ReportDetail = () => {
     );
   }
 
-  // Linked runs
-  const linkedRunIds: string[] = report.selectedRuns ?? [];
+  // Linked runs (after report is loaded)
   const linkedRuns = linkedRunIds.length > 0
     ? allRuns.filter((r) => linkedRunIds.includes(r.id))
     : allRuns;
