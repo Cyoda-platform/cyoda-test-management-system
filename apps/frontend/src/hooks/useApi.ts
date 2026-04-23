@@ -809,6 +809,28 @@ export function useTestRunCases(projectId: string, runId: string) {
   });
 }
 
+/**
+ * Fetches all TestRunCase records for multiple runs, aggregating results
+ * with suite and title metadata. Useful for reports that need to combine
+ * execution data across multiple test runs.
+ */
+export function useTestRunCasesForRuns(projectId: string, runIds: string[]) {
+  return useQuery({
+    queryKey: ['runCases', projectId, ...runIds],
+    queryFn:  async () => {
+      const allCases: TestRunCase[] = [];
+      for (const runId of runIds) {
+        const result = await testRunCasesApi.list(projectId, runId);
+        allCases.push(...result.data);
+      }
+      return allCases;
+    },
+    enabled:  !!projectId && runIds.length > 0,
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+}
+
 export function useUpdateTestRunCaseStatus() {
   const qc = useQueryClient();
   return useMutation({

@@ -507,6 +507,14 @@ export interface TestRunCase {
   /** Uppercase: 'UNTESTED' | 'PASSED' | 'FAILED' | 'SKIPPED' */
   status: string;
   bugUrl?: string;
+  /** Suite ID from the original test case */
+  suiteId: string;
+  /** Title from the original test case */
+  title: string;
+  /** Optional ISO timestamp when execution started */
+  startedAt?: string;
+  /** Optional ISO timestamp when execution completed */
+  completedAt?: string;
 }
 
 export const testRunCasesApi = {
