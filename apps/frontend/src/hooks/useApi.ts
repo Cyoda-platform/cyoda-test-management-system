@@ -11,7 +11,7 @@
  * is always consistent.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   projectsApi,
   suitesApi,
@@ -810,24 +810,17 @@ export function useTestRunCases(projectId: string, runId: string) {
 }
 
 /**
- * Fetches all TestRunCase records for multiple runs, aggregating results
- * with suite and title metadata. Useful for reports that need to combine
- * execution data across multiple test runs.
+ * Fetches TestRunCase records for multiple runs in parallel.
+ * Returns one query result per runId in the same order.
  */
 export function useTestRunCasesForRuns(projectId: string, runIds: string[]) {
-  return useQuery({
-    queryKey: ['runCases', projectId, ...runIds],
-    queryFn:  async () => {
-      const allCases: TestRunCase[] = [];
-      for (const runId of runIds) {
-        const result = await testRunCasesApi.list(projectId, runId);
-        allCases.push(...result.data);
-      }
-      return allCases;
-    },
-    enabled:  !!projectId && runIds.length > 0,
-    staleTime: 0,
-    refetchOnMount: true,
+  return useQueries({
+    queries: runIds.map(runId => ({
+      queryKey: keys.runCases.all(projectId, runId),
+      queryFn:  () => testRunCasesApi.list(projectId, runId),
+      enabled:  !!projectId && runIds.length > 0,
+      select:   (res: { data: TestRunCase[] }) => res.data,
+    })),
   });
 }
 

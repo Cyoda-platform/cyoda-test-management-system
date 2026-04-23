@@ -2,12 +2,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Download, ExternalLink, Trash2, AlertTriangle, Eye, Pencil, Loader2 } from 'lucide-react';
-import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useReport, useTestRunCasesForRuns } from '@/hooks/useApi';
+import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useSuites, useReport, useTestRunCasesForRuns } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
 import { attachmentsApi } from '@/lib/api';
 import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
 import { useMemo, useState } from 'react';
 import { deduplicateRunCases, groupBySuite } from '@/lib/reportAggregation';
+import type { RunCaseWithMeta } from '@/lib/reportAggregation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -52,17 +53,42 @@ const ReportDetail = () => {
   const navigate = useNavigate();
 
   // Live data
-  const { data: project } = useProject(projectId!);
-  const { data: allRuns  = [] } = useTestRuns(projectId!);
-  const { data: defects  = [] } = useDefects(projectId!);
-
-  // ── Suite Analysis — aggregate run case data ──────────────────────────────────
-  // Load report from API first to get the linked run IDs
+  const { data: project }        = useProject(projectId!);
+  const { data: allRuns  = [] }  = useTestRuns(projectId!);
+  const { data: defects  = [] }  = useDefects(projectId!);
+  const { data: suites   = [] }  = useSuites(projectId!);
   const { data: report, isLoading: reportLoading } = useReport(projectId!, reportId!);
-  const linkedRunIds: string[] = report?.selectedRuns ?? [];
 
-  // Fetch all test run cases for the linked runs
-  const { data: allRunCases = [] } = useTestRunCasesForRuns(projectId!, linkedRunIds);
+  // Resolve run IDs before early returns so hook call count is stable.
+  // Falls back to all project runs when the report has no selectedRuns.
+  const resolvedRunIds = useMemo(() => {
+    if (!report) return [];
+    const ids = report.selectedRuns ?? [];
+    return ids.length > 0 ? ids : allRuns.map(r => r.id);
+  }, [report, allRuns]);
+
+  const runCasesQueries = useTestRunCasesForRuns(projectId!, resolvedRunIds);
+
+  // Flatten all TestRunCase records, attach each run's createdAt so
+  // deduplicateRunCases can pick the latest status per test case.
+  const deduped = useMemo((): RunCaseWithMeta[] => {
+    const runCreatedAtMap = new Map(allRuns.map(r => [r.id, r.createdAt ?? '']));
+    const all: RunCaseWithMeta[] = runCasesQueries.flatMap(q =>
+      (q.data ?? []).map(rc => ({
+        testCaseId:   rc.testCaseId,
+        suiteId:      rc.suiteId ?? '',
+        testRunId:    rc.testRunId,
+        status:       rc.status,
+        runCreatedAt: runCreatedAtMap.get(rc.testRunId) ?? '',
+      }))
+    );
+    return deduplicateRunCases(all);
+  }, [runCasesQueries, allRuns]);
+
+  const suiteData = useMemo(() => {
+    const suiteNameMap = new Map(suites.map(s => [s.id, s.name]));
+    return groupBySuite(deduped, suiteNameMap);
+  }, [deduped, suites]);
 
   const updateDefect = useUpdateDefect();
   const deleteDefect = useDeleteDefect();
@@ -97,34 +123,6 @@ const ReportDetail = () => {
   // Tracks in-flight inline severity/status update
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Suite breakdown — aggregate run case data using reportAggregation utils
-  const suiteData = useMemo(() => {
-    if (!allRunCases.length) return [];
-    // Build run createdAt map to resolve latest status by run timestamp
-    const runCreatedAtMap = new Map<string, string>();
-    linkedRuns.forEach(run => {
-      runCreatedAtMap.set(run.id, run.createdAt || '');
-    });
-    // Deduplicate by testCaseId, keeping the latest run's status
-    const deduped = deduplicateRunCases(allRunCases.map(rc => ({
-      testCaseId: rc.testCaseId,
-      suiteId: rc.suiteId,
-      testRunId: rc.testRunId,
-      status: rc.status,
-      runCreatedAt: runCreatedAtMap.get(rc.testRunId) || '',
-    })));
-    // Build suite name map from run cases (they have titles)
-    const suiteNameMap = new Map<string, string>();
-    allRunCases.forEach(rc => {
-      if (!suiteNameMap.has(rc.suiteId)) {
-        // Use suite ID as fallback; backend doesn't yet provide suite names on TestRunCase
-        suiteNameMap.set(rc.suiteId, rc.suiteId);
-      }
-    });
-    // Group by suite and count statuses
-    return groupBySuite(deduped, suiteNameMap);
-  }, [allRunCases, linkedRuns]);
-
   if (reportLoading) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground">
@@ -141,15 +139,17 @@ const ReportDetail = () => {
     );
   }
 
-  // Linked runs (after report is loaded)
+  // Linked runs — kept for Environment Info section (environment, buildVersion, createdBy)
+  const linkedRunIds: string[] = report.selectedRuns ?? [];
   const linkedRuns = linkedRunIds.length > 0
     ? allRuns.filter((r) => linkedRunIds.includes(r.id))
     : allRuns;
 
-  const totalPassed   = linkedRuns.reduce((s, r) => s + r.passed,   0);
-  const totalFailed   = linkedRuns.reduce((s, r) => s + r.failed,   0);
-  const totalSkipped  = linkedRuns.reduce((s, r) => s + r.skipped,  0);
-  const totalUntested = linkedRuns.reduce((s, r) => s + r.untested, 0);
+  // KPI totals from deduplicated TestRunCase records — no double-counting
+  const totalPassed   = deduped.filter(rc => rc.status === 'PASSED').length;
+  const totalFailed   = deduped.filter(rc => rc.status === 'FAILED').length;
+  const totalSkipped  = deduped.filter(rc => rc.status === 'SKIPPED').length;
+  const totalUntested = deduped.filter(rc => rc.status === 'UNTESTED').length;
   const totalExecuted = totalPassed + totalFailed + totalSkipped;
   const totalCases    = totalPassed + totalFailed + totalSkipped + totalUntested;
   const passRate      = totalExecuted > 0 ? ((totalPassed / totalExecuted) * 100).toFixed(1) : '0.0';
