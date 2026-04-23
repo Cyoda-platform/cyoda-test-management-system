@@ -4,7 +4,6 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PieChart, BarChart3, Bug, Server } from 'lucide-react';
@@ -43,8 +42,6 @@ const CreateReport = () => {
   const [reportType, setReportType] = useState<string>('Summary');
   const [description, setDescription] = useState('');
   const [selectedRuns, setSelectedRuns] = useState<Set<string>>(new Set());
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
   const [sections, setSections] = useState({
     executiveSummary: true,
     suiteAnalytics: true,
@@ -79,8 +76,6 @@ const CreateReport = () => {
           type:                    reportType as 'Summary' | 'Regression' | 'Sprint' | 'Custom',
           description,
           createdBy:               user?.username || 'unknown',
-          dateFrom:                dateFrom || undefined,
-          dateTo:                  dateTo   || undefined,
           selectedRuns:            Array.from(selectedRuns),
           sectionExecutiveSummary: sections.executiveSummary,
           sectionSuiteAnalytics:   sections.suiteAnalytics,
@@ -144,16 +139,6 @@ const CreateReport = () => {
               rows={3}
               className="mt-0 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring resize-none"
             />
-          </div>
-
-          {/* Date Range Filter */}
-          <div>
-            <label className={labelCls}>Date Range</label>
-            <div className="flex gap-3 mt-1.5">
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="flex-1 h-10 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
-              <span className="self-center text-muted-foreground text-sm">to</span>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="flex-1 h-10 bg-white border border-input focus-visible:ring-1 focus-visible:ring-ring" />
-            </div>
           </div>
 
           {/* Test Runs Selection */}
