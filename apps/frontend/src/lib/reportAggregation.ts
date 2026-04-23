@@ -44,10 +44,10 @@ export function groupBySuite(
     if (!rc.suiteId) continue;
     const name = suiteNameMap.get(rc.suiteId) ?? rc.suiteId;
     const entry = bySuite.get(rc.suiteId) ?? { suite: name, passed: 0, failed: 0, skipped: 0, untested: 0 };
-    const st = rc.status.toLowerCase();
-    if (st === 'passed')       entry.passed++;
-    else if (st === 'failed')  entry.failed++;
-    else if (st === 'skipped') entry.skipped++;
+    const st = rc.status.toUpperCase();
+    if (st === 'PASSED')       entry.passed++;
+    else if (st === 'FAILED')  entry.failed++;
+    else if (st === 'SKIPPED') entry.skipped++;
     else                       entry.untested++;
     bySuite.set(rc.suiteId, entry);
   }

@@ -69,21 +69,25 @@ const ReportDetail = () => {
 
   const runCasesQueries = useTestRunCasesForRuns(projectId!, resolvedRunIds);
 
-  // Flatten all TestRunCase records, attach each run's createdAt so
-  // deduplicateRunCases can pick the latest status per test case.
+  // Stable flattened data — React Query's dataUpdatedAt only changes when data changes,
+  // so this memo does not re-run on every render tick.
+  const rawRunCases = useMemo(
+    () => runCasesQueries.flatMap(q => q.data ?? []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [runCasesQueries.map(q => q.dataUpdatedAt).join(), allRuns],
+  );
+
   const deduped = useMemo((): RunCaseWithMeta[] => {
     const runCreatedAtMap = new Map(allRuns.map(r => [r.id, r.createdAt ?? '']));
-    const all: RunCaseWithMeta[] = runCasesQueries.flatMap(q =>
-      (q.data ?? []).map(rc => ({
-        testCaseId:   rc.testCaseId,
-        suiteId:      rc.suiteId ?? '',
-        testRunId:    rc.testRunId,
-        status:       rc.status,
-        runCreatedAt: runCreatedAtMap.get(rc.testRunId) ?? '',
-      }))
-    );
+    const all: RunCaseWithMeta[] = rawRunCases.map(rc => ({
+      testCaseId:   rc.testCaseId,
+      suiteId:      rc.suiteId ?? '',
+      testRunId:    rc.testRunId,
+      status:       rc.status,
+      runCreatedAt: runCreatedAtMap.get(rc.testRunId) ?? '',
+    }));
     return deduplicateRunCases(all);
-  }, [runCasesQueries, allRuns]);
+  }, [rawRunCases, allRuns]);
 
   const suiteData = useMemo(() => {
     const suiteNameMap = new Map(suites.map(s => [s.id, s.name]));

@@ -818,7 +818,7 @@ export function useTestRunCasesForRuns(projectId: string, runIds: string[]) {
     queries: runIds.map(runId => ({
       queryKey: keys.runCases.all(projectId, runId),
       queryFn:  () => testRunCasesApi.list(projectId, runId),
-      enabled:  !!projectId && runIds.length > 0,
+      enabled:  !!projectId && !!runId,
       select:   (res: { data: TestRunCase[] }) => res.data,
     })),
   });
