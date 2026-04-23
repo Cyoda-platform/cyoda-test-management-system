@@ -13,6 +13,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import CaseFormPage from '@/components/CaseFormPage';
 import PriorityBadge from '@/components/PriorityBadge';
+import { RichText } from '@/components/RichText';
+import { PreConditionsList } from '@/components/PreConditionsList';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -1489,7 +1491,7 @@ const Repository = () => {
 
                           {/* ── Display ID (col 3) ── */}
                           <span
-                            className="min-w-[60px] max-w-[88px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-mono tracking-wider text-muted-foreground"
+                            className="min-w-[60px] max-w-[88px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-mono tracking-wider text-purple-600 font-semibold"
                             title={tc.id}
                           >
                             <HighlightText text={getCaseDisplayId(tc)} query={localSearch} />
@@ -1555,11 +1557,12 @@ const Repository = () => {
                     {/* Compact Header: Title + metadata + actions in one block */}
                     <div className="flex items-start justify-between gap-2 mb-4">
                       <div className="min-w-0 flex-1">
-                        <h2 className="text-sm font-semibold text-foreground truncate mb-1.5 flex items-baseline gap-2">
-                          <span className="font-mono text-[10px] text-muted-foreground font-normal shrink-0" title={selectedCase.id}>{getCaseDisplayId(selectedCase)}</span>
-                          <span className="truncate">{selectedCase.title}</span>
+                        <h2 className="text-base font-bold text-foreground truncate mb-2">
+                          {selectedCase.title}
                         </h2>
                         <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
+                          <span title={selectedCase.id} className="text-purple-600 font-semibold">{getCaseDisplayId(selectedCase)}</span>
+                          <span>·</span>
                           <span className="uppercase tracking-widest">{localSuites.find((s) => s.id === selectedCase.suiteId)?.name}</span>
                           <span>·</span>
                           <PriorityBadge priority={selectedCase.priority} />
@@ -1577,28 +1580,30 @@ const Repository = () => {
 
                     {/* Context Block: Description & Pre-conditions */}
                     {(selectedCase.description || selectedCase.preconditions) && (
-                      <div className="mb-4 space-y-3">
-                        {selectedCase.description && (
-                          <div>
-                            <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Description</label>
-                            <p className="text-sm text-foreground leading-relaxed">{selectedCase.description}</p>
-                          </div>
-                        )}
-                        {selectedCase.description && selectedCase.preconditions && (
-                          <div className="border-t border-border/40" />
-                        )}
-                        {selectedCase.preconditions && (
-                          <div>
-                            <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Pre-conditions</label>
-                            <p className="text-sm text-foreground leading-relaxed">{selectedCase.preconditions}</p>
-                          </div>
-                        )}
+                      <div className="mb-6 rounded-md border border-border/60 bg-card p-3">
+                        <div className="space-y-4">
+                          {selectedCase.description && (
+                            <div>
+                              <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Description</label>
+                              <RichText text={selectedCase.description} className="text-sm text-foreground leading-relaxed" />
+                            </div>
+                          )}
+                          {selectedCase.description && selectedCase.preconditions && (
+                            <div className="border-t border-border/40" />
+                          )}
+                          {selectedCase.preconditions && (
+                            <div>
+                              <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Pre-conditions</label>
+                              <PreConditionsList text={selectedCase.preconditions} />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
                     {/* Resources Block: Attachments */}
                     {caseAttachments.length > 0 && (
-                      <div className="mb-4">
+                      <div className="mb-6">
                         <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Attachments</label>
                         <div className="flex flex-wrap gap-1.5">
                           {caseAttachments.map((att) => {
@@ -1627,26 +1632,19 @@ const Repository = () => {
                     {/* Action Block: Test Steps */}
                     {stepsForSelectedCase.length > 0 && (
                       <div className="flex-1 min-h-0 flex flex-col">
-                        <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-1.5">Test Steps</label>
-                        <div className="rounded-md border border-border/60 bg-card overflow-hidden flex-1">
-                          <table className="w-full">
-                            <thead>
-                              <tr className="bg-muted/50">
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-bold text-muted-foreground uppercase tracking-[0.14em] font-mono w-7">#</th>
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-bold text-muted-foreground uppercase tracking-[0.14em] font-mono">Step</th>
-                                <th className="px-2.5 py-1.5 text-left text-[9px] font-bold text-muted-foreground uppercase tracking-[0.14em] font-mono">Expected result</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {stepsForSelectedCase.map((step) => (
-                                <tr key={step.order} className="ghost-border border-t">
-                                  <td className="px-2.5 py-2 text-muted-foreground font-mono text-xs align-baseline">{step.order}</td>
-                                  <td className="px-2.5 py-2 text-foreground text-sm leading-relaxed align-baseline">{step.action}</td>
-                                  <td className="px-2.5 py-2 text-foreground text-sm leading-relaxed align-baseline">{step.expectedResult}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <label className="text-[10px] font-semibold text-muted-foreground uppercase block font-mono tracking-widest mb-3">Test Steps</label>
+                        <div className="space-y-2.5 flex-1">
+                          {stepsForSelectedCase.map((step) => (
+                            <div key={step.order} className="rounded-md border border-border/60 bg-card p-3">
+                              <div className="flex gap-2.5">
+                                <span className="font-mono text-xs font-semibold text-muted-foreground shrink-0 w-4">{step.order}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-semibold text-foreground mb-1">{step.action}</div>
+                                  <div className="text-xs text-muted-foreground italic">Expected: {step.expectedResult}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -1886,7 +1884,7 @@ const Repository = () => {
                               onCheckedChange={() => toggleExportCase(c.id, s.id)}
                             />
                             <Label htmlFor={`exp-case-${c.id}`} className="min-w-0 text-xs text-foreground cursor-pointer truncate">
-                              <span className="text-[10px] font-mono text-muted-foreground mr-1.5">{getCaseDisplayId(c)}</span>
+                              <span className="text-[10px] font-mono text-purple-600 font-semibold mr-1.5">{getCaseDisplayId(c)}</span>
                               {c.title}
                             </Label>
                           </div>
@@ -2161,7 +2159,7 @@ const Repository = () => {
                     </div>
                     {suite.cases.filter(c => selectedCases.has(c.id)).map((tc) => (
                       <div key={tc.id} className="flex items-center gap-2 px-3 py-1.5 pl-6">
-                        <span className="text-[10px] font-mono text-muted-foreground w-12 shrink-0 truncate" title={tc.id}>{getCaseDisplayId(tc)}</span>
+                        <span className="text-[10px] font-mono text-purple-600 font-semibold w-12 shrink-0 truncate" title={tc.id}>{getCaseDisplayId(tc)}</span>
                         <span className="text-xs text-foreground truncate">{tc.title}</span>
                       </div>
                     ))}

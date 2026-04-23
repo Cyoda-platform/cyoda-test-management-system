@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Lock } from 'lucide-react';
-import { listDisplayId } from '@/lib/utils';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -60,18 +58,6 @@ const ProjectModal = ({ open, onClose, onSave, mode, initialName = '', initialDe
               rows={3}
               className="bg-secondary border-0 focus-visible:ring-1 focus-visible:ring-accent/40"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Project ID</Label>
-            <div className="relative">
-              <Input
-                value={mode === 'edit' && projectIndex !== undefined ? listDisplayId('PROJ', projectIndex) : 'PROJ-XXXX'}
-              title={mode === 'edit' ? projectId : undefined}
-                disabled
-                className="bg-secondary pr-10 border-0 font-mono text-xs"
-              />
-              <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
