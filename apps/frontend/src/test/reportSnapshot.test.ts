@@ -71,6 +71,15 @@ describe('computeSnapshotData — stepStatuses override', () => {
     const result = computeSnapshotData(cases, runs, [baseSuite()], []);
     expect(result.totalPassed).toBe(1);
   });
+
+  it('uses stepStatuses: marks SKIPPED if all steps skipped and none untested', () => {
+    const stepStatuses = JSON.stringify({ 'c1::1': 'SKIPPED', 'c1::2': 'SKIPPED' });
+    const cases: TestRunCase[] = [baseCase({ status: 'UNTESTED' })];
+    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses as any })];
+    const result = computeSnapshotData(cases, runs, [baseSuite()], []);
+    expect(result.totalSkipped).toBe(1);
+    expect(result.totalUntested).toBe(0);
+  });
 });
 
 describe('computeSnapshotData — deduplication', () => {

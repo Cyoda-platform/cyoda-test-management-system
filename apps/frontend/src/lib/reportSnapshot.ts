@@ -97,7 +97,7 @@ export function computeSnapshotData(
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
       .map((s, i) => [s.name, i]),
   );
-  const suiteData = rawSuiteData.sort(
+  const suiteData = [...rawSuiteData].sort(
     (a, b) => (suiteOrderMap.get(a.suite) ?? Infinity) - (suiteOrderMap.get(b.suite) ?? Infinity),
   );
 
