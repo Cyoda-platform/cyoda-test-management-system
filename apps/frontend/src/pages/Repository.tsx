@@ -1491,7 +1491,7 @@ const Repository = () => {
 
                           {/* ── Display ID (col 3) ── */}
                           <span
-                            className="min-w-[60px] max-w-[88px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-mono tracking-wider text-purple-600 font-semibold"
+                            className="min-w-[60px] max-w-[88px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-mono tracking-wider text-purple-600"
                             title={tc.id}
                           >
                             <HighlightText text={getCaseDisplayId(tc)} query={localSearch} />
@@ -1561,7 +1561,7 @@ const Repository = () => {
                           {selectedCase.title}
                         </h2>
                         <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
-                          <span title={selectedCase.id} className="text-purple-600 font-semibold">{getCaseDisplayId(selectedCase)}</span>
+                          <span title={selectedCase.id} className="text-purple-600">{getCaseDisplayId(selectedCase)}</span>
                           <span>·</span>
                           <span className="uppercase tracking-widest">{localSuites.find((s) => s.id === selectedCase.suiteId)?.name}</span>
                           <span>·</span>
@@ -1884,7 +1884,7 @@ const Repository = () => {
                               onCheckedChange={() => toggleExportCase(c.id, s.id)}
                             />
                             <Label htmlFor={`exp-case-${c.id}`} className="min-w-0 text-xs text-foreground cursor-pointer truncate">
-                              <span className="text-[10px] font-mono text-purple-600 font-semibold mr-1.5">{getCaseDisplayId(c)}</span>
+                              <span className="text-[10px] font-mono text-purple-600 mr-1.5">{getCaseDisplayId(c)}</span>
                               {c.title}
                             </Label>
                           </div>
@@ -2159,7 +2159,7 @@ const Repository = () => {
                     </div>
                     {suite.cases.filter(c => selectedCases.has(c.id)).map((tc) => (
                       <div key={tc.id} className="flex items-center gap-2 px-3 py-1.5 pl-6">
-                        <span className="text-[10px] font-mono text-purple-600 font-semibold w-12 shrink-0 truncate" title={tc.id}>{getCaseDisplayId(tc)}</span>
+                        <span className="text-[10px] font-mono text-purple-600 w-12 shrink-0 truncate" title={tc.id}>{getCaseDisplayId(tc)}</span>
                         <span className="text-xs text-foreground truncate">{tc.title}</span>
                       </div>
                     ))}

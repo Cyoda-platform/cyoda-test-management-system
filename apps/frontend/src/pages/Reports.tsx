@@ -109,93 +109,71 @@ const Reports = () => {
 
           {/* Table */}
           {!isLoading && !isError && (
-            <div className="bg-card rounded-lg shadow-soft overflow-hidden flex flex-col">
-              {/* Sticky column headers */}
-              <div
-                className="grid bg-slate-200 dark:bg-slate-700 shrink-0"
-                style={{ gridTemplateColumns: '80px 2fr 1fr 1fr 1fr 80px' }}
-              >
-                {['ID', 'Report Name', 'Type', 'Created By', 'Created', 'Actions'].map((label) => (
-                  <div key={label} className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
-                    {label}
-                  </div>
-                ))}
-              </div>
-
-              {/* Empty state */}
-              {sorted.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground text-sm">No reports yet.</div>
-              )}
-
-              {/* Virtual scroll body */}
-              {sorted.length > 0 && (
-                <div
-                  ref={listRef}
-                  className="overflow-auto"
-                  style={{ maxHeight: 'calc(100vh - 240px)' }}
-                >
-                  <div style={{ height: totalSize, position: 'relative' }}>
-                    {virtualItems.map((vi) => {
-                      const r = sorted[vi.index];
-                      return (
-                        <div
-                          key={r.id}
-                          className="grid hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card items-center"
-                          style={{
-                            gridTemplateColumns: '80px 2fr 1fr 1fr 1fr 80px',
-                            position: 'absolute',
-                            top: vi.start,
-                            left: 0,
-                            right: 0,
-                            height: vi.size,
-                          }}
-                        >
-                          <div className="px-5 font-mono text-[10px] text-accent tracking-wider truncate">
-                            {reportDisplayIdMap[r.id] ?? '—'}
-                          </div>
-                          <div className="px-5 font-medium text-foreground min-w-0">
-                            <Link
-                              to={`/projects/${projectId}/reports/${r.id}`}
-                              className="hover:underline truncate block"
+            <div className="bg-card rounded-lg shadow-soft overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-200 dark:bg-slate-700 sticky top-0 z-10">
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">ID</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Report Name</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Type</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created By</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
+                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-12 text-muted-foreground text-sm">No reports yet.</td>
+                    </tr>
+                  ) : (
+                    sorted.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card">
+                        <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={r.id}>
+                          {reportDisplayIdMap[r.id] ?? '—'}
+                        </td>
+                        <td className="px-5 py-3.5 font-medium text-foreground">
+                          <Link
+                            to={`/projects/${projectId}/reports/${r.id}`}
+                            className="hover:underline"
+                          >
+                            {r.name}
+                          </Link>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`${typeBadge[r.type] || 'text-muted-foreground'} text-[10px] font-mono uppercase tracking-widest`}>
+                            {r.type}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-muted-foreground text-sm">
+                          {r.createdBy || '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">
+                          {formatDate(r.createdAt)}
+                        </td>
+                        <td className="px-5 py-3.5 w-px whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              onClick={() => navigate(`/projects/${projectId}/reports/${r.id}`)}
                             >
-                              {r.name}
-                            </Link>
+                              <Eye className="h-4 w-4" strokeWidth={1.5} />
+                            </Button>
+                            <Button
+                              variant="ghost" size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }}
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                            </Button>
                           </div>
-                          <div className="px-5 flex items-center">
-                            <span className={`${typeBadge[r.type] || 'text-muted-foreground'} text-[10px] font-mono uppercase tracking-widest`}>
-                              {r.type}
-                            </span>
-                          </div>
-                          <div className="px-5 text-muted-foreground text-sm truncate">
-                            {r.createdBy || '—'}
-                          </div>
-                          <div className="px-5 text-muted-foreground font-mono text-[10px] tracking-wider">
-                            {formatDate(r.createdAt)}
-                          </div>
-                          <div className="px-3">
-                            <div className="flex items-center gap-0.5">
-                              <Button
-                                variant="ghost" size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                onClick={() => navigate(`/projects/${projectId}/reports/${r.id}`)}
-                              >
-                                <Eye className="h-4 w-4" strokeWidth={1.5} />
-                              </Button>
-                              <Button
-                                variant="ghost" size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                onClick={() => { setDeleteTarget(r); setDeleteOpen(true); }}
-                              >
-                                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

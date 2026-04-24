@@ -31,7 +31,7 @@ const ProgressBar = ({ passed = 0, failed = 0, skipped = 0, untested = 0 }: { pa
   const total = p + f + s + u;
   if (total === 0) return <div className="h-1.5 rounded-full bg-secondary w-full" />;
   return (
-    <div className="flex h-1.5 rounded-full overflow-hidden w-full bg-secondary" title={`Passed: ${p} | Failed: ${f} | Skipped: ${s} | Untested: ${u}`}>
+    <div className="flex h-1.5 rounded-full overflow-hidden w-32 bg-secondary" title={`Passed: ${p} | Failed: ${f} | Skipped: ${s} | Untested: ${u}`}>
       {p > 0 && <div className="bg-success" style={{ width: `${(p / total) * 100}%` }} />}
       {f > 0 && <div className="bg-destructive" style={{ width: `${(f / total) * 100}%` }} />}
       {s > 0 && <div className="bg-warning" style={{ width: `${(s / total) * 100}%` }} />}
@@ -224,7 +224,7 @@ const TestRuns = () => {
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Name</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Environment</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Status</th>
-              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-40">Progress</th>
+              <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-56">Progress</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
               <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
             </tr>
@@ -234,7 +234,7 @@ const TestRuns = () => {
               if (!run) return null;
               return (
               <tr key={run.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50">
-                <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider" title={run.id ?? undefined}>{runDisplayIdMap[run.id] ?? '-'}</td>
+                <td className="px-5 py-3.5 font-mono text-[10px] text-purple-600 tracking-wider" title={run.id ?? undefined}>{runDisplayIdMap[run.id] ?? '-'}</td>
                 <td className="px-5 py-3.5 font-medium text-foreground">
                   <button
                     className="hover:text-primary transition-colors text-left cursor-pointer"
@@ -244,7 +244,7 @@ const TestRuns = () => {
                   </button>
                 </td>
                 <td className="px-5 py-3.5 text-muted-foreground">{run.environment ?? '-'}</td>
-                <td className="px-5 py-3.5"><StatusBadge status={run.status ?? 'initial'} /></td>
+                <td className="px-5 py-3.5 flex items-center"><StatusBadge status={run.status ?? 'initial'} /></td>
                 <td className="px-5 py-3.5">
                   <ProgressBar passed={run.passed ?? 0} failed={run.failed ?? 0} skipped={run.skipped ?? 0} untested={run.untested ?? 0} />
                 </td>

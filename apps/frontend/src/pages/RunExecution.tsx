@@ -1334,7 +1334,7 @@ const RunExecution = () => {
                       >
                         <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${caseStatusIcon[getCaseStatus(item.tc.id)]}`} />
                         <div className="flex-1 text-left min-w-0">
-                          <span className="text-[10px] text-muted-foreground font-mono tracking-wider" title={item.tc.id}>
+                          <span className="text-[10px] text-purple-600 font-mono tracking-wider" title={item.tc.id}>
                             {getCaseSourceLabel(item.tc.id)}
                           </span>
                           <p className="text-xs font-medium text-foreground truncate">{item.tc.title}</p>
@@ -1351,11 +1351,12 @@ const RunExecution = () => {
         {/* Center: Step Execution */}
         <div className="flex-1 overflow-auto p-6 bg-card">
           <div className="mb-5 flex items-start justify-between">
-            <div>
-              <span className="text-[10px] font-mono text-muted-foreground tracking-wider">{getCaseSourceLabel(activeCase.id)}</span>
-              <div className="flex items-center gap-3 mt-1">
-                <h2 className="text-lg font-bold text-foreground tracking-[-0.02em]">{activeCase.title}</h2>
-                <span className={`inline-block px-2.5 py-0.5 text-[10px] uppercase tracking-widest font-mono ${
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold text-foreground tracking-[-0.02em] mb-2">{activeCase.title}</h2>
+              <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                <span className="text-purple-600">{getCaseSourceLabel(activeCase.id)}</span>
+                <span className="text-muted-foreground">·</span>
+                <span className={`${
                   activeCase.priority === 'HIGH' ? 'text-destructive' :
                   activeCase.priority === 'MEDIUM' ? 'text-warning' :
                   'text-muted-foreground'
@@ -1380,13 +1381,13 @@ const RunExecution = () => {
           {/* Case Description and Pre-conditions */}
           <div className="grid grid-cols-2 gap-4 mb-6">
             {activeCase.description && (
-              <div className="bg-muted/40 rounded-lg p-4">
+              <div className="bg-muted/50 rounded-md p-3">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">Description</h3>
                 <p className="text-sm text-foreground">{activeCase.description}</p>
               </div>
             )}
             {activeCase.preconditions && (
-              <div className="bg-muted/40 rounded-lg p-4">
+              <div className="bg-muted/50 rounded-md p-3">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">Pre-conditions</h3>
                 <p className="text-sm text-foreground">{activeCase.preconditions}</p>
               </div>
@@ -1461,92 +1462,83 @@ const RunExecution = () => {
               <span className="text-sm">Loading steps…</span>
             </div>
           ) : steps.length > 0 ? (
-            <div className="bg-card rounded-lg shadow-soft overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="surface-low">
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider w-10">#</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">Step</th>
-                    <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs uppercase tracking-wider">Expected result</th>
-                    <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs uppercase tracking-wider w-56">Status</th>
-                    <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedSteps.map((step, sIdx) => {
-                    const currentStatus =
-                      (stepStatuses[activeCase.id] || [])[sIdx]
-                      ?? persistedStepStatusByKey[`${activeCase.id}::${step.stepNumber}`]
-                      ?? 'untested';
-                    const totalEvidenceCount = stepEvidenceCounts[`${activeCase.id}::${step.stepNumber}`] ?? 0;
-                    const stepDefectCount = createdDefects.filter(
-                      (d) => d.caseId === activeCase.id && d.stepIdx === sIdx,
-                    ).length;
-                    return (
-                      <tr key={sIdx} className="ghost-border border-t">
-                        <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{step.stepNumber}</td>
-                        <td className="px-4 py-3 text-foreground">{step.action}</td>
-                        <td className="px-4 py-3 text-foreground">{step.expectedResult}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-center gap-1">
-                            {(['untested', 'passed', 'failed', 'skipped'] as StepStatus[]).map((s) => (
-                              <button
-                                key={s}
-                                onClick={() => setStepStatus(activeCase.id, step.stepNumber, step.id, s)}
-                                disabled={isReadOnly}
-                                className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-medium uppercase tracking-widest transition-colors ${
-                                  currentStatus === s ? statusColors[s] : statusOutline[s]
-                                } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                              >
-                                {s}
-                              </button>
-                            ))}
+            <div className="space-y-2.5">
+              {sortedSteps.map((step, sIdx) => {
+                const currentStatus =
+                  (stepStatuses[activeCase.id] || [])[sIdx]
+                  ?? persistedStepStatusByKey[`${activeCase.id}::${step.stepNumber}`]
+                  ?? 'untested';
+                const totalEvidenceCount = stepEvidenceCounts[`${activeCase.id}::${step.stepNumber}`] ?? 0;
+                const stepDefectCount = createdDefects.filter(
+                  (d) => d.caseId === activeCase.id && d.stepIdx === sIdx,
+                ).length;
+                return (
+                  <div key={sIdx} className="rounded-md border border-border/60 bg-card p-3">
+                    <div className="flex gap-3 items-start justify-between">
+                      <div className="flex gap-3 flex-1 min-w-0">
+                        <span className="font-mono text-xs font-semibold text-muted-foreground shrink-0 w-4">{step.stepNumber}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-foreground mb-1">{step.action}</div>
+                          <div className="text-xs text-muted-foreground italic">Expected: {step.expectedResult}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center justify-center gap-1">
+                          {(['untested', 'passed', 'failed', 'skipped'] as StepStatus[]).map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setStepStatus(activeCase.id, step.stepNumber, step.id, s)}
+                              disabled={isReadOnly}
+                              className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-medium uppercase tracking-widest transition-colors ${
+                                currentStatus === s ? statusColors[s] : statusOutline[s]
+                              } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {/* Paperclip - Evidence */}
+                          <div className="relative">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-7 w-7 ${totalEvidenceCount > 0 ? 'text-primary' : 'text-muted-foreground'} ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              onClick={() => handleEvidenceClick(activeCase.id, step.stepNumber - 1)}
+                              disabled={isReadOnly}
+                            >
+                              <Paperclip className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            </Button>
+                            {totalEvidenceCount > 0 && (
+                              <span data-testid="step-evidence-badge" className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
+                                {totalEvidenceCount}
+                              </span>
+                            )}
                           </div>
-                        </td>
-                        <td className="px-4 py-3 w-px whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
-                            {/* Paperclip - Evidence */}
-                            <div className="relative">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={`h-7 w-7 ${totalEvidenceCount > 0 ? 'text-primary' : 'text-muted-foreground'} ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                onClick={() => handleEvidenceClick(activeCase.id, step.stepNumber - 1)}
-                                disabled={isReadOnly}
-                              >
-                                <Paperclip className="h-3.5 w-3.5" strokeWidth={1.5} />
-                              </Button>
-                              {totalEvidenceCount > 0 && (
-                                <span data-testid="step-evidence-badge" className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center">
-                                  {totalEvidenceCount}
-                                </span>
-                              )}
-                            </div>
-                            {/* Bug - Defect */}
-                            <div className="relative">
-                              <Button
-                                data-testid="step-bug-btn"
-                                variant="ghost"
-                                size="icon"
-                                className={`h-7 w-7 ${stepDefectCount > 0 ? 'text-destructive' : 'text-muted-foreground hover:text-destructive'} ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                onClick={() => handleBugClick(activeCase.id, step.stepNumber - 1)}
-                                disabled={isReadOnly}
-                              >
-                                <Bug className="h-3.5 w-3.5" strokeWidth={1.5} />
-                              </Button>
-                              {stepDefectCount > 0 && (
-                                <span data-testid="step-defect-badge" className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
-                                  {stepDefectCount}
-                                </span>
-                              )}
-                            </div>
+                          {/* Bug - Defect */}
+                          <div className="relative">
+                            <Button
+                              data-testid="step-bug-btn"
+                              variant="ghost"
+                              size="icon"
+                              className={`h-7 w-7 ${stepDefectCount > 0 ? 'text-destructive' : 'text-muted-foreground hover:text-destructive'} ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              onClick={() => handleBugClick(activeCase.id, step.stepNumber - 1)}
+                              disabled={isReadOnly}
+                            >
+                              <Bug className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            </Button>
+                            {stepDefectCount > 0 && (
+                              <span data-testid="step-defect-badge" className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
+                                {stepDefectCount}
+                              </span>
+                            )}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-12 text-muted-foreground text-sm">No steps defined for this case.</div>
