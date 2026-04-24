@@ -138,6 +138,7 @@ export interface Suite {
   projectId: string;
   name: string;
   description?: string;
+  sortOrder?: number;
 }
 
 export const suitesApi = {
@@ -376,6 +377,8 @@ export interface Report {
   sectionEnvironmentInfo:  boolean;
   createdAt: string;
   updatedAt?: string;
+  /** JSON-serialized ReportSnapshotData. Present on all new reports; absent on legacy. */
+  snapshotData?: string;
 }
 
 export const reportsApi = {
