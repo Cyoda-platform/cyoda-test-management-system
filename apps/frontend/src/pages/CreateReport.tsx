@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
@@ -8,10 +8,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PieChart, BarChart3, Bug, Server } from 'lucide-react';
 import { toast } from 'sonner';
-import { useProject, useTestRuns, useReports, useCreateReport } from '@/hooks/useApi';
+import { useProject, useTestRuns, useReports, useCreateReport, useSuites } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMemo } from 'react';
 import { listDisplayId } from '@/lib/utils';
+import { testRunCasesApi, defectsApi } from '@/lib/api';
+import { computeSnapshotData } from '@/lib/reportSnapshot';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
@@ -30,6 +31,8 @@ const CreateReport = () => {
   const { data: runs = [] }        = useTestRuns(projectId!);
   const { data: existingReports = [] } = useReports(projectId!);
   const createReport               = useCreateReport();
+  const { data: suitesList = [] } = useSuites(projectId!);
+  const [isBuilding, setIsBuilding] = useState(false);
 
   const runDisplayIdMap = useMemo(() => {
     const sorted = [...runs].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
@@ -61,10 +64,42 @@ const CreateReport = () => {
     setSections((prev) => ({ ...prev, [key]: !prev[key as keyof typeof prev] }));
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!reportName.trim()) {
       toast.error('Report name is required');
       return;
+    }
+
+    const effectiveRunIds = selectedRuns.size > 0
+      ? Array.from(selectedRuns)
+      : runs.map(r => r.id);
+
+    setIsBuilding(true);
+    let snapshotDataStr: string | undefined;
+    try {
+      const [runCaseResults, defectResults] = await Promise.all([
+        Promise.all(
+          effectiveRunIds.map(runId =>
+            testRunCasesApi.list(projectId!, runId).catch(() => ({ data: [] })),
+          ),
+        ),
+        Promise.all(
+          effectiveRunIds.map(runId =>
+            defectsApi.listByRun(projectId!, runId).catch(() => ({ data: [] })),
+          ),
+        ),
+      ]);
+
+      const allRunCases = runCaseResults.flatMap(r => r.data ?? []);
+      const allDefects  = defectResults.flatMap(r => r.data ?? []);
+      const effectiveRuns = runs.filter(r => effectiveRunIds.includes(r.id));
+
+      const snapshot = computeSnapshotData(allRunCases, effectiveRuns, suitesList, allDefects);
+      snapshotDataStr = JSON.stringify(snapshot);
+    } catch {
+      // snapshot failed — create report without it rather than blocking the user
+    } finally {
+      setIsBuilding(false);
     }
 
     createReport.mutate(
@@ -72,7 +107,6 @@ const CreateReport = () => {
         projectId: projectId!,
         body: {
           name:                    reportName.trim(),
-          // displayId is assigned server-side (REP-N via ProjectCounterService)
           type:                    reportType as 'Summary' | 'Regression' | 'Sprint' | 'Custom',
           description,
           createdBy:               user?.username || 'unknown',
@@ -81,6 +115,7 @@ const CreateReport = () => {
           sectionSuiteAnalytics:   sections.suiteAnalytics,
           sectionDefectTable:      sections.defectTable,
           sectionEnvironmentInfo:  sections.environmentInfo,
+          ...(snapshotDataStr ? { snapshotData: snapshotDataStr } : {}),
         },
       },
       {
@@ -89,7 +124,7 @@ const CreateReport = () => {
           navigate(`/projects/${projectId}/reports`);
         },
         onError: (e) => toast.error(e.message),
-      }
+      },
     );
   };
 
@@ -195,9 +230,9 @@ const CreateReport = () => {
           size="sm"
           className="bg-primary text-primary-foreground hover:bg-primary/90 border-0 px-6"
           onClick={handleCreate}
-          disabled={createReport.isPending}
+          disabled={isBuilding || createReport.isPending}
         >
-          {createReport.isPending ? 'Creating…' : 'Create Report'}
+          {isBuilding ? 'Формируем отчёт…' : createReport.isPending ? 'Creating…' : 'Create Report'}
         </Button>
       </div>
     </div>
