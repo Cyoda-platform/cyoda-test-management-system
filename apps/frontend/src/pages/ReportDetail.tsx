@@ -1,25 +1,18 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Download, ExternalLink, Trash2, AlertTriangle, Eye, Pencil, Loader2 } from 'lucide-react';
-import { useProject, useTestRuns, useDefects, useUpdateDefect, useDeleteDefect, useSuites, useReport, useTestRunCasesForRuns } from '@/hooks/useApi';
+import { ArrowLeft, Download, ExternalLink } from 'lucide-react';
+import { useProject, useTestRuns, useDefects, useSuites, useReport, useTestRunCasesForRuns } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
-import { attachmentsApi } from '@/lib/api';
-import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
-import { useMemo, useState } from 'react';
+import type { ReportSnapshotData, SnapshotDefect } from '@/lib/reportSnapshot';
+import { formatDate } from '@/lib/utils';
+import { useMemo } from 'react';
 import { deduplicateRunCases, groupBySuite } from '@/lib/reportAggregation';
 import type { RunCaseWithMeta } from '@/lib/reportAggregation';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
 } from 'recharts';
-import { toast } from 'sonner';
-import ViewDefectModal from '@/components/ViewDefectModal';
-import EditDefectModal from '@/components/EditDefectModal';
-
-import type { Report } from '@/lib/api';
 
 const typeBadge: Record<string, string> = {
   Summary: 'text-success',
@@ -59,13 +52,20 @@ const ReportDetail = () => {
   const { data: suites   = [] }  = useSuites(projectId!);
   const { data: report, isLoading: reportLoading } = useReport(projectId!, reportId!);
 
+  const parsedSnapshot = useMemo((): ReportSnapshotData | null => {
+    if (!report?.snapshotData) return null;
+    try { return JSON.parse(report.snapshotData) as ReportSnapshotData; }
+    catch { return null; }
+  }, [report?.snapshotData]);
+
   // Resolve run IDs before early returns so hook call count is stable.
   // Falls back to all project runs when the report has no selectedRuns.
   const resolvedRunIds = useMemo(() => {
+    if (parsedSnapshot) return [];          // snapshot present — no live fetch needed
     if (!report) return [];
     const ids = report.selectedRuns ?? [];
     return ids.length > 0 ? ids : allRuns.map(r => r.id);
-  }, [report, allRuns]);
+  }, [parsedSnapshot, report, allRuns]);
 
   const runCasesQueries = useTestRunCasesForRuns(projectId!, resolvedRunIds);
 
@@ -77,55 +77,72 @@ const ReportDetail = () => {
     [runCasesQueries.map(q => q.dataUpdatedAt).join(), allRuns],
   );
 
-  const deduped = useMemo((): RunCaseWithMeta[] => {
-    const runCreatedAtMap = new Map(allRuns.map(r => [r.id, r.createdAt ?? '']));
-    const all: RunCaseWithMeta[] = rawRunCases.map(rc => ({
-      testCaseId:   rc.testCaseId,
-      suiteId:      rc.suiteId ?? '',
-      testRunId:    rc.testRunId,
-      status:       rc.status,
-      runCreatedAt: runCreatedAtMap.get(rc.testRunId) ?? '',
-    }));
-    return deduplicateRunCases(all);
-  }, [rawRunCases, allRuns]);
-
-  const suiteData = useMemo(() => {
-    const suiteNameMap = new Map(suites.map(s => [s.id, s.name]));
-    return groupBySuite(deduped, suiteNameMap);
-  }, [deduped, suites]);
-
-  const updateDefect = useUpdateDefect();
-  const deleteDefect = useDeleteDefect();
-
-  // Stable display-ID maps
-  const defectDisplayIdMap = useMemo(() => {
-    const sorted = [...defects].sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
-    const map: Record<string, string> = {};
-    sorted.forEach((d, i) => { map[d.id] = d.displayId || listDisplayId('DEF', i); });
-    return map;
-  }, [defects]);
-
-  const runDisplayIdMap = useMemo(() => {
-    const sorted = [...allRuns].filter(Boolean).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-    const map: Record<string, string> = {};
-    sorted.forEach((r, i) => { map[r.id] = r.displayId || listDisplayId('TR', i); });
+  // Parse each run's flat step-status map (caseId::stepNumber → STATUS).
+  // run.stepStatuses is the ground truth — it is saved on every step click and is
+  // more reliable than TestRunCase.status, which can lag if the SnapshotProcessor
+  // hadn't finished creating TestRunCase records when the user first clicked steps.
+  const runStepStatusMap = useMemo(() => {
+    const map = new Map<string, Record<string, string>>();
+    allRuns.forEach(run => {
+      if (!run.stepStatuses) return;
+      try {
+        const parsed: Record<string, string> =
+          typeof run.stepStatuses === 'string'
+            ? JSON.parse(run.stepStatuses as unknown as string)
+            : (run.stepStatuses as unknown as Record<string, string>);
+        if (Object.keys(parsed).length > 0) map.set(run.id, parsed);
+      } catch { /* ignore malformed JSON */ }
+    });
     return map;
   }, [allRuns]);
 
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; displayId: string } | null>(null);
+  const deduped = useMemo((): RunCaseWithMeta[] => {
+    const runCreatedAtMap = new Map(allRuns.map(r => [r.id, r.createdAt ?? '']));
+    const all: RunCaseWithMeta[] = rawRunCases.map(rc => {
+      // Derive status from the run's flat step map when available — this is the
+      // same source the run-page progress bar uses, so Suite Analysis now agrees.
+      const stepMap = runStepStatusMap.get(rc.testRunId);
+      let status = rc.status;
+      if (stepMap) {
+        const prefix = `${rc.testCaseId}::`;
+        const caseSteps = Object.entries(stepMap)
+          .filter(([k]) => k.startsWith(prefix))
+          .map(([, v]) => v.toLowerCase());
+        if (caseSteps.length > 0) {
+          if (caseSteps.some(s => s === 'failed'))
+            status = 'FAILED';
+          else if (caseSteps.every(s => s === 'passed'))
+            status = 'PASSED';
+          else if (caseSteps.some(s => s === 'skipped') && !caseSteps.some(s => s === 'untested'))
+            status = 'SKIPPED';
+          else
+            status = 'UNTESTED';
+        }
+      }
+      return {
+        testCaseId:   rc.testCaseId,
+        suiteId:      rc.suiteId ?? '',
+        testRunId:    rc.testRunId,
+        status,
+        runCreatedAt: runCreatedAtMap.get(rc.testRunId) ?? '',
+      };
+    });
+    return deduplicateRunCases(all);
+  }, [rawRunCases, allRuns, runStepStatusMap]);
 
-  // View modal
-  const [viewOpen, setViewOpen] = useState(false);
-  const [viewTarget, setViewTarget] = useState<Defect | null>(null);
-  const [viewAttachments, setViewAttachments] = useState<any[]>([]);
-
-  // Edit modal
-  const [editOpen, setEditOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Defect | null>(null);
-  const [editAttachments, setEditAttachments] = useState<any[]>([]);
-
-  // Tracks in-flight inline severity/status update
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const suiteData = useMemo(() => {
+    if (parsedSnapshot?.suiteData) return parsedSnapshot.suiteData;
+    const suiteNameMap = new Map(suites.map(s => [s.id, s.name]));
+    const data = groupBySuite(deduped, suiteNameMap);
+    const suiteOrderMap = new Map(
+      [...suites]
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .map((s, i) => [s.name, i]),
+    );
+    return data.sort(
+      (a, b) => (suiteOrderMap.get(a.suite) ?? Infinity) - (suiteOrderMap.get(b.suite) ?? Infinity),
+    );
+  }, [parsedSnapshot, deduped, suites]);
 
   if (reportLoading) {
     return (
@@ -150,16 +167,17 @@ const ReportDetail = () => {
     : allRuns;
 
   // KPI totals from deduplicated TestRunCase records — no double-counting
-  const totalPassed   = deduped.filter(rc => rc.status === 'PASSED').length;
-  const totalFailed   = deduped.filter(rc => rc.status === 'FAILED').length;
-  const totalSkipped  = deduped.filter(rc => rc.status === 'SKIPPED').length;
-  const totalUntested = deduped.filter(rc => rc.status === 'UNTESTED').length;
+  // Falls back to snapshot values when present
+  const totalPassed   = parsedSnapshot?.totalPassed   ?? deduped.filter(rc => rc.status === 'PASSED').length;
+  const totalFailed   = parsedSnapshot?.totalFailed   ?? deduped.filter(rc => rc.status === 'FAILED').length;
+  const totalSkipped  = parsedSnapshot?.totalSkipped  ?? deduped.filter(rc => rc.status === 'SKIPPED').length;
+  const totalUntested = parsedSnapshot?.totalUntested ?? deduped.filter(rc => rc.status === 'UNTESTED').length;
   const totalExecuted = totalPassed + totalFailed + totalSkipped;
   const totalCases    = totalPassed + totalFailed + totalSkipped + totalUntested;
   const passRate      = totalExecuted > 0 ? ((totalPassed / totalExecuted) * 100).toFixed(1) : '0.0';
   const executionProgress = totalCases > 0 ? (((totalCases - totalUntested) / totalCases) * 100) : 0;
   const remainingScope    = totalCases > 0 ? ((totalUntested / totalCases) * 100) : 0;
-  const totalDefects      = defects.length;
+  const totalDefects      = (parsedSnapshot?.defects ?? defects).length;
 
   const pieData = [
     { name: 'Passed',   value: totalPassed,   color: COLORS.passed   },
@@ -167,103 +185,6 @@ const ReportDetail = () => {
     { name: 'Skipped',  value: totalSkipped,  color: COLORS.skipped  },
     { name: 'Untested', value: totalUntested, color: COLORS.untested },
   ].filter((d) => d.value > 0);
-
-  const buildDefectUpdateBody = (d: Defect, overrides: Partial<Defect>): Partial<Defect> => ({
-    title:       d.title,
-    description: d.description,
-    severity:    d.severity,
-    status:      d.status,
-    source:      d.source ?? '',
-    link:        d.link ?? '',
-    ...(d.createdAt ? { createdAt: d.createdAt } : {}),
-    ...overrides,
-  });
-
-  const handleSeverityChange = (defectId: string, newSeverity: string) => {
-    const d = defects.find((x) => x.id === defectId);
-    if (!d || updatingId) return;
-    setUpdatingId(defectId);
-    updateDefect.mutate(
-      { projectId: projectId!, id: defectId, body: buildDefectUpdateBody(d, { severity: newSeverity as Defect['severity'] }) },
-      {
-        onSuccess: () => toast.success(`Severity updated to ${newSeverity}`),
-        onError:   (e) => toast.error(e.message),
-        onSettled: () => setUpdatingId(null),
-      }
-    );
-  };
-
-  const handleStatusChange = (defectId: string, newStatus: string) => {
-    const d = defects.find((x) => x.id === defectId);
-    if (!d || updatingId) return;
-    setUpdatingId(defectId);
-    updateDefect.mutate(
-      { projectId: projectId!, id: defectId, body: buildDefectUpdateBody(d, { status: newStatus as Defect['status'] }) },
-      {
-        onSuccess: () => toast.success(`Status updated to ${newStatus}`),
-        onError:   (e) => toast.error(e.message),
-        onSettled: () => setUpdatingId(null),
-      }
-    );
-  };
-
-  const handleDeleteDefect = () => {
-    if (!deleteTarget) return;
-    deleteDefect.mutate(
-      { projectId: projectId!, id: deleteTarget.id },
-      {
-        onSuccess: () => {
-          toast.success('Defect deleted');
-          setDeleteTarget(null);
-        },
-        onError: (e) => toast.error(e.message),
-      }
-    );
-  };
-
-  const openView = (d: Defect) => {
-    setViewTarget(d);
-    setViewAttachments([]);
-    attachmentsApi.listByDefect(projectId!, d.id)
-      .then(atts => setViewAttachments((atts || []).map((a: any) => ({ id: a.id, name: a.fileName, size: a.fileSize, type: a.fileType ?? '' }))))
-      .catch(() => setViewAttachments([]));
-    setViewOpen(true);
-  };
-
-  const openEdit = (d: Defect) => {
-    setEditTarget({ ...d });
-    setEditAttachments([]);
-    attachmentsApi.listByDefect(projectId!, d.id)
-      .then(atts => setEditAttachments((atts || []).map((a: any) => ({ id: a.id, name: a.fileName, size: a.fileSize, type: a.fileType ?? '' }))))
-      .catch(() => setEditAttachments([]));
-    setEditOpen(true);
-  };
-
-  const handleEditDefectSave = async (updatedDefect: Defect, newFiles: File[], removedAttachmentIds: string[]) => {
-    if (!projectId) return;
-    try {
-      await new Promise<void>((resolve, reject) => {
-        updateDefect.mutate(
-          { projectId: projectId!, id: updatedDefect.id, body: buildDefectUpdateBody(updatedDefect, {}) },
-          { onSuccess: () => resolve(), onError: (e) => reject(e) }
-        );
-      });
-      for (const file of newFiles) {
-        try { await attachmentsApi.upload(projectId!, file, undefined, updatedDefect.id, 'DEFECT'); }
-        catch { toast.warning(`Failed to upload ${file.name}`); }
-      }
-      for (const attachmentId of removedAttachmentIds) {
-        try { await attachmentsApi.delete(projectId!, attachmentId); }
-        catch { toast.warning('Failed to delete attachment'); }
-      }
-      toast.success('Defect updated');
-      setEditOpen(false);
-      setEditTarget(null);
-      setEditAttachments([]);
-    } catch (error: any) {
-      toast.error(error?.message || 'Failed to update defect');
-    }
-  };
 
   const sortedDefects = [...defects].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
@@ -492,154 +413,70 @@ const ReportDetail = () => {
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Status</th>
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Source</th>
                     <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Created</th>
-                    <th className="text-left px-5 py-3 font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider w-px whitespace-nowrap">Actions</th>
+                    <th className="px-5 py-3 w-px"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedDefects.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="text-center py-12 text-muted-foreground text-sm">No defects linked to this report</td>
-                    </tr>
-                  ) : (
-                    sortedDefects.map((d) => (
+                  {(() => {
+                    const rows: Array<Defect | SnapshotDefect> =
+                      parsedSnapshot?.defects ?? sortedDefects;
+
+                    if (rows.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={6} className="text-center py-12 text-muted-foreground text-sm">
+                            No defects linked to this report
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return rows.map((d) => (
                       <tr
                         key={d.id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"
-                        onClick={() => openView(d)}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card"
                       >
-                        <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>{defectDisplayIdMap[d.id] ?? '-'}</td>
-                        <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
-                        <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
-                          {updatingId === d.id ? (
-                            <span className="inline-flex items-center gap-1 h-7 px-2.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                              <Loader2 className="h-3 w-3 animate-spin" /> {d.severity}
-                            </span>
-                          ) : (
-                            <Select value={d.severity} onValueChange={(val) => handleSeverityChange(d.id, val)} disabled={!!updatingId}>
-                              <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${defectSeverityStyles[d.severity] || ''}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Critical">Critical</SelectItem>
-                                <SelectItem value="Major">Major</SelectItem>
-                                <SelectItem value="Minor">Minor</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
+                        <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>
+                          {d.displayId ?? '-'}
                         </td>
-                        <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
-                          {updatingId === d.id ? (
-                            <span className="inline-flex items-center gap-1 h-7 px-2.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                              <Loader2 className="h-3 w-3 animate-spin" /> {d.status}
-                            </span>
-                          ) : (
-                            <Select value={d.status} onValueChange={(val) => handleStatusChange(d.id, val)} disabled={!!updatingId}>
-                              <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${defectStatusStyles[d.status] || ''}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Open">Open</SelectItem>
-                                <SelectItem value="In Progress">In Progress</SelectItem>
-                                <SelectItem value="Fixed">Fixed</SelectItem>
-                                <SelectItem value="Closed">Closed</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
+                        <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
+                        <td className="px-5 py-3.5">
+                          <span className={`text-[10px] font-mono uppercase tracking-widest ${defectSeverityStyles[d.severity] || ''}`}>
+                            {d.severity}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`text-[10px] font-mono uppercase tracking-widest ${defectStatusStyles[d.status] || ''}`}>
+                            {d.status}
+                          </span>
                         </td>
                         <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">
-                          {(() => {
-                            const parts: string[] = [];
-                            if (d.testRunId) {
-                              const trLabel = runDisplayIdMap[d.testRunId];
-                              if (trLabel) parts.push(trLabel);
-                            }
-                            if (d.source && !isUuid(d.source)) parts.push(d.source);
-                            return parts.length > 0 ? parts.join(' · ') : '—';
-                          })()}
+                          {'source' in d ? (d.source || '—') : '—'}
                         </td>
-                        <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(d.createdAt)}</td>
-                        <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => openView(d)}
-                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">
+                          {formatDate(d.createdAt)}
+                        </td>
+                        <td className="px-5 py-3.5 w-px whitespace-nowrap">
+                          {d.link && (
+                            <a
+                              href={d.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors inline-flex"
                             >
-                              <Eye className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            </button>
-                            <button
-                              onClick={() => openEdit(d)}
-                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            </button>
-                            <button
-                              onClick={() => setDeleteTarget({ id: d.id, displayId: defectDisplayIdMap[d.id] ?? d.id })}
-                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            </button>
-                            {d.link && (
-                              <a
-                                href={d.link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
-                              </a>
-                            )}
-                          </div>
+                              <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            </a>
+                          )}
                         </td>
                       </tr>
-                    ))
-                  )}
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>
           )}
         </div>
       </div>
-
-      {/* View Defect Modal */}
-      <ViewDefectModal
-        open={viewOpen}
-        onOpenChange={setViewOpen}
-        defect={viewTarget}
-        displayId={viewTarget ? defectDisplayIdMap[viewTarget.id] : undefined}
-        existingAttachments={viewAttachments}
-        formatDate={formatDate}
-        projectId={projectId}
-      />
-
-      {/* Edit Defect Modal */}
-      <EditDefectModal
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        defect={editTarget}
-        displayId={editTarget ? defectDisplayIdMap[editTarget.id] : undefined}
-        existingAttachments={editAttachments}
-        onSave={handleEditDefectSave}
-        projectId={projectId}
-      />
-
-      {/* Delete Confirmation */}
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
-        <DialogContent className="sm:max-w-sm bg-card">
-          <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-3">
-              <AlertTriangle className="h-6 w-6 text-destructive shrink-0" strokeWidth={1.5} />
-              Remove Defect
-            </DialogTitle>
-            <DialogDescription className="text-sm text-foreground mt-3">
-              Are you sure you want to delete <span className="font-bold font-mono text-purple-600 dark:text-purple-400">{deleteTarget?.displayId}</span>? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-6">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteDefect}>Remove</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
     </div>
   );
