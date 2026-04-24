@@ -424,7 +424,7 @@ const ReportDetail = () => {
                     if (rows.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={6} className="text-center py-12 text-muted-foreground text-sm">
+                          <td colSpan={7} className="text-center py-12 text-muted-foreground text-sm">
                             No defects linked to this report
                           </td>
                         </tr>
