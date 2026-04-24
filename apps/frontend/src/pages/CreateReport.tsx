@@ -77,6 +77,8 @@ const CreateReport = () => {
     setIsBuilding(true);
     let snapshotDataStr: string | undefined;
     try {
+      // Fetches up to 500 cases and 200 defects per run (API defaults).
+      // Snapshot is silently truncated for runs that exceed these limits.
       const [runCaseResults, defectResults] = await Promise.all([
         Promise.all(
           effectiveRunIds.map(runId =>
