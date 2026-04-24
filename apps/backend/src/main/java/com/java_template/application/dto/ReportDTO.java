@@ -1,6 +1,7 @@
 package com.java_template.application.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.java_template.common.workflow.CyodaEntity;
 import com.java_template.common.workflow.OperationSpecification;
 import lombok.AllArgsConstructor;
@@ -64,6 +65,13 @@ public class ReportDTO implements CyodaEntity {
 
     private String createdAt;
     private String updatedAt;
+
+    /**
+     * JSON-serialized point-in-time snapshot of KPIs, suite breakdown, and defects.
+     * Computed by the frontend at report creation time. Empty for legacy reports.
+     */
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    private String snapshotData;
 
     @Override
     @JsonIgnore
