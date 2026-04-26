@@ -14,5 +14,6 @@
   "sectionDefectTable": true,
   "sectionEnvironmentInfo": true,
   "createdAt": "2026-03-20T10:00:00",
-  "updatedAt": "2026-03-20T10:00:00"
+  "updatedAt": "2026-03-20T10:00:00",
+  "snapshotData": "{\"totalPassed\":1,\"totalFailed\":0,\"totalSkipped\":0,\"totalUntested\":0,\"suiteData\":[],\"defects\":[]}"
 }
