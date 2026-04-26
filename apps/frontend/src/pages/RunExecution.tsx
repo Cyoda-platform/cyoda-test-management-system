@@ -597,16 +597,22 @@ const RunExecution = () => {
   }, [run?.stepStatuses]);
 
   /**
-   * Compute run-level aggregate counts from a step-status map.
-   * Uses the provided cases list so it works inside cleanup refs too.
+   * Compute run-level aggregate counts from the flat step-status map
+   * (key: "caseId::stepNumber", value: uppercase status string).
+   * This is the canonical source — it is seeded from run.stepStatuses on load
+   * and accumulated on every click, so it always reflects ALL sessions, not
+   * just cases visited in the current session.
    */
-  const computeAggregates = (
-    statusMap: Record<string, StepStatus[]>,
+  const computeAggregatesFromFlatMap = (
+    flatMap: Record<string, string>,
     cases: typeof allCases,
   ) => {
     let passed = 0, failed = 0, skipped = 0, untested = 0;
     cases.forEach((tc) => {
-      const s = computeCaseStatus(statusMap[tc.id] || []);
+      const caseStepStatuses = Object.entries(flatMap)
+        .filter(([key]) => key.startsWith(`${tc.id}::`))
+        .map(([, value]) => normalizeStepStatus(value));
+      const s = computeCaseStatus(caseStepStatuses);
       if (s === 'passed')       passed++;
       else if (s === 'failed')  failed++;
       else if (s === 'skipped') skipped++;
@@ -667,17 +673,18 @@ const RunExecution = () => {
   // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
     return () => {
-      const r       = runRef.current;
-      const cases   = allCasesRef.current;
-      const statMap = stepStatusesRef.current;
+      const r     = runRef.current;
+      const cases = allCasesRef.current;
 
       // Always invalidate so the list re-fetches when the user navigates back
       qc.invalidateQueries({ queryKey: keys.runs.all(projectId!) });
 
       if (!r || !runId || !projectId || r.status === 'completed') return;
 
-      // Derive aggregate counts from local step-status state
-      const agg = computeAggregates(statMap, cases);
+      // Use the flat accumulated map — seeded from run.stepStatuses on load and
+      // updated on every click — so we get correct counts for ALL cases, not just
+      // those visited in the current session (stepStatusesRef only covers visited cases).
+      const agg = computeAggregatesFromFlatMap(fullStepStatusesRef.current, cases);
       const hasProgress = agg.passed + agg.failed + agg.skipped > 0;
 
       // Fire-and-forget: direct API call is safer than a mutation hook in cleanup.
@@ -803,8 +810,9 @@ const RunExecution = () => {
     // testRunExists(id) check, which is the source of the console error.
     const r = runRef.current;
     if (r && runId && isUuid(runId)) {
-      const newAllStatuses = { ...stepStatusesRef.current, [caseId]: updated };
-      const agg = computeAggregates(newAllStatuses, allCasesRef.current);
+      // fullStepStatusesRef is already updated above — use it so counts include
+      // ALL cases from all sessions, not only those visited this session.
+      const agg = computeAggregatesFromFlatMap(fullStepStatusesRef.current, allCasesRef.current);
 
       updateRun.mutate({
         projectId: projectId!,
