@@ -222,6 +222,8 @@ const RunExecution = () => {
    * Using `runCases` as the primary fallback prevents the "all project cases appear"
    * regression that occurred when a run was created without caseIds being stored.
    */
+  const caseIdsKey = run?.caseIds?.join(',') ?? '';
+
   const filteredSuitesWithCases = useMemo(() => {
     // Build the authoritative set of case UUIDs for this run.
     let runCaseIdSet: Set<string> | null = null;
@@ -247,7 +249,7 @@ const RunExecution = () => {
 
     // Last resort: show everything (backward compatibility / data not yet loaded).
     return suitesWithCases;
-  }, [getRunCaseTestCaseId, suitesWithCases, run?.caseIds, runCases]);
+  }, [getRunCaseTestCaseId, suitesWithCases, caseIdsKey, runCases.length]);
 
   // Flat list of cases in this run (for indexed access)
   const allCases = useMemo(() =>
