@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Plus, Eye, Pencil, Trash2, ExternalLink, Search, Lock, Upload, FileText, Image, File, X, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -48,7 +48,7 @@ interface DefectAttachmentsListProps {
   defectId: string;
 }
 
-const DefectAttachmentsList = ({ projectId, defectId }: DefectAttachmentsListProps) => {
+const DefectAttachmentsList = React.memo(({ projectId, defectId }: DefectAttachmentsListProps) => {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -82,7 +82,7 @@ const DefectAttachmentsList = ({ projectId, defectId }: DefectAttachmentsListPro
       })}
     </div>
   );
-};
+});
 
 const Defects = () => {
   const { projectId } = useParams<{ projectId: string }>();

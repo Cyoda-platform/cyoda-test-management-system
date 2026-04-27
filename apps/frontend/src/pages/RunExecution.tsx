@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { useVirtualList } from '@/hooks/useVirtualList';
@@ -136,7 +136,7 @@ function getFileIcon(type: string) {
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
-const DefectAttachmentsList = ({ projectId, defectId }: { projectId: string; defectId: string }) => {
+const DefectAttachmentsList = React.memo(({ projectId, defectId }: { projectId: string; defectId: string }) => {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -165,7 +165,7 @@ const DefectAttachmentsList = ({ projectId, defectId }: { projectId: string; def
       })}
     </div>
   );
-};
+});
 
 const RunExecution = () => {
   const { projectId, runId } = useParams<{ projectId: string; runId: string }>();
