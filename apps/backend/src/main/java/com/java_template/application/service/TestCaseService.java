@@ -21,6 +21,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -341,16 +342,22 @@ public class TestCaseService {
                 entityService.update(saved.getId(), saved, null);
 
                 if (item.getSteps() != null && !item.getSteps().isEmpty()) {
-                    int stepNum = 1;
-                    for (BatchImportCaseDTO.StepDTO s : item.getSteps()) {
-                        TestStepDTO step = new TestStepDTO();
-                        step.setTestCaseId(saved.getId());
-                        step.setStepNumber(s.getStepNumber() != null ? s.getStepNumber() : stepNum);
-                        step.setAction(s.getAction() != null ? s.getAction() : "");
-                        step.setExpectedResult(s.getExpectedResult() != null ? s.getExpectedResult() : "");
-                        testStepService.createTestStep(step);
-                        stepNum++;
+                    // Assign step numbers sequentially first (deterministic), then create in parallel
+                    List<BatchImportCaseDTO.StepDTO> steps = item.getSteps();
+                    List<CompletableFuture<Void>> stepFutures = new ArrayList<>(steps.size());
+                    for (int si = 0; si < steps.size(); si++) {
+                        final BatchImportCaseDTO.StepDTO s = steps.get(si);
+                        final int stepNum = s.getStepNumber() != null ? s.getStepNumber() : si + 1;
+                        stepFutures.add(CompletableFuture.runAsync(() -> {
+                            TestStepDTO step = new TestStepDTO();
+                            step.setTestCaseId(saved.getId());
+                            step.setStepNumber(stepNum);
+                            step.setAction(s.getAction() != null ? s.getAction() : "");
+                            step.setExpectedResult(s.getExpectedResult() != null ? s.getExpectedResult() : "");
+                            testStepService.createTestStep(step);
+                        }));
                     }
+                    CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
                 }
                 results[idx] = saved;
             }));

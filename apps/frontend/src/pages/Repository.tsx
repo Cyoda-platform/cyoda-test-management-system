@@ -801,35 +801,33 @@ const Repository = () => {
         return results;
       }
 
-      // ── 1. Persist NEW cases (suite-aware) ──
-      for (const group of toCreate as ImportSuiteGroup[]) {
-        if (group.cases.length === 0) continue;
+      // ── 1. Persist NEW cases (suite-aware, parallel across suite groups) ──
+      await pooledRun(
+        (toCreate as ImportSuiteGroup[])
+          .filter(g => g.cases.length > 0)
+          .map(group => async () => {
+            let suiteId = group.suiteId ?? '';
+            if (group.isNewSuite || !suiteId) {
+              const created = await suitesApi.create(projectId, { name: group.suiteName });
+              suiteId = created.id;
+            }
+            affectedSuiteIds.add(suiteId);
 
-        // Create the suite first if it doesn't exist yet
-        let suiteId = group.suiteId ?? '';
-        if (group.isNewSuite || !suiteId) {
-          const created = await suitesApi.create(projectId, { name: group.suiteName });
-          suiteId = created.id;
-        }
-        affectedSuiteIds.add(suiteId);
-
-        // ── Batch-create all cases in this group in ONE HTTP call ──
-        // The backend reserves all display IDs in a single counter round-trip,
-        // then creates each case + its steps before returning.
-        const batchPayload = group.cases.map(tc => ({
-          title:         tc.title,
-          priority:      tc.priority,
-          description:   tc.description,
-          preconditions: tc.preconditions,
-          steps: (tc.steps || []).map(s => ({
-            stepNumber:     s.order || 1,
-            action:         s.action,
-            expectedResult: s.expectedResult,
-          })),
-        }));
-        await testCasesApi.batchCreate(projectId, suiteId, batchPayload);
-        tick(group.cases.length);
-      }
+            const batchPayload = group.cases.map(tc => ({
+              title:         tc.title,
+              priority:      tc.priority,
+              description:   tc.description,
+              preconditions: tc.preconditions,
+              steps: (tc.steps || []).map(s => ({
+                stepNumber:     s.order || 1,
+                action:         s.action,
+                expectedResult: s.expectedResult,
+              })),
+            }));
+            await testCasesApi.batchCreate(projectId, suiteId, batchPayload);
+            tick(group.cases.length);
+          }),
+      );
 
       // ── 2. Persist OVERWRITE cases ──
       // Each overwrite: PUT the case fields + replace its steps
