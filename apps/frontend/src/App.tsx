@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -7,16 +8,17 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Login from "./pages/Login";
 import Projects from "./pages/Projects";
 import ProjectLayout from "./components/ProjectLayout";
-import Repository from "./pages/Repository";
 import TestRuns from "./pages/TestRuns";
 import CreateTestRun from "./pages/CreateTestRun";
-import RunExecution from "./pages/RunExecution";
-import Defects from "./pages/Defects";
-import Attachments from "./pages/Attachments";
-import Reports from "./pages/Reports";
-import CreateReport from "./pages/CreateReport";
-import ReportDetail from "./pages/ReportDetail";
 import NotFound from "./pages/NotFound";
+
+const Repository   = lazy(() => import("./pages/Repository"));
+const RunExecution = lazy(() => import("./pages/RunExecution"));
+const Defects      = lazy(() => import("./pages/Defects"));
+const Attachments  = lazy(() => import("./pages/Attachments"));
+const Reports      = lazy(() => import("./pages/Reports"));
+const CreateReport = lazy(() => import("./pages/CreateReport"));
+const ReportDetail = lazy(() => import("./pages/ReportDetail"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,6 +28,12 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <span className="text-muted-foreground text-sm">Loading…</span>
+  </div>
+);
 
 /** Redirects to login if the user is not authenticated. */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -64,15 +72,29 @@ const App = () => (
               <ProtectedRoute><ProjectLayout /></ProtectedRoute>
             }>
               <Route index element={<Navigate to="repository" replace />} />
-              <Route path="repository"      element={<Repository />} />
+              <Route path="repository" element={
+                <Suspense fallback={<PageLoader />}><Repository /></Suspense>
+              } />
               <Route path="runs"            element={<TestRuns />} />
               <Route path="runs/create"     element={<CreateTestRun />} />
-              <Route path="runs/:runId"     element={<RunExecution />} />
-              <Route path="defects"         element={<Defects />} />
-              <Route path="attachments"     element={<Attachments />} />
-              <Route path="reports"         element={<Reports />} />
-              <Route path="reports/create"  element={<CreateReport />} />
-              <Route path="reports/:reportId" element={<ReportDetail />} />
+              <Route path="runs/:runId" element={
+                <Suspense fallback={<PageLoader />}><RunExecution /></Suspense>
+              } />
+              <Route path="defects" element={
+                <Suspense fallback={<PageLoader />}><Defects /></Suspense>
+              } />
+              <Route path="attachments" element={
+                <Suspense fallback={<PageLoader />}><Attachments /></Suspense>
+              } />
+              <Route path="reports" element={
+                <Suspense fallback={<PageLoader />}><Reports /></Suspense>
+              } />
+              <Route path="reports/create" element={
+                <Suspense fallback={<PageLoader />}><CreateReport /></Suspense>
+              } />
+              <Route path="reports/:reportId" element={
+                <Suspense fallback={<PageLoader />}><ReportDetail /></Suspense>
+              } />
             </Route>
 
             <Route path="*" element={<NotFound />} />
