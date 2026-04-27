@@ -1,6 +1,7 @@
 package com.java_template.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.java_template.application.dto.StepReplaceDTO;
 import com.java_template.application.dto.TestStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.service.EntityService;
@@ -12,10 +13,13 @@ import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for Test Step operations
@@ -135,6 +139,43 @@ public class TestStepService {
      */
     public void hardDeleteTestStep(UUID id) {
         entityService.deleteById(id);
+    }
+
+    /**
+     * Replaces all steps for a test case atomically:
+     * soft-deletes existing steps in parallel, then creates new ones in parallel.
+     */
+    public List<TestStepDTO> replaceSteps(UUID caseId, List<StepReplaceDTO> newSteps) {
+        List<TestStepDTO> existing = getTestStepsByTestCaseId(caseId);
+        if (!existing.isEmpty()) {
+            List<CompletableFuture<Void>> deleteFutures = existing.stream()
+                    .map(s -> CompletableFuture.runAsync(() -> {
+                        s.setDeleted(true);
+                        entityService.update(s.getId(), s, null);
+                    }))
+                    .toList();
+            CompletableFuture.allOf(deleteFutures.toArray(new CompletableFuture[0])).join();
+        }
+
+        if (newSteps == null || newSteps.isEmpty()) return List.of();
+
+        TestStepDTO[] results = new TestStepDTO[newSteps.size()];
+        List<CompletableFuture<Void>> createFutures = new ArrayList<>(newSteps.size());
+        for (int i = 0; i < newSteps.size(); i++) {
+            final int idx = i;
+            final StepReplaceDTO dto = newSteps.get(i);
+            createFutures.add(CompletableFuture.runAsync(() -> {
+                TestStepDTO step = new TestStepDTO();
+                step.setTestCaseId(caseId);
+                step.setStepNumber(dto.getStepNumber() != null ? dto.getStepNumber() : idx + 1);
+                step.setAction(dto.getAction() != null ? dto.getAction() : "");
+                step.setExpectedResult(dto.getExpectedResult() != null ? dto.getExpectedResult() : "");
+                step.setDeleted(false);
+                results[idx] = withId(entityService.create(step));
+            }));
+        }
+        CompletableFuture.allOf(createFutures.toArray(new CompletableFuture[0])).join();
+        return Arrays.asList(results);
     }
 }
 

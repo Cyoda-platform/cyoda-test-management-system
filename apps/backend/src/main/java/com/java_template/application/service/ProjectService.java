@@ -252,8 +252,25 @@ public class ProjectService {
                 allRunCases.forEach(rc -> testRunCaseService.deleteTestRunCase(rc.getId()));
             }
 
-            testRunService.getAllTestRunsByProjectId(id)
-                    .forEach(run -> testRunService.deleteTestRun(run.getId()));
+            var allRuns = testRunService.getAllTestRunsByProjectId(id);
+            logger.info("[Project] Cascade: {} TestRun(s) to delete", allRuns.size());
+            if (!allRuns.isEmpty()) {
+                var runFutures = allRuns.stream()
+                        .map(run -> CompletableFuture.runAsync(() -> {
+                            try {
+                                testRunService.deleteTestRun(run.getId());
+                            } catch (Exception e) {
+                                logger.error("[Project] Failed to delete TestRun {}: {}", run.getId(), e.getMessage(), e);
+                                throw new RuntimeException(e);
+                            }
+                        }))
+                        .toList();
+                try {
+                    CompletableFuture.allOf(runFutures.toArray(new CompletableFuture[0])).join();
+                } catch (Exception e) {
+                    throw new RuntimeException("Cascade delete failed at TestRun phase: " + e.getMessage(), e);
+                }
+            }
 
             // ── Phase 2: Master data (TestSteps → TestCases → Suites) ────────────────────
             var allCases = testCaseService.getAllCasesByProjectIdIncludingDeleted(id);
@@ -282,18 +299,39 @@ public class ProjectService {
                 allCases.forEach(tc -> testCaseService.hardDeleteTestCase(tc.getId()));
             }
 
-            suiteService.getAllSuitesByProjectId(id)
-                    .forEach(suite -> entityService.deleteById(suite.getId()));
+            var allSuites = suiteService.getAllSuitesByProjectId(id);
+            if (!allSuites.isEmpty()) {
+                var suiteFutures = allSuites.stream()
+                        .map(suite -> CompletableFuture.runAsync(() -> entityService.deleteById(suite.getId())))
+                        .toList();
+                CompletableFuture.allOf(suiteFutures.toArray(new CompletableFuture[0])).join();
+            }
 
             // ── Phase 3: Defects, attachments, reports, counter ──────────────────────────
-            defectService.getAllDefectsByProjectId(id)
-                    .forEach(d -> defectService.deleteDefect(d.getId()));
+            var allDefects     = defectService.getAllDefectsByProjectId(id);
+            var allAttachments = attachmentService.getAllAttachmentsByProjectId(id);
+            var allReports     = reportService.getAllReportsByProjectId(id);
 
-            attachmentService.getAllAttachmentsByProjectId(id)
-                    .forEach(a -> attachmentService.deleteAttachment(a.getId()));
-
-            reportService.getAllReportsByProjectId(id)
-                    .forEach(r -> reportService.deleteReport(r.getId()));
+            List<CompletableFuture<Void>> phase3Futures = new java.util.ArrayList<>();
+            allDefects.forEach(d -> phase3Futures.add(CompletableFuture.runAsync(() -> {
+                try { defectService.deleteDefect(d.getId()); }
+                catch (Exception e) { throw new RuntimeException("Delete defect failed: " + d.getId(), e); }
+            })));
+            allAttachments.forEach(a -> phase3Futures.add(CompletableFuture.runAsync(() -> {
+                try { attachmentService.deleteAttachment(a.getId()); }
+                catch (Exception e) { throw new RuntimeException("Delete attachment failed: " + a.getId(), e); }
+            })));
+            allReports.forEach(r -> phase3Futures.add(CompletableFuture.runAsync(() -> {
+                try { reportService.deleteReport(r.getId()); }
+                catch (Exception e) { throw new RuntimeException("Delete report failed: " + r.getId(), e); }
+            })));
+            if (!phase3Futures.isEmpty()) {
+                try {
+                    CompletableFuture.allOf(phase3Futures.toArray(new CompletableFuture[0])).join();
+                } catch (Exception e) {
+                    throw new RuntimeException("Cascade delete failed at Phase 3: " + e.getMessage(), e);
+                }
+            }
 
             projectCounterService.deleteCounterForProject(id);
 

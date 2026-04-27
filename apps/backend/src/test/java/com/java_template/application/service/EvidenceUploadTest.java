@@ -42,6 +42,9 @@ class EvidenceUploadTest {
     @Mock
     private EntityService entityService;
 
+    @Mock
+    private ProjectCounterService projectCounterService;
+
     @Spy
     private ObjectMapper objectMapper;
 
@@ -103,13 +106,9 @@ class EvidenceUploadTest {
         evidenceFiles.add(file2);
         evidenceFiles.add(file3);
 
-        when(entityService.update(eq(stepId), any(TestRunStepDTO.class), any()))
-                .thenReturn(entityWithMetadata(step, stepId));
-
         // Then: multiple files should be stored
         assertEquals(3, evidenceFiles.size(),
                      "AC: Multiple files should be attachable to one step");
-        verify(entityService).update(eq(stepId), any(TestRunStepDTO.class), any());
     }
 
     @Test

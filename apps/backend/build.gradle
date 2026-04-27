@@ -104,6 +104,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client' // Version managed by Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server' // JWT validation; delete when switching to real IdP
     implementation 'org.springframework.boot:spring-boot-starter-validation' // Jakarta validation
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
     implementation 'org.springframework.data:spring-data-commons' // For Page and Pageable
 
 

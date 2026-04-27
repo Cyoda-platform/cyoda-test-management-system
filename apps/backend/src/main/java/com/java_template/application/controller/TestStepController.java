@@ -1,9 +1,11 @@
 package com.java_template.application.controller;
 
+import com.java_template.application.dto.StepReplaceDTO;
 import com.java_template.application.dto.TestStepDTO;
 import com.java_template.application.service.TestStepService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -81,6 +83,17 @@ public class TestStepController {
             return ResponseEntity.noContent().build();
         }
         return ResponseEntity.notFound().build();
+    }
+
+    @PutMapping("/replace")
+    @Operation(summary = "Replace all steps for a test case atomically")
+    public ResponseEntity<List<TestStepDTO>> replaceSteps(
+            @PathVariable UUID projectId,
+            @PathVariable UUID suiteId,
+            @PathVariable UUID caseId,
+            @Valid @RequestBody List<StepReplaceDTO> steps) {
+        List<TestStepDTO> result = testStepService.replaceSteps(caseId, steps);
+        return ResponseEntity.ok(result);
     }
 }
 

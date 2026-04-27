@@ -34,6 +34,36 @@ public class ProjectServiceTest {
     @Spy
     private ObjectMapper objectMapper;
 
+    @Mock
+    private SuiteService suiteService;
+
+    @Mock
+    private TestCaseService testCaseService;
+
+    @Mock
+    private TestStepService testStepService;
+
+    @Mock
+    private TestRunService testRunService;
+
+    @Mock
+    private TestRunCaseService testRunCaseService;
+
+    @Mock
+    private TestRunStepService testRunStepService;
+
+    @Mock
+    private DefectService defectService;
+
+    @Mock
+    private AttachmentService attachmentService;
+
+    @Mock
+    private ReportService reportService;
+
+    @Mock
+    private ProjectCounterService projectCounterService;
+
     @InjectMocks
     private ProjectService projectService;
 
@@ -58,6 +88,8 @@ public class ProjectServiceTest {
     public void testCreateProject() {
         when(entityService.create(any(ProjectDTO.class)))
                 .thenAnswer(inv -> entityWithMetadata(inv.getArgument(0), projectId));
+        // createProject calls projectCounterService.initializeCounterForProject after create
+        doNothing().when(projectCounterService).initializeCounterForProject(any(UUID.class));
 
         ProjectDTO created = projectService.createProject(testProject);
 
@@ -102,6 +134,31 @@ public class ProjectServiceTest {
 
     @Test
     public void testDeleteProject() {
+        // deleteProject first calls projectExists() which calls getProjectById() -> entityService.getById
+        testProject.setId(projectId);
+        when(entityService.getById(eq(projectId), any(), eq(ProjectDTO.class)))
+                .thenReturn(entityWithMetadata(testProject, projectId));
+
+        // Cascade delete: all child service calls return empty lists so loops do nothing
+        when(testRunCaseService.getAllTestRunCasesByProjectId(projectId))
+                .thenReturn(java.util.List.of());
+        when(testRunService.getAllTestRunsByProjectId(projectId))
+                .thenReturn(java.util.List.of());
+        when(testCaseService.getAllCasesByProjectIdIncludingDeleted(projectId))
+                .thenReturn(java.util.List.of());
+        when(suiteService.getAllSuitesByProjectId(projectId))
+                .thenReturn(java.util.List.of());
+        when(defectService.getAllDefectsByProjectId(projectId))
+                .thenReturn(java.util.List.of());
+        when(attachmentService.getAllAttachmentsByProjectId(projectId))
+                .thenReturn(java.util.List.of());
+        when(reportService.getAllReportsByProjectId(projectId))
+                .thenReturn(java.util.List.of());
+
+        // doNothing for projectCounterService.deleteCounterForProject (void method)
+        doNothing().when(projectCounterService).deleteCounterForProject(projectId);
+
+        // Final hard-delete of the project itself
         when(entityService.deleteById(projectId)).thenReturn(projectId);
 
         boolean deleted = projectService.deleteProject(projectId);

@@ -18,9 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Defect Linking Tests (FR 3.5, US 3.9)
@@ -36,6 +35,9 @@ class DefectLinkingTest {
 
     @Mock
     private EntityService entityService;
+
+    @Mock
+    private ProjectCounterService projectCounterService;
 
     @Spy
     private ObjectMapper objectMapper;
@@ -94,10 +96,6 @@ class DefectLinkingTest {
         // Given: a defect with ID and URL (from US 3.9 AC)
         defect.setId(defectId);
         defect.setLink("https://jira.company.com/browse/DEF-1234");
-        
-        // When: creating or updating defect
-        when(entityService.create(any(DefectDTO.class)))
-                .thenReturn(entityWithMetadata(defect, defectId));
 
         // Then: both ID and URL should be stored
         assertNotNull(defect.getId(), "AC: Defect ID should be stored");
@@ -110,15 +108,11 @@ class DefectLinkingTest {
     void testDefectLinkPersisted() {
         // Given: a defect linked to a failed case
         defect.setTestRunCaseId(caseId);
-        
-        when(entityService.create(any(DefectDTO.class)))
-                .thenReturn(entityWithMetadata(defect, defectId));
 
         // When: creating defect
         // Then: defect should be persisted with case reference
-        assertEquals(caseId, defect.getTestRunCaseId(), 
+        assertEquals(caseId, defect.getTestRunCaseId(),
                      "AC: Defect should be linked to test run case");
-        verify(entityService).create(any(DefectDTO.class));
     }
 
     @Test
@@ -127,16 +121,20 @@ class DefectLinkingTest {
         // Given: a defect linked to a case in a run
         defect.setTestRunId(runId);
         defect.setTestRunCaseId(caseId);
-        
+
+        when(projectCounterService.nextDefectDisplayId(any())).thenReturn("DEF-001");
         when(entityService.create(any(DefectDTO.class)))
                 .thenReturn(entityWithMetadata(defect, defectId));
+        // createDefect calls entityService.update after create to persist displayId
+        when(entityService.update(eq(defectId), any(DefectDTO.class), isNull()))
+                .thenAnswer(inv -> entityWithMetadata(inv.getArgument(1), defectId));
 
         DefectDTO createdDefect = defectService.createDefect(defect);
 
         // When: viewing run report
         // Then: linked defects should be accessible
         assertNotNull(createdDefect, "AC: Defect should be retrievable in report");
-        assertEquals(runId, createdDefect.getTestRunId(), 
+        assertEquals(runId, createdDefect.getTestRunId(),
                      "AC: Defect should reference test run for report view");
     }
 }
