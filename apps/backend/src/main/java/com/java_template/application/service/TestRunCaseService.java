@@ -313,6 +313,7 @@ public class TestRunCaseService {
         });
     }
 
+    @CacheEvict(value = "runCasesByRun", allEntries = true)
     public Optional<TestRunCaseDTO> linkBug(UUID id, String bugUrl) {
         return getTestRunCaseById(id).map(trc -> {
             trc.setBugUrl(bugUrl);

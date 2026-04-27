@@ -260,6 +260,7 @@ public class TestCaseService {
      * Unknown or deleted IDs are silently skipped.
      * Uses {@code entityService.updateAll()} to avoid N individual update round-trips.
      */
+    @CacheEvict(value = "casesBySuite", allEntries = true)
     public void reorderTestCases(List<ReorderItemDTO> items) {
         var orderMap = new java.util.HashMap<UUID, Integer>(items.size() * 2);
         items.forEach(item -> orderMap.put(item.id(), item.sortOrder()));

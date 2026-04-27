@@ -189,6 +189,7 @@ public class SuiteService {
      * Unknown IDs are silently skipped to guard against stale client state.
      * Uses {@code entityService.updateAll()} to avoid N individual update round-trips.
      */
+    @CacheEvict(value = "suitesByProject", allEntries = true)
     public void reorderSuites(List<ReorderItemDTO> items) {
         // Build a map of id → new sortOrder for O(1) lookups
         var orderMap = new java.util.HashMap<UUID, Integer>(items.size() * 2);
