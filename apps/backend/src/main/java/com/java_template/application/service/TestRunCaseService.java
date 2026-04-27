@@ -16,6 +16,8 @@ import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -88,6 +90,7 @@ public class TestRunCaseService {
      * first — keeping {@code /cases} in {@code (pending)} state in the Network
      * tab and causing the defect-creation modal to hang.</p>
      */
+    @CacheEvict(value = "runCasesByRun", allEntries = true)
     public TestRunCaseDTO createTestRunCase(TestRunCaseDTO testRunCase) {
         // Upsert guard: check for an existing record with the same run+case pair.
         if (testRunCase.getTestRunId() != null && testRunCase.getTestCaseId() != null) {
@@ -152,6 +155,7 @@ public class TestRunCaseService {
      * @return the persisted {@link TestRunCaseDTO} with its assigned {@code id}
      * @throws RuntimeException if step creation fails (case creation is rolled back)
      */
+    @CacheEvict(value = "runCasesByRun", allEntries = true)
     public TestRunCaseDTO createTestRunCaseWithSteps(TestRunCaseDTO testRunCase,
                                                      List<UUID> testStepIds) {
         // 1. Persist the case record.
@@ -208,6 +212,7 @@ public class TestRunCaseService {
      * @param steps       ordered list of original {@link TestStepDTO} objects to snapshot
      * @return the persisted {@link TestRunCaseDTO} with its assigned {@code id}
      */
+    @CacheEvict(value = "runCasesByRun", allEntries = true)
     public TestRunCaseDTO createTestRunCaseWithStepSnapshots(TestRunCaseDTO testRunCase,
                                                               List<TestStepDTO> steps) {
         TestRunCaseDTO created = createTestRunCase(testRunCase);
@@ -281,6 +286,7 @@ public class TestRunCaseService {
      * Returns ALL TestRunCase records for a given test run without pagination.
      * Used internally for cascade-delete operations.
      */
+    @Cacheable(value = "runCasesByRun", key = "#testRunId")
     public List<TestRunCaseDTO> getAllTestRunCasesByTestRunId(UUID testRunId) {
         return entityService.search(MODEL_SPEC,
                         conditionByField("testRunId", testRunId.toString()),
@@ -294,10 +300,12 @@ public class TestRunCaseService {
      * Hard-deletes a TestRunCase entity by ID.
      * Used during cascade deletion of parent entities.
      */
+    @CacheEvict(value = "runCasesByRun", allEntries = true)
     public void deleteTestRunCase(UUID id) {
         entityService.deleteById(id);
     }
 
+    @CacheEvict(value = "runCasesByRun", allEntries = true)
     public Optional<TestRunCaseDTO> updateTestRunCaseStatus(UUID id, String status) {
         return getTestRunCaseById(id).map(trc -> {
             trc.setStatus(status);

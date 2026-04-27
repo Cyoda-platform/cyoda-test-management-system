@@ -15,6 +15,8 @@ import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
@@ -79,6 +81,7 @@ public class SuiteService {
      * all sortOrder values are null — which would cause suites to jump whenever a
      * child test-case is created and the suite's updated_at timestamp changes.
      */
+    @CacheEvict(value = "suitesByProject", allEntries = true)
     public SuiteDTO createSuite(SuiteDTO suite) {
         if (suite.getSortOrder() == null) {
             int count = getSuitesByProjectId(suite.getProjectId(), 0, 1000).data().size();
@@ -134,6 +137,7 @@ public class SuiteService {
      * Retrieves all suites for a project without pagination.
      * Used internally for cascade-delete operations.
      */
+    @Cacheable(value = "suitesByProject", key = "#projectId")
     public List<SuiteDTO> getAllSuitesByProjectId(UUID projectId) {
         GroupConditionDto condition = conditionByField("projectId", projectId.toString());
         return entityService.search(MODEL_SPEC, condition, SuiteDTO.class)
@@ -143,6 +147,7 @@ public class SuiteService {
     /**
      * Updates an existing suite
      */
+    @CacheEvict(value = "suitesByProject", allEntries = true)
     public SuiteDTO updateSuite(UUID id, SuiteDTO suite) {
         return withId(entityService.update(id, suite, null));
     }
@@ -160,6 +165,7 @@ public class SuiteService {
      * via {@code testCaseId} and are still referenced by {@code TestRunStep.testStepId},
      * keeping the run history intact.</p>
      */
+    @CacheEvict(value = "suitesByProject", allEntries = true)
     public boolean deleteSuite(UUID id) {
         var cases = testCaseService.getAllTestCasesBySuiteId(id);
         log.info("[Suite] Cascade soft-delete: {} TestCase(s) for suite {}", cases.size(), id);

@@ -16,6 +16,8 @@ import org.cyoda.cloud.api.common.model.GroupOperatorDto;
 import org.cyoda.cloud.api.common.model.OperatorTypeDto;
 import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -84,6 +86,7 @@ public class TestCaseService {
      * reloaded payload.  We therefore persist it explicitly via a follow-up update
      * so that subsequent reads always see the correct TC-X value.
      */
+    @CacheEvict(value = "casesBySuite", allEntries = true)
     public TestCaseDTO createTestCase(TestCaseDTO testCase) {
         testCase.setDeleted(false);
         // Always override any client-supplied displayId with a server-generated one
@@ -113,6 +116,7 @@ public class TestCaseService {
     /**
      * Retrieves test cases for a suite, ordered by sortOrder (nulls last).
      */
+    @Cacheable(value = "casesBySuite", key = "#suiteId + ':' + #page + ':' + #size")
     public PageResult<TestCaseDTO> getTestCasesBySuiteId(UUID suiteId, int page, int size) {
         SearchAndRetrievalParams params = SearchAndRetrievalParams.builder()
                 .pageNumber(page).pageSize(size).build();
@@ -173,6 +177,7 @@ public class TestCaseService {
                 .toList();
     }
 
+    @CacheEvict(value = "casesBySuite", allEntries = true)
     public TestCaseDTO updateTestCase(UUID id, TestCaseDTO testCase) {
         // Protect displayId from being overwritten by client updates
         // If the client doesn't send displayId (or sends null), preserve the existing one
@@ -194,6 +199,7 @@ public class TestCaseService {
         return getTestCaseById(id).isPresent();
     }
 
+    @CacheEvict(value = "casesBySuite", allEntries = true)
     public boolean softDeleteTestCase(UUID id) {
         return getTestCaseById(id).map(tc -> {
             tc.setDeleted(true);
@@ -281,6 +287,7 @@ public class TestCaseService {
      * @return the updated TestCaseDTO
      * @throws IllegalArgumentException if the test case does not exist
      */
+    @CacheEvict(value = "casesBySuite", allEntries = true)
     public TestCaseDTO moveTestCase(UUID id, UUID targetSuiteId, Integer sortOrder) {
         return getTestCaseById(id).map(tc -> {
             tc.setSuiteId(targetSuiteId);
@@ -301,6 +308,7 @@ public class TestCaseService {
      * @param items     ordered list of cases to import; each may carry embedded steps
      * @return the list of created test cases (without their steps)
      */
+    @CacheEvict(value = "casesBySuite", allEntries = true)
     public List<TestCaseDTO> batchCreateTestCases(UUID projectId, UUID suiteId,
                                                   List<BatchImportCaseDTO> items) {
         if (items == null || items.isEmpty()) return java.util.Collections.emptyList();
