@@ -2,6 +2,7 @@ package com.java_template;
 
 import com.java_template.common.service.EntityService;
 import org.cyoda.cloud.api.event.common.ModelSpec;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -11,8 +12,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * Test utility to clean up all entity data from tenant.
- * Run with: gradle test --tests CleanupTest
+ * Run manually with: gradle test --tests CleanupTest
+ * Requires a live Cyoda instance — disabled in the standard unit-test suite.
  */
+@Disabled("Requires a live Cyoda instance — run manually when needed")
 @SpringBootTest
 @DisplayName("Tenant Cleanup Utility")
 class CleanupTest {

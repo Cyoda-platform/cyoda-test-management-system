@@ -67,14 +67,16 @@ public class TestCaseServiceTest {
         testCase.setDescription("A test case");
         testCase.setPriority(com.java_template.application.dto.Priority.MEDIUM);
         testCase.setDeleted(false);
-
-        when(projectCounterService.nextDisplayId(projectId)).thenReturn("TC-001");
     }
 
     @Test
     public void testCreateTestCase() {
+        when(projectCounterService.nextDisplayId(projectId)).thenReturn("TC-001");
         when(entityService.create(any(TestCaseDTO.class)))
                 .thenAnswer(inv -> entityWithMetadata(inv.getArgument(0), caseId));
+        // createTestCase calls entityService.update after create to persist displayId
+        when(entityService.update(eq(caseId), any(TestCaseDTO.class), isNull()))
+                .thenAnswer(inv -> entityWithMetadata(inv.getArgument(1), caseId));
 
         TestCaseDTO created = testCaseService.createTestCase(testCase);
 

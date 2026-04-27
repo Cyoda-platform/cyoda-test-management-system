@@ -31,6 +31,9 @@ public class TestRunServiceTest {
     @Mock
     private EntityService entityService;
 
+    @Mock
+    private ProjectCounterService projectCounterService;
+
     @Spy
     private ObjectMapper objectMapper;
 
@@ -59,8 +62,12 @@ public class TestRunServiceTest {
 
     @Test
     public void testCreateTestRun() {
+        when(projectCounterService.nextRunDisplayId(projectId)).thenReturn("RUN-001");
         when(entityService.create(any(TestRunDTO.class)))
                 .thenAnswer(inv -> entityWithMetadata(inv.getArgument(0), runId));
+        // createTestRun calls entityService.update after create (to persist displayId + set status)
+        when(entityService.update(eq(runId), any(TestRunDTO.class), isNull()))
+                .thenAnswer(inv -> entityWithMetadata(inv.getArgument(1), runId));
 
         TestRunDTO created = testRunService.createTestRun(testRun);
 

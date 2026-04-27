@@ -35,6 +35,9 @@ public class SuiteServiceTest {
     @Spy
     private ObjectMapper objectMapper;
 
+    @Mock
+    private TestCaseService testCaseService;
+
     @InjectMocks
     private SuiteService suiteService;
 
@@ -122,6 +125,9 @@ public class SuiteServiceTest {
     @Test
     @DisplayName("Should delete suite")
     public void testDeleteSuite() {
+        // deleteSuite first soft-deletes all test cases, then hard-deletes the suite itself
+        when(testCaseService.getAllTestCasesBySuiteId(suiteId))
+                .thenReturn(java.util.List.of());
         when(entityService.deleteById(suiteId)).thenReturn(suiteId);
 
         boolean deleted = suiteService.deleteSuite(suiteId);
