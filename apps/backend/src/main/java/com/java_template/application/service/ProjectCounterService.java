@@ -263,31 +263,23 @@ public class ProjectCounterService {
      * If the counter already exists, this is a no-op (idempotent).
      */
     public void initializeCounterForProject(UUID projectId) {
+        // No existence check needed — this is only called from createProject,
+        // so the project (and its counter) cannot exist yet. Skipping the search
+        // eliminates one unnecessary gRPC round-trip (~1–2 s) on every project creation.
         try {
-            // Check if counter already exists
-            Optional<ProjectCounterDTO> existing = findCounterForProject(projectId);
-            if (existing.isPresent()) {
-                logger.info("[Counter] ProjectCounter already exists for project: {}", projectId);
-                return;  // Already initialized, nothing to do
-            }
-
-            logger.info("[Counter] Initializing ProjectCounter for project: {}", projectId);
-
-            // Create new counter with all counters starting at 1
             ProjectCounterDTO counter = new ProjectCounterDTO();
-            counter.setId(UUID.randomUUID());  // Generate unique ID
+            counter.setId(UUID.randomUUID());
             counter.setProjectId(projectId);
-            counter.setNextId(1L);           // TC-N counter
-            counter.setNextRunId(1L);        // TR-N counter
-            counter.setNextDefectId(1L);     // DEF-N counter
-            counter.setNextReportId(1L);     // REP-N counter
+            counter.setNextId(1L);
+            counter.setNextRunId(1L);
+            counter.setNextDefectId(1L);
+            counter.setNextReportId(1L);
 
-            // Initialize counter in Cyoda (no timestamps on ProjectCounter)
             entityService.create(counter);
-            logger.info("[Counter] ProjectCounter initialized successfully for project: {}", projectId);
+            logger.info("[Counter] ProjectCounter initialized for project: {}", projectId);
         } catch (Exception e) {
+            // Duplicate or transient failure — nextBatch() will self-heal on first use.
             logger.warn("[Counter] Failed to initialize ProjectCounter for project {}: {}", projectId, e.getMessage());
-            // Don't throw — let next operation handle counter creation if needed
         }
     }
 }
