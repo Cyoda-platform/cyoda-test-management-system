@@ -125,9 +125,10 @@ app:
     grpc-idle-timeout-seconds: 600                  # 10 minutes for long operations (was 5 min)
 
     # Thread Pool Configuration
-    processor-thread-pool: 20
-    criteria-thread-pool: 20
-    control-thread-pool: 3
+    # Override via PROCESSOR_THREAD_POOL / CRITERIA_THREAD_POOL env vars for larger instances.
+    processor-thread-pool: ${PROCESSOR_THREAD_POOL:40}
+    criteria-thread-pool:  ${CRITERIA_THREAD_POOL:40}
+    control-thread-pool:   ${CONTROL_THREAD_POOL:3}
 
     # Connection Configuration
     handshake-timeout-ms: 5000
