@@ -23,6 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Service for Test Case operations
@@ -304,45 +305,55 @@ public class TestCaseService {
                                                   List<BatchImportCaseDTO> items) {
         if (items == null || items.isEmpty()) return java.util.Collections.emptyList();
 
-        // Pre-allocate ALL display IDs in one counter update
         List<String> displayIds = projectCounterService.nextDisplayIdBatch(projectId, items.size());
 
-        List<TestCaseDTO> created = new java.util.ArrayList<>(items.size());
+        TestCaseDTO[] results = new TestCaseDTO[items.size()];
+        List<CompletableFuture<Void>> futures = new java.util.ArrayList<>(items.size());
+
         for (int i = 0; i < items.size(); i++) {
-            BatchImportCaseDTO item = items.get(i);
+            final int idx = i;
+            final BatchImportCaseDTO item = items.get(i);
+            final String displayId = displayIds.get(i);
 
-            TestCaseDTO tc = new TestCaseDTO();
-            tc.setProjectId(projectId);
-            tc.setSuiteId(suiteId);
-            tc.setTitle(item.getTitle());
-            tc.setDescription(item.getDescription() != null ? item.getDescription() : "");
-            tc.setPreconditions(item.getPreconditions() != null ? item.getPreconditions() : "");
-            tc.setPriority(item.getPriority() != null ? item.getPriority()
-                    : com.java_template.application.dto.Priority.MEDIUM);
-            tc.setDeleted(false);
-            String batchDisplayId = displayIds.get(i);
-            tc.setDisplayId(batchDisplayId);
+            futures.add(CompletableFuture.runAsync(() -> {
+                TestCaseDTO tc = new TestCaseDTO();
+                tc.setProjectId(projectId);
+                tc.setSuiteId(suiteId);
+                tc.setTitle(item.getTitle());
+                tc.setDescription(item.getDescription() != null ? item.getDescription() : "");
+                tc.setPreconditions(item.getPreconditions() != null ? item.getPreconditions() : "");
+                tc.setPriority(item.getPriority() != null ? item.getPriority()
+                        : com.java_template.application.dto.Priority.MEDIUM);
+                tc.setDeleted(false);
+                tc.setDisplayId(displayId);
 
-            TestCaseDTO saved = withId(entityService.create(tc));
-            // Persist displayId explicitly (Cyoda's create reload may strip it)
-            saved.setDisplayId(batchDisplayId);
-            entityService.update(saved.getId(), saved, null);
+                TestCaseDTO saved = withId(entityService.create(tc));
+                saved.setDisplayId(displayId);
+                entityService.update(saved.getId(), saved, null);
 
-            // Create steps inline if provided
-            if (item.getSteps() != null && !item.getSteps().isEmpty()) {
-                int stepNum = 1;
-                for (BatchImportCaseDTO.StepDTO s : item.getSteps()) {
-                    TestStepDTO step = new TestStepDTO();
-                    step.setTestCaseId(saved.getId());
-                    step.setStepNumber(s.getStepNumber() != null ? s.getStepNumber() : stepNum);
-                    step.setAction(s.getAction() != null ? s.getAction() : "");
-                    step.setExpectedResult(s.getExpectedResult() != null ? s.getExpectedResult() : "");
-                    testStepService.createTestStep(step);
-                    stepNum++;
+                if (item.getSteps() != null && !item.getSteps().isEmpty()) {
+                    int stepNum = 1;
+                    for (BatchImportCaseDTO.StepDTO s : item.getSteps()) {
+                        TestStepDTO step = new TestStepDTO();
+                        step.setTestCaseId(saved.getId());
+                        step.setStepNumber(s.getStepNumber() != null ? s.getStepNumber() : stepNum);
+                        step.setAction(s.getAction() != null ? s.getAction() : "");
+                        step.setExpectedResult(s.getExpectedResult() != null ? s.getExpectedResult() : "");
+                        testStepService.createTestStep(step);
+                        stepNum++;
+                    }
                 }
-            }
-            created.add(saved);
+                results[idx] = saved;
+            }));
         }
-        return created;
+
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        } catch (java.util.concurrent.CompletionException e) {
+            Throwable cause = e.getCause();
+            throw new RuntimeException("Batch import failed: " + cause.getMessage(), cause);
+        }
+
+        return java.util.Arrays.asList(results);
     }
 }

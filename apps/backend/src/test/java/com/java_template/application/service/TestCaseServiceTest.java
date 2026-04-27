@@ -1,6 +1,7 @@
 package com.java_template.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.java_template.application.dto.BatchImportCaseDTO;
 import com.java_template.application.dto.Priority;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.common.dto.EntityWithMetadata;
@@ -164,6 +165,60 @@ public class TestCaseServiceTest {
 
         // Assert: new displayId should be accepted (client's value takes precedence if provided)
         assertEquals("TC-999", result.getDisplayId(), "new displayId should be accepted");
+    }
+
+    @Test
+    public void batchCreateTestCases_createsAllCasesWithCorrectDisplayIds() {
+        UUID projectId = UUID.randomUUID();
+        UUID suiteId   = UUID.randomUUID();
+
+        BatchImportCaseDTO.StepDTO step = new BatchImportCaseDTO.StepDTO();
+        step.setStepNumber(1);
+        step.setAction("click button");
+        step.setExpectedResult("page loads");
+
+        BatchImportCaseDTO item1 = new BatchImportCaseDTO();
+        item1.setTitle("Case Alpha");
+        item1.setSteps(List.of(step));
+
+        BatchImportCaseDTO item2 = new BatchImportCaseDTO();
+        item2.setTitle("Case Beta");
+        item2.setSteps(List.of());
+
+        when(projectCounterService.nextDisplayIdBatch(projectId, 2))
+                .thenReturn(List.of("TC-001", "TC-002"));
+        when(entityService.create(any(TestCaseDTO.class))).thenAnswer(inv ->
+                entityWithMetadata(inv.getArgument(0), UUID.randomUUID()));
+        when(entityService.update(any(UUID.class), any(TestCaseDTO.class), any())).thenAnswer(inv ->
+                entityWithMetadata(inv.getArgument(1), inv.getArgument(0)));
+        when(testStepService.createTestStep(any())).thenReturn(new com.java_template.application.dto.TestStepDTO());
+
+        List<TestCaseDTO> result = testCaseService.batchCreateTestCases(projectId, suiteId, List.of(item1, item2));
+
+        assertEquals(2, result.size());
+        assertEquals("TC-001", result.get(0).getDisplayId());
+        assertEquals("TC-002", result.get(1).getDisplayId());
+        verify(entityService, times(2)).create(any(TestCaseDTO.class));
+        verify(entityService, times(2)).update(any(UUID.class), any(TestCaseDTO.class), any());
+        verify(testStepService, times(1)).createTestStep(any()); // 1 step in item1, 0 in item2
+    }
+
+    @Test
+    public void batchCreateTestCases_propagatesExceptionWhenCreateFails() {
+        UUID projectId = UUID.randomUUID();
+        UUID suiteId   = UUID.randomUUID();
+
+        BatchImportCaseDTO item = new BatchImportCaseDTO();
+        item.setTitle("Failing case");
+        item.setSteps(List.of());
+
+        when(projectCounterService.nextDisplayIdBatch(projectId, 1))
+                .thenReturn(List.of("TC-001"));
+        when(entityService.create(any(TestCaseDTO.class)))
+                .thenThrow(new RuntimeException("Cyoda unavailable"));
+
+        assertThrows(RuntimeException.class, () ->
+                testCaseService.batchCreateTestCases(projectId, suiteId, List.of(item)));
     }
 
 }
