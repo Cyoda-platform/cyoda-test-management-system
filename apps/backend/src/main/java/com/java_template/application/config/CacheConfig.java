@@ -17,11 +17,15 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         CaffeineCacheManager manager = new CaffeineCacheManager(
                 "testRunsByProject",
-                "allTestRunsByProject"
+                "allTestRunsByProject",
+                "suitesByProject",
+                "casesBySuite",
+                "stepsByCase",
+                "runCasesByRun"
         );
         manager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(30, TimeUnit.SECONDS)
-                .maximumSize(500));
+                .maximumSize(1000));
         return manager;
     }
 }

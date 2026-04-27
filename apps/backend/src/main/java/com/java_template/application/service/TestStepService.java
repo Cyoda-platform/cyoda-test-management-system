@@ -11,6 +11,8 @@ import org.cyoda.cloud.api.common.model.GroupOperatorDto;
 import org.cyoda.cloud.api.common.model.OperatorTypeDto;
 import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -41,7 +43,7 @@ public class TestStepService {
         SimpleConditionDto condition = new SimpleConditionDto()
                 .jsonPath("$." + fieldName)
                 .operation(OperatorTypeDto.EQUALS)
-                .value(objectMapper.valueToTree(value));
+                .value(com.fasterxml.jackson.databind.node.TextNode.valueOf(value.toString()));
         condition.setType(QueryConditionTypeDto.SIMPLE);
         GroupConditionDto group = new GroupConditionDto()
                 .operator(GroupOperatorDto.AND)
@@ -59,6 +61,7 @@ public class TestStepService {
     /**
      * Creates a new test step
      */
+    @CacheEvict(value = "stepsByCase", allEntries = true)
     public TestStepDTO createTestStep(TestStepDTO testStep) {
         testStep.setDeleted(false);
         return withId(entityService.create(testStep));
@@ -79,6 +82,7 @@ public class TestStepService {
     /**
      * Retrieves all non-deleted test steps for a specific test case, ordered by stepNumber
      */
+    @Cacheable(value = "stepsByCase", key = "#testCaseId")
     public List<TestStepDTO> getTestStepsByTestCaseId(UUID testCaseId) {
         SimpleConditionDto caseCondition = new SimpleConditionDto()
                 .jsonPath("$.testCaseId")
@@ -104,6 +108,7 @@ public class TestStepService {
     /**
      * Updates an existing test step
      */
+    @CacheEvict(value = "stepsByCase", allEntries = true)
     public TestStepDTO updateTestStep(UUID id, TestStepDTO testStep) {
         return withId(entityService.update(id, testStep, null));
     }
@@ -112,6 +117,7 @@ public class TestStepService {
      * Soft-deletes a test step by setting deleted=true.
      * Preserves the record so existing TestRunStep snapshots remain intact.
      */
+    @CacheEvict(value = "stepsByCase", allEntries = true)
     public boolean deleteTestStep(UUID id) {
         return getTestStepById(id).map(ts -> {
             ts.setDeleted(true);
@@ -145,6 +151,7 @@ public class TestStepService {
      * Replaces all steps for a test case atomically:
      * soft-deletes existing steps in parallel, then creates new ones in parallel.
      */
+    @CacheEvict(value = "stepsByCase", allEntries = true)
     public List<TestStepDTO> replaceSteps(UUID caseId, List<StepReplaceDTO> newSteps) {
         List<TestStepDTO> existing = getTestStepsByTestCaseId(caseId);
         if (!existing.isEmpty()) {

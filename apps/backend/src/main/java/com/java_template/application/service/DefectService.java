@@ -44,7 +44,7 @@ public class DefectService {
         SimpleConditionDto condition = new SimpleConditionDto()
                 .jsonPath("$." + jsonPath)
                 .operation(OperatorTypeDto.EQUALS)
-                .value(objectMapper.valueToTree(value));
+                .value(com.fasterxml.jackson.databind.node.TextNode.valueOf(value));
         condition.setType(QueryConditionTypeDto.SIMPLE);
         GroupConditionDto group = new GroupConditionDto()
                 .operator(GroupOperatorDto.AND)
