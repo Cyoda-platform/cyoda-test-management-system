@@ -52,7 +52,7 @@ public class SuiteService {
         SimpleConditionDto condition = new SimpleConditionDto()
                 .jsonPath("$." + fieldName)
                 .operation(OperatorTypeDto.EQUALS)
-                .value(objectMapper.valueToTree(value));
+                .value(com.fasterxml.jackson.databind.node.TextNode.valueOf(value.toString()));
         condition.setType(QueryConditionTypeDto.SIMPLE);
         GroupConditionDto group = new GroupConditionDto()
                 .operator(GroupOperatorDto.AND)
