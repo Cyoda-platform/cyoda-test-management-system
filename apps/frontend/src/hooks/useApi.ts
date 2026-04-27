@@ -720,8 +720,8 @@ export function useDefectsByRun(projectId: string, runId: string) {
     queryFn:  () => defectsApi.listByRun(projectId, runId),
     enabled:  !!projectId && !!runId,
     select:   (res) => res.data,
-    staleTime: 0,
-    refetchOnMount: true,
+    staleTime: 5_000,
+    refetchOnMount: 'always',
   });
 }
 

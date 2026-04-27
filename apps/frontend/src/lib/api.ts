@@ -232,6 +232,8 @@ export const testStepsApi = {
     api.put<TestStep>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps/${id}`, body),
   delete: (projectId: string, suiteId: string, caseId: string, id: string) =>
     api.delete<void>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps/${id}`),
+  replace: (projectId: string, suiteId: string, caseId: string, steps: Array<{ stepNumber: number; action: string; expectedResult: string }>) =>
+    api.put<TestStep[]>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps/replace`, steps),
 };
 
 // ── Test Runs ─────────────────────────────────────────────────────────────────

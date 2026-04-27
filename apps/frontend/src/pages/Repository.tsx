@@ -844,22 +844,14 @@ const Repository = () => {
           });
           affectedSuiteIds.add(ow.existingSuiteId);
 
-          // Replace steps: delete existing then recreate
-          // (Fetch existing steps first so we know their IDs)
-          if (ow.data.steps && ow.data.steps.length > 0) {
-            const existingSteps = await testStepsApi.list(projectId, ow.existingSuiteId, ow.existingCaseId);
-            await Promise.all(
-              existingSteps.map(s =>
-                testStepsApi.delete(projectId, ow.existingSuiteId, ow.existingCaseId, s.id),
-              ),
-            );
-            for (const step of ow.data.steps) {
-              await testStepsApi.create(projectId, ow.existingSuiteId, ow.existingCaseId, {
-                stepNumber: step.order || 1,
-                action: step.action,
-                expectedResult: step.expectedResult,
-              });
-            }
+          // Replace steps with a single HTTP call
+          if (ow.data.steps !== undefined) {
+            const stepsPayload = (ow.data.steps || []).map(s => ({
+              stepNumber:     s.order || 1,
+              action:         s.action,
+              expectedResult: s.expectedResult,
+            }));
+            await testStepsApi.replace(projectId, ow.existingSuiteId, ow.existingCaseId, stepsPayload);
           }
           tick();
         }));
