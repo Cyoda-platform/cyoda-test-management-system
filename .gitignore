@@ -57,3 +57,4 @@ application-*.yml
 
 # Playwright auth state
 apps/frontend/e2e/.auth/*.json
+.worktrees/
