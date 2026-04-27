@@ -1,68 +1,69 @@
-# Архитектурный план: встраивание шагов в тест-кейс
+# Architectural Plan: Embedding Test Steps into Test Case
 
-**Дата:** 2026-04-27  
-**Автор:** Victoria  
-**Статус:** На обсуждение  
-**Оценка:** 1–2 недели
-
----
-
-## Проблема
-
-Сейчас шаги тест-кейсов (`TestStep`) хранятся как отдельные сущности в Cyoda. Каждый шаг — отдельный gRPC-вызов при создании, чтении и удалении.
-
-**Последствия:**
-- Импорт 300 кейсов × 5 шагов = **~1800 gRPC-вызовов** → несколько часов
-- Открытие репозитория = 2 HTTP-запроса на каждый кейс (кейс + шаги отдельно)
-- Масштабируемость отсутствует: больше кейсов → пропорционально дольше
-
-**Корень:** TestStep спроектирован как Cyoda-сущность с FSM-workflow. Технически корректно для Cyoda, но архитектурно неверно для TMS — шаги кейса никогда не существуют независимо от родительского кейса.
+**Date:** 2026-04-27  
+**Author:** Victoria  
+**Status:** For discussion  
+**Estimate:** 1–2 weeks
 
 ---
 
-## Решение
+## Problem
 
-Встроить шаги кейса (TestStep) как JSON-массив внутрь сущности TestCase.
+Test case steps (`TestStep`) are currently stored as separate Cyoda entities. Each step requires an individual gRPC call to create, read, or delete.
 
-### Принцип
+**Consequences:**
+- Importing 300 cases × 5 steps = **~1,800 gRPC calls** → takes hours
+- Opening the repository = 2 HTTP requests per test case (case + steps separately)
+- No scalability: more cases → proportionally longer wait
+
+**Root cause:** TestStep was designed as a Cyoda entity with its own FSM workflow. This is technically correct for Cyoda but architecturally wrong for a TMS — test case steps never exist independently of their parent case.
+
+---
+
+## Solution
+
+Embed test case steps (TestStep) as a JSON array inside the TestCase entity.
+
+### Concept
 
 ```
-// Сейчас
+// Current
 TestCase { id, title, priority, ... }
-TestStep { id, testCaseId, stepNumber, action, expectedResult }  ← отдельная Cyoda-сущность
+TestStep { id, testCaseId, stepNumber, action, expectedResult }  ← separate Cyoda entity
 
-// После изменений
+// After
 TestCase {
   id, title, priority, ...,
-  steps: [                           ← JSON-массив, часть кейса
+  steps: [                           ← JSON array embedded in the case
     { stepNumber, action, expectedResult },
     { stepNumber, action, expectedResult }
   ]
 }
 ```
 
-### Важное разграничение: TestStep vs TestRunStep
+### Key Distinction: TestStep vs TestRunStep
 
-**TestStep (шаги определения)** — встраиваем в TestCase.  
-**TestRunStep (шаги выполнения)** — **оставляем как есть**. У них свой статус (pass/fail/skip), они обновляются по одному во время тест-рана. Это правильные отдельные сущности.
+**TestStep (definition steps)** — embed into TestCase.  
+**TestRunStep (execution steps)** — **keep as-is**. These have their own execution status (pass/fail/skip), are updated one at a time during a test run, and are correctly modelled as separate entities.
 
 ---
 
-## Что меняется
+## What Changes
 
-### Бэкенд
+### Backend
 
-#### Убирается полностью
-- `TestStepDTO` — Java-класс сущности Cyoda
-- `TestStepService` — сервис для операций со шагами
-- `TestStepController` — REST-контроллер `/cases/{id}/steps`
-- `TestStepServiceCacheTest` — тесты (кеш stepsByCase)
+#### Removed entirely
+- `TestStepDTO` — Cyoda entity Java class
+- `TestStepService` — service for step operations
+- `TestStepController` — REST controller for `/cases/{id}/steps`
+- `TestStepServiceCacheTest` — cache tests (stepsByCase)
 - FSM workflow `teststep/version_1/TestStep.json`
-- Кеш `stepsByCase` из `CacheConfig`
+- `stepsByCase` cache from `CacheConfig`
+- `StepReplaceDTO` and the `PUT /steps/replace` endpoint (no longer needed)
 
-#### Меняется
+#### Modified
 
-**TestCaseDTO** — добавить поле:
+**TestCaseDTO** — add embedded steps field:
 ```java
 private List<StepDTO> steps = new ArrayList<>();
 
@@ -74,133 +75,132 @@ public static class StepDTO {
 }
 ```
 
-**TestCaseService** — все методы, которые создают/обновляют кейс, теперь включают шаги.  
-`createTestCase` принимает шаги в теле запроса.  
-`updateTestCase` обновляет весь кейс включая шаги.  
-`getTestCasesBySuiteId` возвращает кейсы со шагами (один запрос).  
+**TestCaseService** — all create/update methods now include steps inline.  
+`createTestCase` accepts steps in the request body.  
+`updateTestCase` updates the entire case including steps.  
+`getTestCasesBySuiteId` returns cases with steps in one request.
 
-**batchCreateTestCases** — существенно упрощается:
+**batchCreateTestCases** — significantly simplified:
 ```
-// Сейчас: 300 cases × (2 gRPC case + 5 gRPC steps) = 1800 gRPC
-// После:  300 cases × 1 gRPC = 300 gRPC
+// Current:  300 cases × (2 gRPC case + 5 gRPC steps) = 1,800 gRPC calls
+// After:    300 cases × 1 gRPC                        =   300 gRPC calls
 ```
-Никакого `testStepService.createTestStep()` — шаги идут внутри create кейса.
+No more `testStepService.createTestStep()` — steps are included in the case create payload.
 
-**Импорт `StepReplaceDTO`** — становится ненужным (шаги заменяются через update кейса).  
-**Endpoint `PUT /steps/replace`** — убирается.
+**Cyoda entity schema** for TestCase — add `steps` JSON field and re-import the schema.
 
-**Cyoda entity schema** для TestCase — добавить поле `steps` в JSON-схему и переимпортировать.
-
-#### Остаётся без изменений
-- `TestRunStep` и всё что с ним связано
+#### Unchanged
+- `TestRunStep` and everything related to it
 - `TestRunCaseService`
-- Логика копирования шагов в тест-ран: `case.steps` → `TestRunStep`
+- Logic for copying steps into a test run: `case.steps` → `TestRunStep`
 
-### Фронтенд
+### Frontend
 
-**Убирается:**
-- `testStepsApi` (list, create, update, delete, replace) в `api.ts`
-- `useApi.ts` — хуки для шагов (`useTestSteps` и аналоги)
-- Отдельные fetch-запросы шагов в компонентах
+#### Removed
+- `testStepsApi` (list, create, update, delete, replace) from `api.ts`
+- Step-related hooks in `useApi.ts`
+- Separate step fetch calls in components
 
-**Меняется:**
-- `Repository.tsx` — шаги читаются из `case.steps`, не из отдельного API
-- `CaseFormPage` / форма кейса — CRUD шагов идёт через update кейса целиком
-- `CreateTestRun.tsx` — шаги берутся из `case.steps` при формировании рана
-- Импорт — упрощается: шаги включены в payload кейса, никакого `testStepsApi.replace`
-- Тип `TestCase` в `api.ts` — добавить `steps: TestStep[]`
+#### Modified
+- `Repository.tsx` — steps are read from `case.steps`, no separate API call
+- Case form / editor — step CRUD goes through case update as a whole
+- `CreateTestRun.tsx` — steps sourced from `case.steps` when building a run
+- Import flow — simplified: steps are part of the case payload, no `testStepsApi.replace`
+- `TestCase` type in `api.ts` — add `steps: TestStep[]`
 
 ### Cyoda
 
-- Переимпорт схемы `TestCase` с новым полем `steps`
-- **Удалить workflow `TestStep`** из Cyoda (или оставить для backward-compat, но не использовать)
-- Миграция существующих данных: перенести все `TestStep` в `steps[]` на родительских `TestCase`
+- Re-import `TestCase` schema with the new `steps` field
+- Remove (or deprecate) the `TestStep` workflow from Cyoda
+- **Data migration:** move all existing `TestStep` entities into `steps[]` on their parent `TestCase`
 
 ---
 
-## Стратегия миграции данных
+## Data Migration Strategy
 
-Это самый рискованный шаг. Существующие шаги хранятся как отдельные Cyoda-сущности. Их нужно перенести в поля кейсов.
+This is the highest-risk step. Existing steps are stored as separate Cyoda entities and must be moved into their parent cases.
 
-### Вариант A: One-shot миграционный скрипт (рекомендуется)
-1. Остановить приложение (maintenance window)
-2. Запустить миграционный скрипт:
-   - Для каждого проекта: загрузить все кейсы
-   - Для каждого кейса: загрузить его TestStep-сущности
-   - Записать шаги в `case.steps` через update кейса
-   - Удалить TestStep-сущности
-3. Переимпортировать схему Cyoda
-4. Запустить новую версию приложения
+### Option A: One-shot migration script (recommended)
 
-**Плюсы:** чисто, одна версия кода после миграции  
-**Минусы:** требует maintenance window (время зависит от объёма данных)
+1. Take a maintenance window (stop the application)
+2. Run migration script:
+   - For each project: load all test cases
+   - For each case: load its TestStep entities
+   - Write steps into `case.steps` via case update
+   - Delete the TestStep entities
+3. Re-import Cyoda schema
+4. Deploy new application version
 
-### Вариант B: Двойная запись (без downtime)
-1. Деплоим версию N+1: пишет шаги и в TestStep-сущности, и в `case.steps`
-2. Запускаем фоновый мигратор: копирует старые TestStep → `case.steps`
-3. После полной миграции: деплоим версию N+2, читает только из `case.steps`
-4. Убираем старые TestStep-сущности
+**Pros:** clean, single code version after migration  
+**Cons:** requires maintenance window
 
-**Плюсы:** нет downtime  
-**Минусы:** сложнее, временное дублирование данных
+### Option B: Dual-write (zero downtime)
 
-**Рекомендация:** Вариант A, так как это не production-система с 24/7 требованиями. Maintenance window на 1-2 часа проще и надёжнее.
+1. Deploy version N+1: writes steps to both TestStep entities and `case.steps`
+2. Run background migrator: copies old TestStep → `case.steps`
+3. Once migration is complete: deploy version N+2 that reads only from `case.steps`
+4. Remove old TestStep entities
+
+**Pros:** no downtime  
+**Cons:** more complex, temporary data duplication
+
+**Recommendation:** Option A. This is not a 24/7 production system, so a 1–2 hour maintenance window is simpler and safer.
 
 ---
 
-## Риски
+## Risks
 
-| Риск | Вероятность | Влияние | Митигация |
+| Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Переимпорт Cyoda-схемы требует удаления всех кейсов | Высокая | Высокое | Сделать миграцию данных до удаления; бэкап |
-| Шаги в TestRunStep ссылаются на TestStep ID | Средняя | Среднее | Проверить все fk-зависимости; TestRunStep хранит snapshot шага, не ссылку |
-| Старые тест-раны теряют connection с шагами | Низкая | Среднее | TestRunStep независим от TestStep — хранит свою копию данных |
-| Cyoda не поддерживает вложенный JSON-массив в schema | Низкая | Высокое | Проверить на тест-окружении до начала рефакторинга |
+| Cyoda schema re-import requires deleting all cases | High | High | Run data migration before deletion; take a backup |
+| Cyoda does not support nested JSON arrays in schema | Low | High | **Verify on test environment before starting any work** |
+| TestRunStep references TestStep IDs | Medium | Medium | Confirm TestRunStep stores a snapshot (action/expectedResult), not a FK to TestStep |
+| Old test runs lose connection to step definitions | Low | Medium | TestRunStep is independent — it stores its own copy of step data |
 
 ---
 
-## Что НЕ меняется
+## What Does NOT Change
 
-- TestRunStep — все шаги выполнения остаются отдельными Cyoda-сущностями
-- Логика создания тест-рана (копирование шагов в TestRunStep)
-- API тест-ранов
-- Вся работа с дефектами, аттачментами, отчётами
+- `TestRunStep` — all execution-time steps remain separate Cyoda entities
+- Test run creation logic (copying steps into TestRunStep)
+- Test run API
+- Defects, attachments, reports — untouched
 
 ---
 
-## Оценка по задачам
+## Task Breakdown
 
-| Задача | Оценка |
+| Task | Estimate |
 |---|---|
-| Проверить поддержку JSON-array в Cyoda схеме | 0.5 дня |
-| Обновить схему TestCase + переимпорт в тест-окружении | 1 день |
-| Бэкенд: изменить TestCaseDTO, TestCaseService, убрать TestStepService/Controller | 2 дня |
-| Бэкенд: обновить batchCreateTestCases и импорт | 1 день |
-| Бэкенд: обновить TestRunCase (копирование из case.steps) | 1 день |
-| Бэкенд: тесты | 1 день |
-| Фронтенд: убрать testStepsApi, обновить компоненты | 2 дня |
-| Фронтенд: обновить импорт/экспорт | 0.5 дня |
-| Миграционный скрипт | 1 день |
-| QA + E2E тесты | 1 день |
-| **Итого** | **~10 рабочих дней** |
+| Verify Cyoda schema supports JSON array field | 0.5 day |
+| Update TestCase schema + re-import on test environment | 1 day |
+| Backend: update TestCaseDTO, TestCaseService; remove TestStepService/Controller | 2 days |
+| Backend: update batchCreateTestCases and import endpoint | 1 day |
+| Backend: update TestRunCase step-copy logic (case.steps → TestRunStep) | 1 day |
+| Backend: update tests | 1 day |
+| Frontend: remove testStepsApi, update components | 2 days |
+| Frontend: update import/export | 0.5 day |
+| Data migration script | 1 day |
+| QA + E2E tests | 1 day |
+| **Total** | **~10 working days** |
 
 ---
 
-## Ожидаемый результат
+## Expected Outcome
 
-| Метрика | Сейчас | После |
+| Metric | Current | After |
 |---|---|---|
-| Импорт 300 кейсов × 5 шагов | ~2100 gRPC, часы | ~300 gRPC, минуты |
-| Открытие кейса в редакторе | 2 HTTP-запроса | 1 HTTP-запрос |
-| Загрузка репозитория | N+1 запросов на шаги | 0 доп. запросов |
-| Сложность кодовой базы | Выше (отдельный контроллер/сервис) | Ниже |
+| Import 300 cases × 5 steps | ~1,800 gRPC calls, hours | ~300 gRPC calls, minutes |
+| Opening a case in the editor | 2 HTTP requests | 1 HTTP request |
+| Loading the repository | N+1 step requests | 0 extra requests |
+| Codebase complexity | Higher (separate controller/service) | Lower |
 
 ---
 
-## Вопросы для обсуждения на дейлике
+## Discussion Points for the Daily
 
-1. **Cyoda**: поддерживает ли схема вложенный JSON-array? Нужно проверить до начала работы.
-2. **Downtime**: допустим ли maintenance window для миграции данных? Сколько данных уже в системе?
-3. **Приоритет**: этот рефакторинг vs другие задачи в бэклоге?
-4. **Тест-окружение**: есть ли изолированное окружение для проверки Cyoda-схемы?
-5. **TestRunStep**: подтвердить что TestRunStep хранит snapshot шага (action/expectedResult) и не зависит от TestStep ID.
+1. **Cyoda schema:** does Cyoda support a nested JSON array field on an entity? This must be verified on a test environment **before any code work begins**.
+2. **Downtime:** is a maintenance window acceptable for the data migration? How much data is already in the system?
+3. **Priority:** this refactoring vs other backlog items — when do we schedule it?
+4. **Test environment:** is there an isolated Cyoda environment to test the schema change safely?
+5. **TestRunStep:** confirm that TestRunStep stores a full snapshot of step data (action/expectedResult) and has no foreign key dependency on TestStep ID.
