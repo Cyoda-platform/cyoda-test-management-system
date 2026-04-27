@@ -12,6 +12,9 @@ import org.cyoda.cloud.api.common.model.GroupOperatorDto;
 import org.cyoda.cloud.api.common.model.OperatorTypeDto;
 import org.cyoda.cloud.api.common.model.QueryConditionTypeDto;
 import org.cyoda.cloud.api.common.model.SimpleConditionDto;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -66,6 +69,10 @@ public class TestRunService {
                 result.pageNumber(), result.pageSize(), result.totalElements());
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "testRunsByProject",    allEntries = true),
+        @CacheEvict(value = "allTestRunsByProject", allEntries = true)
+    })
     public TestRunDTO createTestRun(TestRunDTO testRun) {
         String now = Instant.now().toString();
         testRun.setCreatedAt(now);
@@ -115,6 +122,7 @@ public class TestRunService {
         }
     }
 
+    @Cacheable(value = "testRunsByProject", key = "#projectId + ':' + #page + ':' + #size")
     public PageResult<TestRunDTO> getTestRunsByProjectId(UUID projectId, int page, int size) {
         // Filter in-memory: the Cyoda entity model for TestRun was registered before
         // projectId was added, so $.projectId is not a valid search path in the schema.
@@ -147,6 +155,7 @@ public class TestRunService {
      * Retrieves all test runs for a project without pagination.
      * Used internally for cascade-delete operations.
      */
+    @Cacheable(value = "allTestRunsByProject", key = "#projectId")
     public List<TestRunDTO> getAllTestRunsByProjectId(UUID projectId) {
         return entityService.findAll(MODEL_SPEC, TestRunDTO.class).data()
                 .stream()
@@ -169,6 +178,10 @@ public class TestRunService {
      * tab cannot silently discard progress already saved by the first tab.
      * Note: stepStatuses is stored as JSON string, so merging happens via Map conversion.</p>
      */
+    @Caching(evict = {
+        @CacheEvict(value = "testRunsByProject",    allEntries = true),
+        @CacheEvict(value = "allTestRunsByProject", allEntries = true)
+    })
     public TestRunDTO updateTestRun(UUID id, TestRunDTO testRun) {
         boolean needsCaseIdsMerge = testRun.getCaseIds() == null || testRun.getCaseIds().isEmpty();
         boolean needsStatusMerge  = testRun.getStepStatuses() == null
@@ -269,6 +282,10 @@ public class TestRunService {
         return getTestRunById(id).isPresent();
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "testRunsByProject",    allEntries = true),
+        @CacheEvict(value = "allTestRunsByProject", allEntries = true)
+    })
     public boolean deleteTestRun(UUID id) {
         entityService.deleteById(id);
         return true;
