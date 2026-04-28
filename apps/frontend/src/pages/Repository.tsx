@@ -27,7 +27,7 @@ import {
   useCreateTestRun, useRepository,
   keys,
 } from '@/hooks/useApi';
-import { suitesApi, testCasesApi, testStepsApi, attachmentsApi } from '@/lib/api';
+import { suitesApi, testCasesApi, attachmentsApi } from '@/lib/api';
 import { AuthenticatedImage, AuthenticatedPdf, attachmentContentUrl, downloadWithAuth, isImageType, isPdfType, isPreviewableType } from '@/components/AttachmentPreview';
 import type { LocalCase as TestCase, LocalStep, LocalSuite as Suite } from '@/lib/localTypes';
 // TestRun type only needed for legacy Create Run handler shape — removed, using API directly
@@ -64,7 +64,7 @@ const Repository = () => {
         priority:      c.priority,
         description:   c.description,
         preconditions: c.preconditions,
-        steps:         [],    // loaded lazily when a case is selected
+        steps:         (c.steps ?? []).map(s => ({ order: s.stepNumber ?? 1, action: s.action, expectedResult: s.expectedResult, status: '' })),
         deleted:       c.deleted,
       })),
     }));
@@ -169,25 +169,14 @@ const Repository = () => {
     });
   }, [suites]);
 
-  // 3. Fetch steps for the selected case (lazy)
+  // 3. Steps for the selected case are embedded in the case object — no separate fetch needed.
   const selectedCaseSuiteId = useMemo(
     () => localSuites.find(s => s.cases.some(c => c.id === selectedCase?.id))?.id ?? '',
     [localSuites, selectedCase?.id]
   );
-  const { data: stepsData = [] } = useQuery({
-    queryKey: keys.steps.all(projectId!, selectedCaseSuiteId, selectedCase?.id ?? ''),
-    queryFn:  () => testStepsApi.list(projectId!, selectedCaseSuiteId, selectedCase!.id),
-    enabled:  !!selectedCase && !!selectedCaseSuiteId,
-  });
   const stepsForSelectedCase: LocalStep[] = useMemo(
-    () => stepsData.map(s => ({
-      id:             s.id,
-      order:          s.stepNumber,
-      action:         s.action,
-      expectedResult: s.expectedResult,
-      status:         s.status,
-    })),
-    [stepsData]
+    () => (selectedCase?.steps ?? []),
+    [selectedCase?.steps]
   );
 
   // 4. Fetch attachments for the selected case (lazy)
@@ -584,14 +573,8 @@ const Repository = () => {
         const newCase = await testCasesApi.create(projectId, suite.id, {
           title: `${tc.title} (Copy)`, priority: tc.priority,
           description: tc.description, preconditions: tc.preconditions,
+          steps: (tc.steps ?? []).map(s => ({ stepNumber: s.order, action: s.action, expectedResult: s.expectedResult })),
         });
-        // Copy steps
-        const steps = await testStepsApi.list(projectId, suite.id, tc.id);
-        for (const step of steps) {
-          await testStepsApi.create(projectId, suite.id, newCase.id, {
-            stepNumber: step.stepNumber, action: step.action, expectedResult: step.expectedResult,
-          });
-        }
         // Copy attachments
         const attachments = await attachmentsApi.listByCase(projectId, tc.id);
         for (const att of attachments) {
@@ -619,21 +602,10 @@ const Repository = () => {
   const [caseSuiteId, setCaseSuiteId] = useState<string>('');
   const [editingCase, setEditingCase] = useState<TestCase | null>(null);
 
-  // Fetch steps for the case being edited (separate from selectedCase to avoid cross-contamination)
-  const { data: editingStepsData = [] } = useQuery({
-    queryKey: keys.steps.all(projectId!, caseSuiteId, editingCaseId),
-    queryFn:  () => testStepsApi.list(projectId!, caseSuiteId, editingCaseId),
-    enabled:  !!editingCase && !!caseSuiteId && !!editingCaseId,
-  });
+  // Steps for the editing case are embedded in the case object — no separate fetch needed.
   const stepsForEditingCase: LocalStep[] = useMemo(
-    () => editingStepsData.map(s => ({
-      id:             s.id,
-      order:          s.stepNumber,
-      action:         s.action,
-      expectedResult: s.expectedResult,
-      status:         s.status,
-    })),
-    [editingStepsData]
+    () => (editingCase?.steps ?? []),
+    [editingCase?.steps]
   );
 
   // Quick create modal
@@ -719,28 +691,8 @@ const Repository = () => {
             .map(s => ({ ...s, cases: s.cases.filter(c => exportSelectedCases.has(c.id)) }))
         : localSuites;
 
-      const suitesForExport = exportIncludeSteps
-        ? await Promise.all(targetSuites.map(async (suite) => ({
-            ...suite,
-            cases: await Promise.all(suite.cases.map(async (tc) => {
-              const steps = await queryClient.fetchQuery({
-                queryKey: keys.steps.all(projectId!, suite.id, tc.id),
-                queryFn: async () => {
-                  const data = await testStepsApi.list(projectId!, suite.id, tc.id);
-                  return data.map(step => ({
-                    id: step.id,
-                    order: step.stepNumber,
-                    action: step.action,
-                    expectedResult: step.expectedResult,
-                    status: step.status,
-                  }));
-                },
-              });
-
-              return { ...tc, steps };
-            })),
-          })))
-        : targetSuites;
+      // Steps are embedded in each TestCase — no separate fetch needed.
+      const suitesForExport = targetSuites;
 
       await performExport({
         suites: suitesForExport,
@@ -844,18 +796,11 @@ const Repository = () => {
             priority:     ow.data.priority,
             description:  ow.data.description,
             preconditions: ow.data.preconditions,
+            steps: ow.data.steps !== undefined
+              ? (ow.data.steps || []).map(s => ({ stepNumber: s.order || 1, action: s.action, expectedResult: s.expectedResult }))
+              : undefined,
           });
           affectedSuiteIds.add(ow.existingSuiteId);
-
-          // Replace steps with a single HTTP call
-          if (ow.data.steps !== undefined) {
-            const stepsPayload = (ow.data.steps || []).map(s => ({
-              stepNumber:     s.order || 1,
-              action:         s.action,
-              expectedResult: s.expectedResult,
-            }));
-            await testStepsApi.replace(projectId, ow.existingSuiteId, ow.existingCaseId, stepsPayload);
-          }
           tick();
         }));
       }
@@ -959,14 +904,8 @@ const Repository = () => {
           priority: tc.priority,
           description: tc.description || '',
           preconditions: tc.preconditions || '',
+          steps: (tc.steps ?? []).map(s => ({ stepNumber: s.order, action: s.action, expectedResult: s.expectedResult })),
         });
-        // Copy steps
-        const steps = await testStepsApi.list(projectId, suite.id, tc.id);
-        for (const step of steps) {
-          await testStepsApi.create(projectId, newSuite.id, newCase.id, {
-            stepNumber: step.stepNumber, action: step.action, expectedResult: step.expectedResult,
-          });
-        }
         // Copy attachments
         const attachments = await attachmentsApi.listByCase(projectId, tc.id);
         for (const att of attachments) {
@@ -1014,12 +953,8 @@ const Repository = () => {
         const newCase = await testCasesApi.create(projectId, targetSuiteId, {
           title: data.title, priority: data.priority,
           description: data.description, preconditions: data.preconditions,
+          steps: data.steps.map(s => ({ stepNumber: s.order, action: s.action, expectedResult: s.expectedResult })),
         });
-        for (const step of data.steps) {
-          await testStepsApi.create(projectId, targetSuiteId, newCase.id, {
-            stepNumber: step.order, action: step.action, expectedResult: step.expectedResult,
-          });
-        }
         for (const file of data.files) {
           await attachmentsApi.upload(projectId, file, newCase.id);
         }
@@ -1033,16 +968,8 @@ const Repository = () => {
         await testCasesApi.update(projectId, caseSuiteId, editingCaseId, {
           title: data.title, priority: data.priority,
           description: data.description, preconditions: data.preconditions,
+          steps: data.steps.map(s => ({ stepNumber: s.order, action: s.action, expectedResult: s.expectedResult })),
         });
-        // Replace all steps: delete existing then recreate
-        for (const step of stepsForSelectedCase) {
-          if (step.id) await testStepsApi.delete(projectId, caseSuiteId, editingCaseId, step.id);
-        }
-        for (const step of data.steps) {
-          await testStepsApi.create(projectId, caseSuiteId, editingCaseId, {
-            stepNumber: step.order, action: step.action, expectedResult: step.expectedResult,
-          });
-        }
         for (const id of data.removedAttachmentIds) {
           await attachmentsApi.delete(projectId, id);
         }
@@ -1051,7 +978,6 @@ const Repository = () => {
         }
         queryClient.invalidateQueries({ queryKey: keys.cases.all(projectId, caseSuiteId) });
         queryClient.invalidateQueries({ queryKey: keys.repository.all(projectId) });
-        queryClient.invalidateQueries({ queryKey: keys.steps.all(projectId, caseSuiteId, editingCaseId) });
         // Use the root attachments key so the Attachments page AND the per-case
         // panel both refresh (covers keys used by useAttachmentsByCase and the
         // local ['attachments', projectId, caseId] key used inline in Repository).
@@ -1082,14 +1008,8 @@ const Repository = () => {
       const newCase = await testCasesApi.create(projectId, tc.suiteId, {
         title: `${tc.title} (Copy)`, priority: tc.priority,
         description: tc.description, preconditions: tc.preconditions,
+        steps: (tc.steps ?? []).map(s => ({ stepNumber: s.stepNumber ?? 1, action: s.action, expectedResult: s.expectedResult })),
       });
-      // Copy steps
-      const steps = await testStepsApi.list(projectId, tc.suiteId, tc.id);
-      for (const step of steps) {
-        await testStepsApi.create(projectId, tc.suiteId, newCase.id, {
-          stepNumber: step.stepNumber, action: step.action, expectedResult: step.expectedResult,
-        });
-      }
       // Copy attachments
       const attachments = await attachmentsApi.listByCase(projectId, tc.id);
       for (const att of attachments) {

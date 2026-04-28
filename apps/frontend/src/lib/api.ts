@@ -170,6 +170,7 @@ export interface TestCase {
   description: string;
   preconditions: string;
   deleted: boolean;
+  steps?: BatchImportStep[];
 }
 
 export interface BatchImportStep {
@@ -212,29 +213,6 @@ export const testCasesApi = {
     api.patch<TestCase>(`/projects/${projectId}/suites/${suiteId}/cases/${id}/move`, body),
 };
 
-// ── Test Steps ────────────────────────────────────────────────────────────────
-
-export interface TestStep {
-  id: string;
-  testCaseId: string;
-  stepNumber: number;
-  action: string;
-  expectedResult: string;
-  status: string;
-}
-
-export const testStepsApi = {
-  list:   (projectId: string, suiteId: string, caseId: string) =>
-    api.get<TestStep[]>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps`),
-  create: (projectId: string, suiteId: string, caseId: string, body: Partial<TestStep>) =>
-    api.post<TestStep>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps`, body),
-  update: (projectId: string, suiteId: string, caseId: string, id: string, body: Partial<TestStep>) =>
-    api.put<TestStep>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps/${id}`, body),
-  delete: (projectId: string, suiteId: string, caseId: string, id: string) =>
-    api.delete<void>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps/${id}`),
-  replace: (projectId: string, suiteId: string, caseId: string, steps: Array<{ stepNumber: number; action: string; expectedResult: string }>) =>
-    api.put<TestStep[]>(`/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps/replace`, steps),
-};
 
 // ── Test Runs ─────────────────────────────────────────────────────────────────
 

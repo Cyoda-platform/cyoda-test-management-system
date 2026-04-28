@@ -16,7 +16,6 @@ import ViewDefectModal from '@/components/ViewDefectModal';
 import {
   useTestRunDetails,
   useRepository,
-  useTestSteps,
   useUpdateTestRun,
   useCompleteTestRun,
   useUnlockTestRun,
@@ -502,24 +501,17 @@ const RunExecution = () => {
     projectId!, runId!, activeCaseRunCaseId,
   );
 
-  /** testStepId → TestRunStep.id — used when firing per-step DB mutations. */
-  const testStepToRunStepId = useMemo(() => {
-    const map = new Map<string, string>();
-    activeCaseRunSteps.forEach((rs) => map.set(rs.testStepId, rs.id));
+  /** stepNumber → TestRunStep.id — used when firing per-step DB mutations. */
+  const stepNumberToRunStepId = useMemo(() => {
+    const map = new Map<number, string>();
+    activeCaseRunSteps.forEach((rs) => { if (rs.stepNumber != null) map.set(rs.stepNumber, rs.id); });
     return map;
   }, [activeCaseRunSteps]);
 
-  /** Global step data (action / expectedResult) for the active case. */
-  const { data: steps = [], isLoading: stepsLoading } = useTestSteps(
-    projectId!,
-    activeCase?.suiteId ?? '',
-    activeCase?.id ?? '',
-  );
-
-  // Sort steps by stepNumber to ensure consistent ordering
+  // Steps come from TestRunStep snapshot — no separate TestCase step fetch needed.
   const sortedSteps = useMemo(() =>
-    [...steps].sort((a, b) => (a.stepNumber || 0) - (b.stepNumber || 0)),
-    [steps]
+    [...activeCaseRunSteps].sort((a, b) => (a.stepNumber || 0) - (b.stepNumber || 0)),
+    [activeCaseRunSteps]
   );
 
   // Load persisted attachments for the active case from the server
@@ -844,7 +836,7 @@ const RunExecution = () => {
     // Run entity). Keeping both in sync means the /cases and /steps endpoints
     // always reflect the real execution state for reporting & external consumers.
     const runCaseId = testCaseToRunCaseId.get(caseId);
-    const runStepId = testStepToRunStepId.get(globalStepId);
+    const runStepId = stepNumberToRunStepId.get(stepNumber);
     const derivedCaseStatus = computeCaseStatus(updated).toUpperCase();
     if (runCaseId && runStepId) {
       updateTestRunStepStatus.mutate({
@@ -1466,12 +1458,7 @@ const RunExecution = () => {
             </div>
           )}
 
-          {stepsLoading ? (
-            <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Loading steps…</span>
-            </div>
-          ) : steps.length > 0 ? (
+          {sortedSteps.length > 0 ? (
             <div className="space-y-2.5">
               {sortedSteps.map((step, sIdx) => {
                 const currentStatus =

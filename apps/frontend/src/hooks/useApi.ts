@@ -16,7 +16,7 @@ import {
   projectsApi,
   suitesApi,
   testCasesApi,
-  testStepsApi,
+
   testRunsApi,
   testRunCasesApi,
   testRunStepsRunApi,
@@ -27,7 +27,7 @@ import {
   type Project,
   type Suite,
   type TestCase,
-  type TestStep,
+
   type TestRun,
   type TestRunCase,
   type TestRunDetail,
@@ -336,75 +336,6 @@ export function useMoveTestCase() {
       qc.invalidateQueries({ queryKey: keys.cases.all(projectId, targetSuiteId) });
       qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
     },
-  });
-}
-
-// ── Test Steps ────────────────────────────────────────────────────────────────
-
-export function useTestSteps(projectId: string, suiteId: string, caseId: string) {
-  return useQuery({
-    queryKey: keys.steps.all(projectId, suiteId, caseId),
-    queryFn:  () => testStepsApi.list(projectId, suiteId, caseId),
-    enabled:  !!projectId && !!suiteId && !!caseId,
-  });
-}
-
-export function useCreateTestStep() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      projectId,
-      suiteId,
-      caseId,
-      body,
-    }: {
-      projectId: string;
-      suiteId: string;
-      caseId: string;
-      body: Partial<TestStep>;
-    }) => testStepsApi.create(projectId, suiteId, caseId, body),
-    onSuccess: (_data, { projectId, suiteId, caseId }) =>
-      qc.invalidateQueries({ queryKey: keys.steps.all(projectId, suiteId, caseId) }),
-  });
-}
-
-export function useUpdateTestStep() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      projectId,
-      suiteId,
-      caseId,
-      id,
-      body,
-    }: {
-      projectId: string;
-      suiteId: string;
-      caseId: string;
-      id: string;
-      body: Partial<TestStep>;
-    }) => testStepsApi.update(projectId, suiteId, caseId, id, body),
-    onSuccess: (_data, { projectId, suiteId, caseId }) =>
-      qc.invalidateQueries({ queryKey: keys.steps.all(projectId, suiteId, caseId) }),
-  });
-}
-
-export function useDeleteTestStep() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      projectId,
-      suiteId,
-      caseId,
-      id,
-    }: {
-      projectId: string;
-      suiteId: string;
-      caseId: string;
-      id: string;
-    }) => testStepsApi.delete(projectId, suiteId, caseId, id),
-    onSuccess: (_data, { projectId, suiteId, caseId }) =>
-      qc.invalidateQueries({ queryKey: keys.steps.all(projectId, suiteId, caseId) }),
   });
 }
 
