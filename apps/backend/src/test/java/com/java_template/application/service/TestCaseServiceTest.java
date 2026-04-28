@@ -36,9 +36,6 @@ public class TestCaseServiceTest {
     @Mock
     private ProjectCounterService projectCounterService;
 
-    @Mock
-    private TestStepService testStepService;
-
     @Spy
     private ObjectMapper objectMapper;
 
@@ -191,7 +188,6 @@ public class TestCaseServiceTest {
                 entityWithMetadata(inv.getArgument(0), UUID.randomUUID()));
         when(entityService.update(any(UUID.class), any(TestCaseDTO.class), any())).thenAnswer(inv ->
                 entityWithMetadata(inv.getArgument(1), inv.getArgument(0)));
-        when(testStepService.createTestStep(any())).thenReturn(new com.java_template.application.dto.TestStepDTO());
 
         List<TestCaseDTO> result = testCaseService.batchCreateTestCases(projectId, suiteId, List.of(item1, item2));
 
@@ -199,8 +195,14 @@ public class TestCaseServiceTest {
         assertEquals("TC-001", result.get(0).getDisplayId());
         assertEquals("TC-002", result.get(1).getDisplayId());
         verify(entityService, times(2)).create(any(TestCaseDTO.class));
+        // 2 updates for displayId persistence (one per case)
         verify(entityService, times(2)).update(any(UUID.class), any(TestCaseDTO.class), any());
-        verify(testStepService, times(1)).createTestStep(any()); // 1 step in item1, 0 in item2
+        // Verify item1 has embedded steps (no testStepService calls)
+        TestCaseDTO case1 = result.get(0);
+        assertNotNull(case1.getSteps(), "steps should be embedded");
+        assertEquals(1, case1.getSteps().size(), "item1 should have 1 embedded step");
+        assertEquals("click button", case1.getSteps().get(0).getAction());
+        assertEquals("page loads", case1.getSteps().get(0).getExpectedResult());
     }
 
     @Test

@@ -20,7 +20,6 @@ public class CacheConfig {
                 "allTestRunsByProject",
                 "suitesByProject",
                 "casesBySuite",
-                "stepsByCase",
                 "runCasesByRun"
         );
         manager.setCaffeine(Caffeine.newBuilder()

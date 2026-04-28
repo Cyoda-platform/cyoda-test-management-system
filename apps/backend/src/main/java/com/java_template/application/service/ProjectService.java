@@ -37,7 +37,6 @@ public class ProjectService {
     private final ObjectMapper objectMapper;
     private final SuiteService suiteService;
     private final TestCaseService testCaseService;
-    private final TestStepService testStepService;
     private final TestRunService testRunService;
     private final TestRunCaseService testRunCaseService;
     private final TestRunStepService testRunStepService;
@@ -50,7 +49,6 @@ public class ProjectService {
                           ObjectMapper objectMapper,
                           @Lazy SuiteService suiteService,
                           @Lazy TestCaseService testCaseService,
-                          @Lazy TestStepService testStepService,
                           @Lazy TestRunService testRunService,
                           @Lazy TestRunCaseService testRunCaseService,
                           @Lazy TestRunStepService testRunStepService,
@@ -62,7 +60,6 @@ public class ProjectService {
         this.objectMapper = objectMapper;
         this.suiteService = suiteService;
         this.testCaseService = testCaseService;
-        this.testStepService = testStepService;
         this.testRunService = testRunService;
         this.testRunCaseService = testRunCaseService;
         this.testRunStepService = testRunStepService;
@@ -272,30 +269,12 @@ public class ProjectService {
                 }
             }
 
-            // ── Phase 2: Master data (TestSteps → TestCases → Suites) ────────────────────
+            // ── Phase 2: Master data (TestCases → Suites) ───────────────────────────────
+            // Steps are embedded in TestCase JSON — no separate TestStep entities to delete.
             var allCases = testCaseService.getAllCasesByProjectIdIncludingDeleted(id);
             logger.info("[Project] Cascade: {} TestCase(s) to delete (including soft-deleted)", allCases.size());
 
             if (!allCases.isEmpty()) {
-                var stepFutures = allCases.stream()
-                        .map(tc -> CompletableFuture.runAsync(() -> {
-                            logger.debug("[Project] Deleting TestSteps for TestCase: {}", tc.getId());
-                            try {
-                                testStepService.getAllTestStepsByTestCaseIdIncludingDeleted(tc.getId())
-                                        .forEach(s -> testStepService.hardDeleteTestStep(s.getId()));
-                            } catch (Exception e) {
-                                logger.error("[Project] Failed to delete TestSteps for TestCase {}: {}",
-                                    tc.getId(), e.getMessage(), e);
-                                throw new RuntimeException(e);
-                            }
-                        }))
-                        .toList();
-                try {
-                    CompletableFuture.allOf(stepFutures.toArray(new CompletableFuture[0])).join();
-                } catch (Exception e) {
-                    logger.error("[Project] Failed during parallel TestStep deletion: {}", e.getMessage(), e);
-                    throw new RuntimeException("Cascade delete failed at TestStep phase: " + e.getMessage(), e);
-                }
                 allCases.forEach(tc -> testCaseService.hardDeleteTestCase(tc.getId()));
             }
 

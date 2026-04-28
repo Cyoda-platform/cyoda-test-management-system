@@ -5,10 +5,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.java_template.application.dto.Priority;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.application.dto.TestRunCaseDTO;
-import com.java_template.application.dto.TestStepDTO;
 import com.java_template.application.service.TestCaseService;
 import com.java_template.application.service.TestRunCaseService;
-import com.java_template.application.service.TestStepService;
 import com.java_template.common.workflow.CyodaEventContext;
 import com.java_template.common.workflow.OperationSpecification;
 import io.cloudevents.v1.proto.CloudEvent;
@@ -38,7 +36,6 @@ import static org.mockito.Mockito.*;
 class SnapshotProcessorTest {
 
     @Mock private TestCaseService testCaseService;
-    @Mock private TestStepService testStepService;
     @Mock private TestRunCaseService testRunCaseService;
 
     private SnapshotProcessor processor;
@@ -47,7 +44,7 @@ class SnapshotProcessorTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        processor = new SnapshotProcessor(testCaseService, testStepService, testRunCaseService, objectMapper);
+        processor = new SnapshotProcessor(testCaseService, testRunCaseService, objectMapper);
     }
 
     // ---- supports() --------------------------------------------------------
@@ -87,7 +84,7 @@ class SnapshotProcessorTest {
 
         EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
 
-        // TestCase returned by service
+        // TestCase returned by service — no steps
         TestCaseDTO tc = new TestCaseDTO();
         tc.setId(caseId);
         tc.setTitle("Login flow");
@@ -96,9 +93,9 @@ class SnapshotProcessorTest {
         tc.setPriority(Priority.HIGH);
         tc.setDisplayId("TC-001");
         tc.setSuiteId(suiteId);
+        // steps is empty by default
 
         when(testCaseService.getTestCaseById(caseId)).thenReturn(Optional.of(tc));
-        when(testStepService.getTestStepsByTestCaseId(caseId)).thenReturn(List.of());
 
         TestRunCaseDTO createdCase = new TestRunCaseDTO();
         createdCase.setId(UUID.randomUUID());
@@ -127,12 +124,11 @@ class SnapshotProcessorTest {
     }
 
     @Test
-    @DisplayName("passes TestStep snapshot data to createTestRunCaseWithStepSnapshots")
-    void passesStepSnapshotData() throws Exception {
+    @DisplayName("passes embedded step data from tc.getSteps() to createTestRunCaseWithStepSnapshots")
+    void passesEmbeddedStepData() throws Exception {
         UUID testRunId = UUID.randomUUID();
         UUID projectId = UUID.randomUUID();
         UUID caseId    = UUID.randomUUID();
-        UUID stepId    = UUID.randomUUID();
 
         ObjectNode runJson = objectMapper.createObjectNode();
         runJson.put("projectId", projectId.toString());
@@ -140,18 +136,14 @@ class SnapshotProcessorTest {
 
         EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
 
+        TestCaseDTO.StepDTO embeddedStep = new TestCaseDTO.StepDTO(1, "Click checkout", "Order confirmed");
+
         TestCaseDTO tc = new TestCaseDTO();
         tc.setId(caseId);
         tc.setTitle("Checkout flow");
-
-        TestStepDTO step = new TestStepDTO();
-        step.setId(stepId);
-        step.setStepNumber(1);
-        step.setAction("Click checkout");
-        step.setExpectedResult("Order confirmed");
+        tc.setSteps(List.of(embeddedStep));
 
         when(testCaseService.getTestCaseById(caseId)).thenReturn(Optional.of(tc));
-        when(testStepService.getTestStepsByTestCaseId(caseId)).thenReturn(List.of(step));
 
         TestRunCaseDTO createdCase = new TestRunCaseDTO();
         createdCase.setId(UUID.randomUUID());
@@ -160,12 +152,11 @@ class SnapshotProcessorTest {
 
         processor.process(context(request));
 
-        ArgumentCaptor<List<TestStepDTO>> stepsCaptor = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<TestCaseDTO.StepDTO>> stepsCaptor = ArgumentCaptor.forClass(List.class);
         verify(testRunCaseService).createTestRunCaseWithStepSnapshots(any(), stepsCaptor.capture());
 
-        List<TestStepDTO> captured = stepsCaptor.getValue();
+        List<TestCaseDTO.StepDTO> captured = stepsCaptor.getValue();
         assertEquals(1, captured.size());
-        assertEquals(stepId, captured.get(0).getId());
         assertEquals(1,                captured.get(0).getStepNumber());
         assertEquals("Click checkout", captured.get(0).getAction());
         assertEquals("Order confirmed",captured.get(0).getExpectedResult());
@@ -186,7 +177,7 @@ class SnapshotProcessorTest {
         EntityProcessorCalculationResponse response = processor.process(context(request));
 
         assertTrue(response.getSuccess());
-        verifyNoInteractions(testCaseService, testStepService, testRunCaseService);
+        verifyNoInteractions(testCaseService, testRunCaseService);
     }
 
     @Test
@@ -202,7 +193,7 @@ class SnapshotProcessorTest {
         EntityProcessorCalculationResponse response = processor.process(context(request));
 
         assertTrue(response.getSuccess());
-        verifyNoInteractions(testCaseService, testStepService, testRunCaseService);
+        verifyNoInteractions(testCaseService, testRunCaseService);
     }
 
     @Test
@@ -226,8 +217,8 @@ class SnapshotProcessorTest {
         TestCaseDTO present = new TestCaseDTO();
         present.setId(presentId);
         present.setTitle("Present case");
+        // steps is empty by default
         when(testCaseService.getTestCaseById(presentId)).thenReturn(Optional.of(present));
-        when(testStepService.getTestStepsByTestCaseId(presentId)).thenReturn(List.of());
 
         TestRunCaseDTO created = new TestRunCaseDTO();
         created.setId(UUID.randomUUID());

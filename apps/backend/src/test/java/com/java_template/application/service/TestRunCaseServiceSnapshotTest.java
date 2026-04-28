@@ -2,9 +2,9 @@ package com.java_template.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.Priority;
+import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.application.dto.TestRunCaseDTO;
 import com.java_template.application.dto.TestRunStepDTO;
-import com.java_template.application.dto.TestStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.service.EntityService;
 import com.java_template.common.workflow.CyodaEntity;
@@ -85,21 +85,10 @@ class TestRunCaseServiceSnapshotTest {
         caseInput.setTestCaseId(testCaseId);
         caseInput.setProjectId(projectId);
 
-        UUID stepId1 = UUID.randomUUID();
-        UUID stepId2 = UUID.randomUUID();
         UUID runStepId1 = UUID.randomUUID();
 
-        TestStepDTO step1 = new TestStepDTO();
-        step1.setId(stepId1);
-        step1.setStepNumber(1);
-        step1.setAction("Open browser");
-        step1.setExpectedResult("Browser opens");
-
-        TestStepDTO step2 = new TestStepDTO();
-        step2.setId(stepId2);
-        step2.setStepNumber(2);
-        step2.setAction("Enter URL");
-        step2.setExpectedResult("Page loads");
+        TestCaseDTO.StepDTO step1 = new TestCaseDTO.StepDTO(1, "Open browser", "Browser opens");
+        TestCaseDTO.StepDTO step2 = new TestCaseDTO.StepDTO(2, "Enter URL", "Page loads");
 
         when(entityService.create(any(TestRunCaseDTO.class))).thenReturn(wrap(caseInput, runCaseId));
 
@@ -124,17 +113,8 @@ class TestRunCaseServiceSnapshotTest {
         caseInput.setProjectId(projectId);
 
         UUID runStepId1 = UUID.randomUUID();
-        TestStepDTO step1 = new TestStepDTO();
-        step1.setId(UUID.randomUUID());
-        step1.setStepNumber(1);
-        step1.setAction("Step 1");
-        step1.setExpectedResult("Result 1");
-
-        TestStepDTO step2 = new TestStepDTO();
-        step2.setId(UUID.randomUUID());
-        step2.setStepNumber(2);
-        step2.setAction("Step 2");
-        step2.setExpectedResult("Result 2");
+        TestCaseDTO.StepDTO step1 = new TestCaseDTO.StepDTO(1, "Step 1", "Result 1");
+        TestCaseDTO.StepDTO step2 = new TestCaseDTO.StepDTO(2, "Step 2", "Result 2");
 
         when(entityService.create(any(TestRunCaseDTO.class))).thenReturn(wrap(caseInput, runCaseId));
 

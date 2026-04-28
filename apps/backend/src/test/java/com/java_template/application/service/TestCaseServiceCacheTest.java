@@ -26,7 +26,6 @@ public class TestCaseServiceCacheTest {
     @MockBean EntityService entityService;
     @MockBean ObjectMapper objectMapper;
     @MockBean ProjectCounterService projectCounterService;
-    @MockBean TestStepService testStepService;
     @Autowired TestCaseService testCaseService;
 
     private <T extends CyodaEntity> EntityWithMetadata<T> wrap(T dto, UUID id) {

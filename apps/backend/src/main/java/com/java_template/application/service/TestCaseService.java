@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.BatchImportCaseDTO;
 import com.java_template.application.dto.ReorderItemDTO;
 import com.java_template.application.dto.TestCaseDTO;
-import com.java_template.application.dto.TestStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
@@ -40,16 +39,13 @@ public class TestCaseService {
 
     private final EntityService entityService;
     private final ProjectCounterService projectCounterService;
-    private final TestStepService testStepService;
     private final ObjectMapper objectMapper;
 
     public TestCaseService(EntityService entityService,
                            ProjectCounterService projectCounterService,
-                           TestStepService testStepService,
                            ObjectMapper objectMapper) {
         this.entityService = entityService;
         this.projectCounterService = projectCounterService;
-        this.testStepService = testStepService;
         this.objectMapper = objectMapper;
     }
 
@@ -337,22 +333,24 @@ public class TestCaseService {
                 tc.setDeleted(false);
                 tc.setDisplayId(displayId);
 
-                TestCaseDTO saved = withId(entityService.create(tc));
-                saved.setDisplayId(displayId);
-                entityService.update(saved.getId(), saved, null);
-
                 if (item.getSteps() != null && !item.getSteps().isEmpty()) {
                     int stepNum = 1;
+                    List<TestCaseDTO.StepDTO> embeddedSteps = new java.util.ArrayList<>();
                     for (BatchImportCaseDTO.StepDTO s : item.getSteps()) {
-                        TestStepDTO step = new TestStepDTO();
-                        step.setTestCaseId(saved.getId());
-                        step.setStepNumber(s.getStepNumber() != null ? s.getStepNumber() : stepNum);
-                        step.setAction(s.getAction() != null ? s.getAction() : "");
-                        step.setExpectedResult(s.getExpectedResult() != null ? s.getExpectedResult() : "");
-                        testStepService.createTestStep(step);
+                        TestCaseDTO.StepDTO step = new TestCaseDTO.StepDTO(
+                                s.getStepNumber() != null ? s.getStepNumber() : stepNum,
+                                s.getAction() != null ? s.getAction() : "",
+                                s.getExpectedResult() != null ? s.getExpectedResult() : "");
+                        embeddedSteps.add(step);
                         stepNum++;
                     }
+                    tc.setSteps(embeddedSteps);
                 }
+
+                TestCaseDTO saved = withId(entityService.create(tc));
+                saved.setDisplayId(displayId);
+                saved.setSteps(tc.getSteps());
+                entityService.update(saved.getId(), saved, null);
                 results[idx] = saved;
             }));
         }

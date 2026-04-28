@@ -4,10 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.application.dto.TestRunCaseDTO;
-import com.java_template.application.dto.TestStepDTO;
 import com.java_template.application.service.TestCaseService;
 import com.java_template.application.service.TestRunCaseService;
-import com.java_template.application.service.TestStepService;
 import com.java_template.common.workflow.CyodaEventContext;
 import com.java_template.common.workflow.CyodaProcessor;
 import com.java_template.common.workflow.OperationSpecification;
@@ -42,16 +40,13 @@ public class SnapshotProcessor implements CyodaProcessor {
     private static final String PROCESSOR_NAME = SnapshotProcessor.class.getSimpleName();
 
     private final TestCaseService testCaseService;
-    private final TestStepService testStepService;
     private final TestRunCaseService testRunCaseService;
     private final ObjectMapper objectMapper;
 
     public SnapshotProcessor(TestCaseService testCaseService,
-                              TestStepService testStepService,
                               TestRunCaseService testRunCaseService,
                               ObjectMapper objectMapper) {
         this.testCaseService    = testCaseService;
-        this.testStepService    = testStepService;
         this.testRunCaseService = testRunCaseService;
         this.objectMapper       = objectMapper;
     }
@@ -117,7 +112,7 @@ public class SnapshotProcessor implements CyodaProcessor {
         caseSnapshot.setDisplayId(tc.getDisplayId());
         caseSnapshot.setSuiteId(tc.getSuiteId());
 
-        List<TestStepDTO> steps = testStepService.getTestStepsByTestCaseId(caseId);
+        List<TestCaseDTO.StepDTO> steps = tc.getSteps();
 
         testRunCaseService.createTestRunCaseWithStepSnapshots(caseSnapshot, steps);
         log.debug("SnapshotProcessor: snapshotted case {} with {} step(s)", caseId, steps.size());

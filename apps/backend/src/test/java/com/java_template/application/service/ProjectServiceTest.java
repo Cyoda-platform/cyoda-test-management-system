@@ -41,9 +41,6 @@ public class ProjectServiceTest {
     private TestCaseService testCaseService;
 
     @Mock
-    private TestStepService testStepService;
-
-    @Mock
     private TestRunService testRunService;
 
     @Mock

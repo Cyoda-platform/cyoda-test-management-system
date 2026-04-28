@@ -1,9 +1,9 @@
 package com.java_template.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.application.dto.TestRunCaseDTO;
 import com.java_template.application.dto.TestRunStepDTO;
-import com.java_template.application.dto.TestStepDTO;
 import com.java_template.common.dto.EntityWithMetadata;
 import com.java_template.common.dto.PageResult;
 import com.java_template.common.repository.SearchAndRetrievalParams;
@@ -140,90 +140,31 @@ public class TestRunCaseService {
     }
 
     /**
-     * Atomically creates a {@link TestRunCaseDTO} together with all of its
-     * {@link TestRunStepDTO} records in a single logical operation.
-     *
-     * <p>Because CYODA's {@code EntityService} does not expose a cross-entity
-     * transaction boundary, this method implements a <em>compensating-transaction</em>
-     * pattern: if any step creation fails, every successfully created step and the
-     * parent case are deleted before the exception is re-thrown, preventing the
-     * "case-without-steps" partial-write state that caused the 'No steps defined'
-     * symptom.</p>
-     *
-     * @param testRunCase the case to create (status will be overwritten to UNTESTED)
-     * @param testStepIds ordered list of original {@code TestStep.id} values to snapshot
-     * @return the persisted {@link TestRunCaseDTO} with its assigned {@code id}
-     * @throws RuntimeException if step creation fails (case creation is rolled back)
-     */
-    @CacheEvict(value = "runCasesByRun", allEntries = true)
-    public TestRunCaseDTO createTestRunCaseWithSteps(TestRunCaseDTO testRunCase,
-                                                     List<UUID> testStepIds) {
-        // 1. Persist the case record.
-        TestRunCaseDTO created = createTestRunCase(testRunCase);
-        UUID runCaseId = created.getId();
-
-        // 2. Persist each step. Track created IDs so we can compensate on failure.
-        List<UUID> createdStepIds = new ArrayList<>();
-        try {
-            for (UUID testStepId : testStepIds) {
-                TestRunStepDTO step = new TestRunStepDTO();
-                step.setTestRunCaseId(runCaseId);
-                step.setTestStepId(testStepId);
-                TestRunStepDTO createdStep = testRunStepService.createTestRunStep(step);
-                createdStepIds.add(createdStep.getId());
-            }
-        } catch (Exception stepException) {
-            // Compensating transaction: delete all steps created so far, then the case.
-            log.error("Step creation failed for TestRunCase {}. Rolling back {} step(s) and the case.",
-                    runCaseId, createdStepIds.size(), stepException);
-            createdStepIds.forEach(stepId -> {
-                try {
-                    entityService.deleteById(stepId);
-                } catch (Exception ignored) {
-                    log.warn("Cleanup failed for TestRunStep {}", stepId);
-                }
-            });
-            try {
-                entityService.deleteById(runCaseId);
-            } catch (Exception ignored) {
-                log.warn("Cleanup failed for TestRunCase {}", runCaseId);
-            }
-            throw new RuntimeException(
-                    "Failed to initialise TestRunCase " + runCaseId +
-                    ": step creation failed. The partial write has been rolled back.", stepException);
-        }
-
-        return created;
-    }
-
-    /**
      * Creates a {@link TestRunCaseDTO} together with all of its {@link TestRunStepDTO}
-     * records, copying snapshot content from the supplied {@link TestStepDTO} objects.
+     * records, copying snapshot content from the case's embedded steps.
      *
-     * <p>This is the snapshot variant of {@link #createTestRunCaseWithSteps}: instead of
-     * taking only step IDs, it takes full {@link TestStepDTO} objects so that
-     * {@code action}, {@code expectedResult}, and {@code stepNumber} are persisted on
-     * the {@code TestRunStep} entity — preserving historical data even if the original
-     * {@code TestStep} is later soft-deleted.</p>
+     * <p>Steps are now embedded directly in {@link TestCaseDTO} — there are no separate
+     * TestStep entities. This method snapshots the step data at run-creation time so
+     * the run remains self-contained even if the original case is updated later.</p>
      *
-     * <p>Uses the same compensating-transaction rollback as the ID-only variant.</p>
+     * <p>Uses a compensating-transaction pattern: if any step creation fails, all
+     * successfully created steps and the parent case are deleted before re-throwing.</p>
      *
      * @param testRunCase the case to create (snapshot fields must already be set by caller)
-     * @param steps       ordered list of original {@link TestStepDTO} objects to snapshot
+     * @param steps       embedded steps from {@link TestCaseDTO#getSteps()}
      * @return the persisted {@link TestRunCaseDTO} with its assigned {@code id}
      */
     @CacheEvict(value = "runCasesByRun", allEntries = true)
     public TestRunCaseDTO createTestRunCaseWithStepSnapshots(TestRunCaseDTO testRunCase,
-                                                              List<TestStepDTO> steps) {
+                                                              List<TestCaseDTO.StepDTO> steps) {
         TestRunCaseDTO created = createTestRunCase(testRunCase);
         UUID runCaseId = created.getId();
 
         List<UUID> createdStepIds = new ArrayList<>();
         try {
-            for (TestStepDTO step : steps) {
+            for (TestCaseDTO.StepDTO step : steps) {
                 TestRunStepDTO runStep = new TestRunStepDTO();
                 runStep.setTestRunCaseId(runCaseId);
-                runStep.setTestStepId(step.getId());
                 runStep.setStepNumber(step.getStepNumber());
                 runStep.setAction(step.getAction());
                 runStep.setExpectedResult(step.getExpectedResult());
