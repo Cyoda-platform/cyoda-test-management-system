@@ -11,6 +11,8 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -51,6 +53,17 @@ public class TestCaseDTO implements CyodaEntity {
     private boolean deleted;
     private String createdAt;
     private String updatedAt;
+
+    private List<StepDTO> steps = new ArrayList<>();
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class StepDTO {
+        private Integer stepNumber;
+        private String action;
+        private String expectedResult;
+    }
 
     @Override
     @JsonIgnore

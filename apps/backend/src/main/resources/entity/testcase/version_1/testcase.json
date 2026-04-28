@@ -10,6 +10,18 @@
   "sortOrder": 1,
   "deleted": false,
   "createdAt": "2024-02-10T14:20:00Z",
-  "updatedAt": "2024-02-10T14:20:00Z"
+  "updatedAt": "2024-02-10T14:20:00Z",
+  "steps": [
+    {
+      "stepNumber": 1,
+      "action": "Navigate to checkout page",
+      "expectedResult": "Checkout page is displayed with cart summary"
+    },
+    {
+      "stepNumber": 2,
+      "action": "Enter valid credit card details and click Pay",
+      "expectedResult": "Order confirmation page is displayed with order number"
+    }
+  ]
 }
 
