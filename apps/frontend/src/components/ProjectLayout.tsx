@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { Outlet, useParams } from 'react-router-dom';
+import useLocalStorage from '@/hooks/useLocalStorage';
 import AppHeader from './AppHeader';
 import AppSidebar from './AppSidebar';
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +8,10 @@ import { Loader2 } from 'lucide-react';
 
 const ProjectLayout = () => {
   const { projectId } = useParams();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage(
+    `tms.sidebar.collapsed.${projectId}`,
+    false,
+  );
 
   // Fetch project from API
   const { data: project, isLoading, isError, error } = useQuery({
