@@ -1278,12 +1278,15 @@ const Repository = () => {
       {/* Three-pane resizable layout */}
       <div className="flex-1 overflow-hidden">
         <ResizablePanelGroup
+          key={projectId}
           direction="horizontal"
           className="h-full"
           onLayout={(sizes) => {
             if (sizes.length === 3) {
               setPanelSizes({ left: sizes[0], middle: sizes[1], right: sizes[2] });
             } else if (sizes.length === 2) {
+              // sizes[1] is the middle panel filling remaining width (right panel absent).
+              // We don't save it to avoid recording an inflated value; only left matters here.
               setPanelSizes(prev => ({ ...prev, left: sizes[0] }));
             }
           }}
