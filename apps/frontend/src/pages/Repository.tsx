@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import useLocalStorage from '@/hooks/useLocalStorage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useProject, useCreateSuite, useUpdateSuite, useDeleteSuite, useDeleteTestCase,
@@ -414,8 +415,10 @@ const Repository = () => {
     }
   }, [localSuites, dropTarget, projectId, queryClient]);
 
-  // Fixed panel sizes
-  const panelSizes = { left: 15, middle: 50, right: 35 };
+  const [panelSizes, setPanelSizes] = useLocalStorage(
+    `tms.repository.panelSizes.${projectId}`,
+    { left: 15, middle: 50, right: 35 },
+  );
 
   // Local search
   const [localSearch, setLocalSearch] = useState('');
@@ -1277,6 +1280,13 @@ const Repository = () => {
         <ResizablePanelGroup
           direction="horizontal"
           className="h-full"
+          onLayout={(sizes) => {
+            if (sizes.length === 3) {
+              setPanelSizes({ left: sizes[0], middle: sizes[1], right: sizes[2] });
+            } else if (sizes.length === 2) {
+              setPanelSizes(prev => ({ ...prev, left: sizes[0] }));
+            }
+          }}
         >
           {/* Suite Tree */}
           <ResizablePanel id="left" order={1} defaultSize={panelSizes.left} minSize={10} maxSize={30}>
