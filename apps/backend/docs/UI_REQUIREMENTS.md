@@ -1,154 +1,154 @@
-# Техническое задание на разработку UI: Test Management System (TMS) v1.1
+# UI Requirements: Test Management System (TMS) v1.1
 
 ---
 
-## 1. Общее описание
+## 1. Overview
 
-TMS — веб-приложение для управления жизненным циклом тестирования. Система построена на строгой изоляции данных по Project ID и использовании Snapshot-копий тест-кейсов при запуске прогонов.
+TMS is a web application for managing the complete testing lifecycle. The system is built on strict data isolation by Project ID and uses snapshot copies of test cases when running test executions.
 
-**Базовый URL API:** `http://<host>/api`  
-**Стек:** REST API (JSON), JWT (Bearer Token), серверная пагинация.
+**Base API URL:** `http://<host>/api`
+**Stack:** REST API (JSON), JWT (Bearer Token), server-side pagination.
 
 ---
 
-## 2. Роли и доступ (RBAC)
+## 2. Roles and Access Control (RBAC)
 
-| Роль | Системное имя | Доступ |
+| Role | System Name | Access |
 |---|---|---|
-| Admin | `Admin` | Полный доступ, управление проектами, разблокировка прогонов. |
-| Tester | `Tester` | Создание и выполнение прогонов, редактирование репозитория кейсов. |
+| Admin | `Admin` | Full access, project management, unlock test runs. |
+| Tester | `Tester` | Create and execute test runs, edit test case repository. |
 
-> **Примечание:** роли чувствительны к регистру (использовать заглавную букву).
+> **Note:** Roles are case-sensitive (use capitalized names).
 
 ---
 
-## 3. Навигация
+## 3. Navigation
 
 ```
 / (login)
 └── /projects
-    └── /projects/:id (Dashboard проекта)
-        ├── /suites (Список папок/сьютов)
-        │   └── /cases/:id (Репозиторий: просмотр/редактирование кейса)
-        ├── /runs (Список прогонов)
-        │   └── /runs/:id (Экран выполнения: кейсы и шаги прогона)
-        └── /attachments (Общий архив вложений проекта)
+    └── /projects/:id (Project Dashboard)
+        ├── /suites (List of test suites)
+        │   └── /cases/:id (Repository: view/edit test case)
+        ├── /runs (List of test runs)
+        │   └── /runs/:id (Execution screen: cases and steps)
+        └── /attachments (Project attachment archive)
 ```
 
 ---
 
-## 4. Спецификация экранов
+## 4. Screen Specifications
 
-### 4.1. Авторизация (`/`)
+### 4.1. Authentication (`/`)
 
-**Элементы:** Логин, Пароль, Кнопка «Войти».
+**Elements:** Login, Password, "Sign In" button.
 
-**Логика:** При 401 ошибке — редирект сюда с очисткой `localStorage`.
-
----
-
-### 4.2. Список проектов (`/projects`)
-
-**Действия (Admin):** Создание проекта (название, описание).  
-**Действия (All):** Поиск по названию, переход в проект.
+**Logic:** On 401 error, redirect here with `localStorage` cleared.
 
 ---
 
-### 4.3. Репозиторий: Сьюты и Кейсы
+### 4.2. Project List (`/projects`)
 
-**Структура:** Список сьютов (одноуровневый). Внутри сьюта — список тест-кейсов.
-
-**TestCase (Детали):** Заголовок, Описание, Предусловия, Приоритет (High / Medium / Low).
-
-**TestSteps:** Таблица шагов (Action / Expected Result).  
-Шаги можно добавлять, удалять и менять местами (drag-and-drop).
-
-**Soft Delete:** Кнопка «Удалить» для кейса переводит его в статус `deleted`  
-(кейс скрывается из списка, но остаётся в базе для истории).
+**Actions (Admin):** Create project (name, description).
+**Actions (All):** Search by name, navigate to project.
 
 ---
 
-### 4.4. Список тест-ранов (`/projects/:id/runs`)
+### 4.3. Repository: Test Suites and Test Cases
 
-**Элементы:** Таблица прогонов с прогресс-баром (соотношение Passed / Failed / Untested).
+**Structure:** List of test suites (single-level). Within each suite — list of test cases.
 
-**Статусы прогона:**
+**TestCase (Details):** Title, Description, Preconditions, Priority (High / Medium / Low).
 
-| Статус | Описание |
+**TestSteps:** Table of steps (Action / Expected Result).
+Steps can be added, deleted, and reordered (drag-and-drop).
+
+**Soft Delete:** "Delete" button for a case changes its status to `deleted`
+(case is hidden from the list but remains in the database for history).
+
+---
+
+### 4.4. Test Run List (`/projects/:id/runs`)
+
+**Elements:** Table of runs with progress bar (Passed / Failed / Untested ratio).
+
+**Run Statuses:**
+
+| Status | Description |
 |---|---|
-| `initial` | Создан |
-| `active` | В работе |
-| `completed` | Заблокирован (Read-Only) |
+| `initial` | Created |
+| `active` | In Progress |
+| `completed` | Locked (Read-Only) |
 
-**Действия:**
+**Actions:**
 
-- **Initialize Run** — создаёт Snapshot (копию) всех кейсов проекта.
-- **Complete Run** — фиксирует метрики и переводит прогон в Read-Only.
-- **Unlock Run** *(Admin only)* — возвращает прогон в статус `active` для правок.
-
----
-
-### 4.5. Выполнение тест-рана (Рабочее место Тестировщика)
-
-**Это самый сложный экран.** Путь: `/projects/:id/runs/:runId`
-
-#### А. Шапка прогона
-- Название, окружение.
-- Общий статус и кнопка «Завершить прогон» (вызывает `complete_run`).
-
-#### Б. Список TestRunCase (Левая панель / Таблица)
-
-- **Статус кейса:** отображается автоматически (Passed / Failed / Skipped / Untested).  
-  Ручное изменение заблокировано!
-- **Link Bug:** поле ввода URL и кнопка «Привязать баг» (вызывает `POST .../link-bug`).  
-  Доступно, если прогон не заблокирован.
-
-#### В. Список TestRunStep (Центральная панель при клике на кейс)
-
-- **Действия:** для каждого шага — Dropdown со статусами: `Passed`, `Failed`, `Skipped`.
-- **Atomic Failure:** при выборе статуса `Failed` для любого шага UI должен обновить (рефрешнуть)
-  статус всего кейса (так как сработает бэкенд-процессор).
-- **Evidence:** кнопка «Прикрепить скриншот/лог» прямо у шага (вызывает `EdgeMessageProcessor`).
+- **Initialize Run** — creates a Snapshot (copy) of all project cases.
+- **Complete Run** — captures metrics and changes run to Read-Only.
+- **Unlock Run** *(Admin only)* — returns run to `active` status for edits.
 
 ---
 
-### 4.6. Вложения (`/projects/:id/attachments`)
+### 4.5. Test Run Execution (Tester's Workspace)
 
-**Просмотр:** список всех файлов, загруженных в рамках проекта (включая прикреплённые к шагам прогонов).
+**This is the most complex screen.** Path: `/projects/:id/runs/:runId`
 
-**Действия:** Скачивание, Удаление (если прогон не заблокирован).
+#### A. Run Header
+- Name, environment.
+- Overall status and "Complete Run" button (calls `complete_run`).
 
----
+#### B. TestRunCase List (Left Panel / Table)
 
-## 5. Системные требования к UX
+- **Case Status:** displayed automatically (Passed / Failed / Skipped / Untested).
+  Manual changes are blocked!
+- **Link Bug:** URL input field and "Link Bug" button (calls `POST .../link-bug`).
+  Available only if run is not locked.
 
-### Блокировка (Read-Only Mode)
+#### C. TestRunStep List (Central Panel when case is selected)
 
-Если `run.status == "completed"`, UI должен:
-
-- Отключить (`disabled`) все Dropdown-ы выбора статусов шагов.
-- Скрыть или заблокировать кнопки «Загрузить файл» и «Привязать баг».
-- Скрыть кнопку «Завершить прогон» и показать кнопку «Разблокировать» *(только для Admin)*.
-
-### Валидация и ошибки
-
-- При ошибке `400` (Validation) выводить сообщения из массива `messages` под соответствующими полями.
-- При любой системной ошибке (`500`) показывать Toast-уведомление «Ошибка на стороне сервера».
-
-### Пагинация
-
-- Использовать параметры `page` и `size`.
-- Отображать общее количество элементов (`totalElements`) в подвале таблиц.
+- **Actions:** for each step — Dropdown with statuses: `Passed`, `Failed`, `Skipped`.
+- **Atomic Failure:** when status `Failed` is selected for any step, UI must update (refresh)
+  the status of the entire case (because backend processor will trigger).
+- **Evidence:** "Attach screenshot/log" button next to each step (calls `EdgeMessageProcessor`).
 
 ---
 
-## 6. Таблица ключевых API вызовов (UI → Backend)
+### 4.6. Attachments (`/projects/:id/attachments`)
 
-| Экран | Действие | Метод | Эндпоинт |
+**View:** list of all files uploaded within the project (including those attached to run steps).
+
+**Actions:** Download, Delete (if run is not locked).
+
+---
+
+## 5. UX System Requirements
+
+### Locking (Read-Only Mode)
+
+If `run.status == "completed"`, UI must:
+
+- Disable all step status selection Dropdowns.
+- Hide or lock "Upload file" and "Link Bug" buttons.
+- Hide "Complete Run" button and show "Unlock" button *(Admin only)*.
+
+### Validation and Errors
+
+- On `400` error (Validation) display messages from the `messages` array under corresponding fields.
+- On any system error (`500`) show Toast notification "Server error".
+
+### Pagination
+
+- Use `page` and `size` parameters.
+- Display total number of elements (`totalElements`) in table footer.
+
+---
+
+## 6. Key API Calls Table (UI → Backend)
+
+| Screen | Action | Method | Endpoint |
 |---|---|---|---|
-| Run Execution | Смена статуса шага | POST | `/runs/{id}/cases/{cid}/steps/{sid}/status` |
-| Run Execution | Привязка бага к кейсу | POST | `/runs/{id}/cases/{cid}/link-bug` |
-| Run Execution | Завершить прогон | POST | `/runs/{id}/complete` |
-| Attachments | Загрузка файла | POST | `/projects/{id}/message/upload` (multipart) |
-| Repository | Удаление кейса | DELETE | `/projects/{id}/cases/{caseId}` |
+| Run Execution | Change step status | POST | `/runs/{id}/cases/{cid}/steps/{sid}/status` |
+| Run Execution | Link bug to case | POST | `/runs/{id}/cases/{cid}/link-bug` |
+| Run Execution | Complete run | POST | `/runs/{id}/complete` |
+| Attachments | Upload file | POST | `/projects/{id}/message/upload` (multipart) |
+| Repository | Delete case | DELETE | `/projects/{id}/cases/{caseId}` |
 

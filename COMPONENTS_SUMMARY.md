@@ -1,13 +1,13 @@
 # Defect Modal Components Summary
 
-## 📦 Созданные компоненты
+## 📦 Created Components
 
 ### 1. DefectAttachmentsUpload.tsx
-**Назначение:** Переиспользуемый компонент для управления загрузкой и отображением файлов
+**Purpose:** Reusable component for managing file upload and display
 
-**Режимы:**
-- **Edit mode** (`readonly={false}`): Показывает drag & drop зону + список файлов + кнопки удаления
-- **View mode** (`readonly={true}`): Только список файлов, без upload зоны и кнопок удаления
+**Modes:**
+- **Edit mode** (`readonly={false}`): Shows drag & drop zone + file list + delete buttons
+- **View mode** (`readonly={true}`): File list only, no upload zone and delete buttons
 
 **Props:**
 ```typescript
@@ -18,18 +18,18 @@ interface DefectAttachmentsUploadProps {
 }
 ```
 
-**Функции:**
-- ✅ Drag & drop зона с hover effects
-- ✅ Click to browse для выбора файлов
-- ✅ Отображение размера файла (B, KB, MB)
-- ✅ Иконки для разных типов файлов (image, PDF, text, generic)
-- ✅ Удаление файлов (только в edit режиме)
-- ✅ Пустое состояние "No attachments"
+**Features:**
+- ✅ Drag & drop zone with hover effects
+- ✅ Click to browse for file selection
+- ✅ File size display (B, KB, MB)
+- ✅ Icons for different file types (image, PDF, text, generic)
+- ✅ File deletion (edit mode only)
+- ✅ Empty state "No attachments"
 
 ---
 
 ### 2. EditDefectModal.tsx
-**Назначение:** Модальное окно для редактирования дефекта с поддержкой загрузки файлов
+**Purpose:** Defect edit modal window with file upload support
 
 **Props:**
 ```typescript
@@ -43,7 +43,7 @@ interface EditDefectModalProps {
 }
 ```
 
-**Структура:**
+**Structure:**
 ```
 Edit Defect Modal
 ├── Header
@@ -60,18 +60,18 @@ Edit Defect Modal
     └── Save Changes button
 ```
 
-**Функции:**
-- ✅ Редактирование всех полей дефекта
-- ✅ Загрузка новых файлов через DefectAttachmentsUpload
-- ✅ Удаление существующих файлов (отслеживание removedAttachmentIds)
-- ✅ Валидация обязательного поля (title)
-- ✅ Loading state при сохранении
-- ✅ Обработка ошибок через toast
+**Features:**
+- ✅ Edit all defect fields
+- ✅ Upload new files via DefectAttachmentsUpload
+- ✅ Delete existing files (tracking removedAttachmentIds)
+- ✅ Validation of required field (title)
+- ✅ Loading state during save
+- ✅ Error handling via toast
 
 ---
 
 ### 3. ViewDefectModal.tsx
-**Назначение:** Модальное окно для просмотра дефекта (все поля read-only)
+**Purpose:** Defect view modal window (all fields read-only)
 
 **Props:**
 ```typescript
@@ -85,7 +85,7 @@ interface ViewDefectModalProps {
 }
 ```
 
-**Структура:**
+**Structure:**
 ```
 View Defect Modal
 ├── Header
@@ -101,26 +101,26 @@ View Defect Modal
     └── Close button
 ```
 
-**Функции:**
-- ✅ Отображение всех полей как read-only
-- ✅ Красивые read-only boxes с borders
-- ✅ Внешние ссылки как кликабельные элементы
-- ✅ Дата форматируется через `formatDate` функцию
-- ✅ UUID в source truncated на первые 8 символов
-- ✅ Пустое состояние для пусто
+**Features:**
+- ✅ Display all fields as read-only
+- ✅ Beautiful read-only boxes with borders
+- ✅ External links as clickable elements
+- ✅ Date formatted via `formatDate` function
+- ✅ UUID in source truncated to first 8 characters
+- ✅ Empty state handling
 
 ---
 
-## 📐 Единообразный дизайн
+## 📐 Unified Design
 
-### Размеры и проблемы
-- **Modal width:** `sm:max-w-3xl` (768px на десктопе)
+### Sizes and Spacing
+- **Modal width:** `sm:max-w-3xl` (768px on desktop)
 - **Input height:** `h-9` (36px)
 - **Textarea height:** `min-h-[140px]`
-- **Padding:** 24px в header и body
-- **Gap:** 20px между form groups, 12px между grid items
+- **Padding:** 24px in header and body
+- **Gap:** 20px between form groups, 12px between grid items
 
-### Стили
+### Styles
 - **Labels:** Uppercase, monospace, gray, small
 - **Inputs (Edit):** White bg, thin border, subtle focus ring
 - **Read-only (View):** White bg, thin border, no focus ring
@@ -128,13 +128,13 @@ View Defect Modal
 
 ---
 
-## 🔄 Интеграция в Defects.tsx
+## 🔄 Integration in Defects.tsx
 
-### Before (Inline модалы)
+### Before (Inline modals)
 ```tsx
 <Dialog open={editOpen} onOpenChange={setEditOpen}>
   <DialogContent className="sm:max-w-3xl bg-card">
-    {/* ~100 строк inline кода */}
+    {/* ~100 lines of inline code */}
     <div>Title</div>
     <div>Description</div>
     {/* ... etc */}
@@ -142,7 +142,7 @@ View Defect Modal
 </Dialog>
 ```
 
-### After (Новые компоненты)
+### After (New components)
 ```tsx
 import EditDefectModal from '@/components/EditDefectModal';
 import ViewDefectModal from '@/components/ViewDefectModal';
@@ -166,99 +166,99 @@ import ViewDefectModal from '@/components/ViewDefectModal';
 />
 ```
 
-**Преимущества:**
-- ✅ Код в Defects.tsx становится чище
-- ✅ Нет дублирования логики между modals
-- ✅ Легче тестировать
-- ✅ Стили согласованы автоматически
+**Benefits:**
+- ✅ Code in Defects.tsx becomes cleaner
+- ✅ No logic duplication between modals
+- ✅ Easier to test
+- ✅ Styles automatically consistent
 
 ---
 
-## 🔗 Интеграция в RunExecution.tsx
+## 🔗 Integration in RunExecution.tsx
 
-Используется точно так же, как в Defects.tsx:
+Used exactly the same as in Defects.tsx:
 ```tsx
 <EditDefectModal {...props} />
 <ViewDefectModal {...props} />
 ```
 
-Теперь defect modals имеют одинаковый вид независимо от страницы, на которой они открыты.
+Now defect modals look the same regardless of which page they're opened from.
 
 ---
 
-## 📝 Дополнительно: CreateDefectModal
+## 📝 Additional: CreateDefectModal
 
-Существующий компонент CreateDefectModal уже имеет хороший дизайн, но для полной унификации:
+The existing CreateDefectModal component already has good design, but for complete unification:
 
-**Вариант 1 (минимальные изменения):**
-- Убедиться, что размер modal соответствует: `sm:max-w-3xl` ✅
-- Убедиться, что стили input/textarea совпадают ✅
-- Стили file upload zone уже хорошие ✅
+**Option 1 (minimal changes):**
+- Ensure modal size matches: `sm:max-w-3xl` ✅
+- Ensure input/textarea styles match ✅
+- File upload zone styles are already good ✅
 
-**Вариант 2 (рефакторинг):**
-- Заменить file upload логику на DefectAttachmentsUpload
-- Это даст полную унификацию всех трёх компонентов
+**Option 2 (refactoring):**
+- Replace file upload logic with DefectAttachmentsUpload
+- This will provide complete unification of all three components
 
 ---
 
-## ✅ Checklist для внедрения
+## ✅ Implementation Checklist
 
-### 1. Копирование компонентов
-- [ ] DefectAttachmentsUpload.tsx скопирован в `apps/frontend/src/components/`
-- [ ] EditDefectModal.tsx скопирован
-- [ ] ViewDefectModal.tsx скопирован
+### 1. Copy Components
+- [ ] DefectAttachmentsUpload.tsx copied to `apps/frontend/src/components/`
+- [ ] EditDefectModal.tsx copied
+- [ ] ViewDefectModal.tsx copied
 
-### 2. Обновление Defects.tsx
-- [ ] Import новых компонентов
-- [ ] Добавить state для `editAttachments` и `editOpen`
-- [ ] Добавить state для `viewAttachments` и `viewOpen`
-- [ ] Заменить inline Edit modal на `<EditDefectModal />`
-- [ ] Заменить inline View modal на `<ViewDefectModal />`
-- [ ] Обновить обработчик сохранения для файлов
+### 2. Update Defects.tsx
+- [ ] Import new components
+- [ ] Add state for `editAttachments` and `editOpen`
+- [ ] Add state for `viewAttachments` and `viewOpen`
+- [ ] Replace inline Edit modal with `<EditDefectModal />`
+- [ ] Replace inline View modal with `<ViewDefectModal />`
+- [ ] Update save handler for files
 
-### 3. Обновление RunExecution.tsx
-- [ ] Import новых компонентов
-- [ ] Аналогичные изменения как в Defects.tsx
+### 3. Update RunExecution.tsx
+- [ ] Import new components
+- [ ] Similar changes as in Defects.tsx
 
-### 4. Тестирование
-- [ ] Создание дефекта (должно работать как раньше)
-- [ ] Редактирование дефекта + загрузка файла
-- [ ] Удаление файла из дефекта
-- [ ] Просмотр дефекта (read-only)
-- [ ] Внешние ссылки открываются в новой вкладке
-- [ ] Проверить на обеих страницах (Defects и RunExecution)
+### 4. Testing
+- [ ] Create defect (should work as before)
+- [ ] Edit defect + upload file
+- [ ] Delete file from defect
+- [ ] View defect (read-only)
+- [ ] External links open in new tab
+- [ ] Check on both pages (Defects and RunExecution)
 
-### 5. API интеграция
+### 5. API Integration
 - [ ] POST /projects/:projectId/defects/:defectId/attachments (upload)
 - [ ] DELETE /projects/:projectId/defects/:defectId/attachments/:attachmentId (delete)
 - [ ] GET /projects/:projectId/defects/:defectId/attachments (list)
 
 ---
 
-## 🎯 Результаты
+## 🎯 Results
 
-После внедрения:
-- ✅ Все модалы дефектов имеют одинаковый размер и стиль
-- ✅ Поле для загрузки файлов присутствует в Edit модале
-- ✅ View модал полностью read-only
-- ✅ Файлы отображаются согласованно во всех модалах
-- ✅ Стиль загрузки файлов соответствует тест кейсам
-- ✅ Компоненты переиспользуются между страницами
-- ✅ Код более чистый и легче поддерживается
-
----
-
-## 📚 Документация
-
-- `DEFECT_MODAL_DESIGN.md` — Полная спецификация дизайна
-- `DEFECT_MODAL_INTEGRATION.md` — Примеры интеграции и API
-- `DEFECT_MODAL_MOCKUP.html` — Визуальная демонстрация
-- `DEFECT_MODAL_README.md` — Быстрый старт и overview
-
-**Все файлы находятся в корне проекта (в одной папке с этим файлом).**
+After implementation:
+- ✅ All defect modals have the same size and style
+- ✅ File upload field present in Edit modal
+- ✅ View modal is fully read-only
+- ✅ Files displayed consistently across all modals
+- ✅ File upload style matches test cases
+- ✅ Components reused between pages
+- ✅ Code is cleaner and easier to maintain
 
 ---
 
-## 🚀 Готово к использованию!
+## 📚 Documentation
 
-Все три компонента готовы к интеграции в приложение. Просто скопируйте их в `apps/frontend/src/components/` и начните использовать согласно документации.
+- `DEFECT_MODAL_DESIGN.md` — Full design specification
+- `DEFECT_MODAL_INTEGRATION.md` — Integration examples and API
+- `DEFECT_MODAL_MOCKUP.html` — Visual demonstration
+- `DEFECT_MODAL_README.md` — Quick start and overview
+
+**All files are in the project root (same folder as this file).**
+
+---
+
+## 🚀 Ready to Use!
+
+All three components are ready for integration into the application. Simply copy them to `apps/frontend/src/components/` and start using according to the documentation.

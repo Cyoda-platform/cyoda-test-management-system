@@ -10,13 +10,28 @@ echo "║         TMS API - Starting with Real Cyoda Credentials        ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
+# Load environment variables from .env file
+if [ -f ".env" ]; then
+    set -a; source .env; set +a
+    echo "✅ Loaded credentials from .env"
+else
+    echo "❌ Error: .env file not found"
+    echo "Please copy .env.example to .env and fill in your credentials"
+    exit 1
+fi
+
+# Verify required credentials
+if [ -z "$CYODA_HOST" ] || [ -z "$CYODA_CLIENT_ID" ] || [ -z "$CYODA_CLIENT_SECRET" ]; then
+    echo "❌ Error: Missing required environment variables"
+    echo "Please ensure .env contains:"
+    echo "  - CYODA_HOST"
+    echo "  - CYODA_CLIENT_ID"
+    echo "  - CYODA_CLIENT_SECRET"
+    exit 1
+fi
+
 # Set Java path
 export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
-
-# Cyoda Configuration
-export CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
-export CYODA_CLIENT_ID="kLXY45"
-export CYODA_CLIENT_SECRET="OAIsUzQMP4LoW19JTwoi"
 
 echo "📋 Configuration:"
 echo "   Cyoda Host: $CYODA_HOST"

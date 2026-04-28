@@ -234,7 +234,7 @@ const CreateReport = () => {
           onClick={handleCreate}
           disabled={isBuilding || createReport.isPending}
         >
-          {isBuilding ? 'Формируем отчёт…' : createReport.isPending ? 'Creating…' : 'Create Report'}
+          {isBuilding ? 'Building report…' : createReport.isPending ? 'Creating…' : 'Create Report'}
         </Button>
       </div>
     </div>

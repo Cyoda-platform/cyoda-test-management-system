@@ -1,5 +1,17 @@
 # Cucumber E2E Test Profile Configuration
 # Only contains test-specific overrides - inherits all other settings from application.yml
+#
+# NOTE: This profile is for E2E testing with a live Cyoda instance.
+# Credentials are loaded from environment variables (CYODA_HOST, CYODA_CLIENT_ID, CYODA_CLIENT_SECRET)
+# or from .env file. Default values below are for local testing with Cyoda running on localhost:8443.
+#
+# To run Cucumber tests:
+#   1. Ensure a Cyoda instance is running
+#   2. Set environment variables or copy .env file:
+#      export CYODA_HOST=localhost:8443
+#      export CYODA_CLIENT_ID=your-m2m-client-id
+#      export CYODA_CLIENT_SECRET=your-m2m-client-secret
+#   3. Run: ./gradlew :apps:backend:cucumberTest
 
 app:
   cors:
@@ -8,14 +20,18 @@ app:
 
   config:
     # Cyoda Platform Connection - Cucumber Test Configuration
-    cyoda-host: localhost:8443
-    cyoda-api-url: https://localhost:8443/api
-    cyoda-client-id: m2m.user
-    cyoda-client-secret: 7JnG1kxKOvLjGp4LMYso
+    # These values are loaded from environment variables or .env file
+    # Default: localhost:8443 (for local Cyoda development)
+    cyoda-host: ${CYODA_HOST:localhost:8443}
+    cyoda-api-url: https://${app.config.cyoda-host}/api
+    # M2M credentials - MUST be set via environment variables or .env file
+    # DO NOT commit real credentials to the repository
+    cyoda-client-id: ${CYODA_CLIENT_ID:}
+    cyoda-client-secret: ${CYODA_CLIENT_SECRET:}
 
     # gRPC Configuration - Cucumber Tests
-    grpc-address: localhost
-    grpc-server-port: 9443
+    grpc-address: ${CYODA_HOST:localhost:8443}
+    grpc-server-port: 443
     grpc-processor-tag: cucumber-java-test
 
     # gRPC Channel Configuration - Increased for large test operations
@@ -25,4 +41,4 @@ app:
     # SSL Configuration for development with self-signed certificates
     # WARNING: Only use in development/testing - NOT for production
     ssl-trust-all: true
-    ssl-trusted-hosts: localhost:8443,localhost:9443,localhost
+    ssl-trusted-hosts: localhost:8443,localhost:443

@@ -16,7 +16,9 @@ export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
 # Cyoda Configuration
 # Load from .env file if it exists, otherwise use defaults
 if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
+  set -a
+  source .env
+  set +a
 else
   export CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
   export CYODA_CLIENT_ID="nbeLy7"

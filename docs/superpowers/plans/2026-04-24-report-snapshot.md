@@ -567,7 +567,7 @@ Find the Create button in the JSX (near the bottom). Replace `disabled={createRe
   onClick={handleCreate}
   disabled={isBuilding || createReport.isPending}
 >
-  {isBuilding ? 'Формируем отчёт…' : createReport.isPending ? 'Creating…' : 'Create Report'}
+  {isBuilding ? 'Building report…' : createReport.isPending ? 'Creating…' : 'Create Report'}
 </Button>
 ```
 
@@ -863,7 +863,7 @@ Expected: `BUILD SUCCESSFUL`
 
 1. Open the app, navigate to a project with test runs that have statuses set.
 2. Create a new report selecting those runs.
-3. Verify the "Формируем отчёт…" spinner appears briefly.
+3. Verify the "Building report…" spinner appears briefly.
 4. Open the report — KPIs and Suite Analysis should reflect statuses at creation time.
 5. Go to the test run, change a case status to something different.
 6. Re-open the report — KPIs and Suite Analysis must NOT have changed.

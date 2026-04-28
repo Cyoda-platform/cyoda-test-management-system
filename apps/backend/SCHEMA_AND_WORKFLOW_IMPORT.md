@@ -1,40 +1,40 @@
 # 📋 Entity Schema and Workflow Import Guide
 
-## ✅ Правильный способ импорта Entity Schemas и Workflows в Cyoda
+## ✅ Correct Way to Import Entity Schemas and Workflows to Cyoda
 
-Этот документ описывает **проверенный и работающий** метод импорта всех entity schemas и workflows.
+This document describes a **verified and working** method for importing all entity schemas and workflows.
 
 ---
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
 ```bash
-# 1. Убедись что .env файл имеет правильные credentials
+# 1. Ensure .env file has correct credentials
 cat .env | grep CYODA
 
-# 2. ⚠️ ОБЯЗАТЕЛЬНО: Удали все tenant entities (каскадное удаление)
-# Запусти удаление в правильном порядке (от листьев к корню):
+# 2. ⚠️ MANDATORY: Delete all tenant entities (cascading deletion)
+# Run deletion in correct order (from leaves to root):
 # TestRunStep → TestRunCase → TestRun → Attachment → Defect →
 # TestStep → TestCase → Suite → Report → ProjectCounter → Project
 
-# 3. Разлочи и удали все модели
-# Потом запусти импорт скрипт:
+# 3. Unlock and delete all models
+# Then run import script:
 
-# 3. Запусти импорт скрипт
+# 3. Run import script
 ./import-schemas.sh
 ```
 
 ---
 
-## 🚨 ВАЖНО: Каскадное удаление перед переimпортом
+## 🚨 IMPORTANT: Cascading Deletion Before Re-Import
 
-**ВСЕГДА удаляй все tenant entities ПЕРЕД переimпортом!**
+**ALWAYS delete all tenant entities BEFORE re-importing!**
 
-### Правильный порядок удаления (Bottom-Up / от листьев к корню):
+### Correct Deletion Order (Bottom-Up / from leaves to root):
 
 ```bash
-# Удалить entities в правильном порядке (зависимости!)
-TestRunStep    # ← листья (самые глубокие)
+# Delete entities in correct order (dependencies!)
+TestRunStep    # ← leaves (deepest)
 TestRunCase
 TestRun
 Attachment
@@ -44,14 +44,14 @@ TestCase
 Suite
 Report
 ProjectCounter
-Project        # ← корень (самый верхний)
+Project        # ← root (top level)
 ```
 
-### Почему важен порядок?
+### Why is Order Important?
 
-Если удалять в неправильном порядке (например, сначала Project), то Cyoda не сможет удалить child entities (TestCase, Suite и т.д.) и они останутся как **orphaned entities**.
+If you delete in the wrong order (for example, start with Project), Cyoda won't be able to delete child entities (TestCase, Suite, etc.) and they will remain as **orphaned entities**.
 
-### Автоматическое удаление всех entities (каскадом):
+### Automatic Deletion of All Entities (Cascading):
 
 ```bash
 set -a; source .env; set +a; TOKEN=$(curl -s -u "$CYODA_CLIENT_ID:$CYODA_CLIENT_SECRET" -H 'Content-Type: application/x-www-form-urlencoded' -d 'grant_type=client_credentials&scope=ROLE_M2M' "https://$CYODA_HOST/api/oauth/token" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("access_token",""))');
@@ -65,7 +65,7 @@ done
 
 ---
 
-## 📝 Что импортируется
+## 📝 What Gets Imported
 
 **11 Entity Schemas:**
 - Project, Suite, TestCase, TestStep
@@ -78,27 +78,27 @@ done
 
 ---
 
-## 🔧 Как это работает
+## 🔧 How It Works
 
-### Шаг 1: Prepare Entity Schemas
+### Step 1: Prepare Entity Schemas
 
-Entity schemas хранятся в JSON файлах:
+Entity schemas are stored in JSON files:
 ```
 apps/backend/src/main/resources/entity/
 ├── project/version_1/project.json
 ├── suite/version_1/suite.json
 ├── testcase/version_1/testcase.json
-└── ... (остальные)
+└── ... (others)
 ```
 
-**Каждый JSON файл содержит:**
-- Все поля entity
-- Валидные значения для примера
-- Все required fields
+**Each JSON file contains:**
+- All entity fields
+- Valid example values
+- All required fields
 
-**Важно:** Cyoda определяет schema из **структуры JSON файла**. Поля с пустыми значениями (`[]`, `{}`) могут быть определены неправильно. Используй реалистичные примеры данных!
+**Important:** Cyoda determines the schema from the **structure of the JSON file**. Fields with empty values (`[]`, `{}`) may be defined incorrectly. Use realistic example data!
 
-### Шаг 2: Импорт Entity Schemas через HTTP API
+### Step 2: Import Entity Schemas via HTTP API
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
@@ -107,17 +107,17 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   "https://$CYODA_HOST/api/model/import/JSON/SAMPLE_DATA/Project/1"
 ```
 
-### Шаг 3: Импорт Workflows
+### Step 3: Import Workflows
 
-Workflows хранятся в:
+Workflows are stored in:
 ```
 apps/backend/src/main/resources/workflow/
 ├── project/version_1/Project.json
 ├── suite/version_1/Suite.json
-└── ... (остальные)
+└── ... (others)
 ```
 
-Каждый workflow импортируется через:
+Each workflow is imported via:
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -125,9 +125,9 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   "https://$CYODA_HOST/api/model/Project/1/workflow/import"
 ```
 
-### Шаг 4: Lock Models
+### Step 4: Lock Models
 
-После импорта все модели должны быть залочены:
+After import, all models must be locked:
 ```bash
 curl -X PUT -H "Authorization: Bearer $TOKEN" \
   "https://$CYODA_HOST/api/model/Project/1/lock"
@@ -135,31 +135,31 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
 
 ---
 
-## 📜 Использование скрипта (Рекомендуется)
+## 📜 Script Usage (Recommended)
 
-Скрипт `import-schemas.sh` автоматизирует весь процесс:
+The `import-schemas.sh` script automates the entire process:
 
 ```bash
 ./import-schemas.sh
 ```
 
-Скрипт выполняет:
-1. Загружает credentials из .env
-2. Получает JWT token от Cyoda
-3. Импортирует все 11 entity schemas
-4. Импортирует все 11 workflows
-5. Залочивает все модели
+The script:
+1. Loads credentials from .env
+2. Gets JWT token from Cyoda
+3. Imports all 11 entity schemas
+4. Imports all 11 workflows
+5. Locks all models
 
 ---
 
-## ⚠️ Важные замечания
+## ⚠️ Important Notes
 
-### 0. ПОЛНЫЙ ЦИКЛ: Удали entities, модели, потом переimпортируй
+### 0. FULL CYCLE: Delete entities, models, then re-import
 
-**Перед каждым переimпортом нужно:**
+**Before each re-import you need to:**
 
-1. **Удалить все tenant entities** (каскадом, см. выше)
-2. **Разлочить все модели:**
+1. **Delete all tenant entities** (cascading, see above)
+2. **Unlock all models:**
 ```bash
 MODELS=("Project" "Suite" "TestCase" "TestStep" "Defect" "TestRun" "TestRunCase" "TestRunStep" "Attachment" "Report" "ProjectCounter")
 for model in "${MODELS[@]}"; do
@@ -167,35 +167,35 @@ for model in "${MODELS[@]}"; do
 done
 ```
 
-3. **Удалить все модели:**
+3. **Delete all models:**
 ```bash
 for model in "${MODELS[@]}"; do
   curl -s -X DELETE -H "Authorization: Bearer $TOKEN" "https://$CYODA_HOST/api/model/$model/1"
 done
 ```
 
-4. **Потом запусти импорт:**
+4. **Then run import:**
 ```bash
 ./import-schemas.sh
 ```
 
-### 1. Модели должны быть удалены перед переimпортом
+### 1. Models Must Be Deleted Before Re-Import
 
-Если модели уже существуют, HTTP 400 вернется. Нужно удалить:
+If models already exist, HTTP 400 is returned. You need to delete:
 
 ```bash
-# Разлочить
+# Unlock
 curl -X PUT -H "Authorization: Bearer $TOKEN" \
   "https://$CYODA_HOST/api/model/Project/1/unlock"
 
-# Удалить
+# Delete
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
   "https://$CYODA_HOST/api/model/Project/1"
 ```
 
-### 2. JSON файлы ОПРЕДЕЛЯЮТ schema
+### 2. JSON Files DEFINE the Schema
 
-Cyoda читает schema из структуры JSON файла. Например:
+Cyoda reads the schema from the structure of the JSON file. For example:
 
 ```json
 {
@@ -206,38 +206,38 @@ Cyoda читает schema из структуры JSON файла. Наприм�
 }
 ```
 
-**Правило:** Используй реалистичные примеры, чтобы Cyoda правильно определил типы:
-- Пустые `[]` → Cyoda может определить как STRING
-- Массив с данными `["item"]` → Cyoda определит как ARRAY ✅
+**Rule:** Use realistic examples so Cyoda correctly identifies types:
+- Empty `[]` → Cyoda might identify as STRING
+- Array with data `["item"]` → Cyoda identifies as ARRAY ✅
 
-### 3. WorkflowImportTool НЕ используется
+### 3. WorkflowImportTool is NOT Used
 
-❌ Старый способ с `WorkflowImportTool` игнорируется.  
-✅ Используется только HTTP curl импорт через `import-schemas.sh`.
+❌ Old method with `WorkflowImportTool` is ignored.
+✅ Only HTTP curl import via `import-schemas.sh` is used.
 
 ---
 
 ## 🐛 Troubleshooting
 
-**Проблема:** HTTP 400 при импорте
-- **Решение:** Удали модель через unlock/delete, потом переimпортируй
+**Problem:** HTTP 400 during import
+- **Solution:** Delete model via unlock/delete, then re-import
 
-**Проблема:** Поля отсутствуют в Cyoda
-- **Решение:** Проверь что JSON файл содержит все поля с реалистичными примерами
+**Problem:** Fields missing in Cyoda
+- **Solution:** Check that JSON file contains all fields with realistic examples
 
-**Проблема:** Workflow импорт возвращает 400
-- **Решение:** Убедись что entity model уже существует перед импортом workflow
+**Problem:** Workflow import returns 400
+- **Solution:** Ensure that entity model already exists before importing workflow
 
 ---
 
-## ✨ Итог
+## ✨ Summary
 
-**Правильный способ:**
-1. Подготовь JSON files в `src/main/resources/entity/` и `src/main/resources/workflow/`
-2. Запусти `./import-schemas.sh`
-3. Проверь что все модели и workflows импортированы в Cyoda UI
+**Correct approach:**
+1. Prepare JSON files in `src/main/resources/entity/` and `src/main/resources/workflow/`
+2. Run `./import-schemas.sh`
+3. Verify that all models and workflows are imported in Cyoda UI
 
-**Быстрая команда:**
+**Quick command:**
 ```bash
 ./import-schemas.sh
 ```

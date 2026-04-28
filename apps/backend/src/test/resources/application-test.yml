@@ -22,10 +22,12 @@ app:
     filter:
       enabled: false
   config:
-    cyoda-host: localhost
+    # Unit test configuration - uses mocked Cyoda server
+    # These are dummy values for testing, NOT real credentials
+    cyoda-host: ${CYODA_HOST:localhost}
     cyoda-api-url: http://localhost:8080/api
-    cyoda-client-id: test-client
-    cyoda-client-secret: test-secret
+    cyoda-client-id: ${CYODA_CLIENT_ID:test-unit-client}
+    cyoda-client-secret: ${CYODA_CLIENT_SECRET:test-unit-secret}
     grpc-address: localhost
     grpc-server-port: 50051
 
