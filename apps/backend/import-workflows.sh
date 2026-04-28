@@ -5,12 +5,40 @@
 
 set -e
 
+# Load environment variables from .env file
+if [ -f ".env" ]; then
+    set -a; source .env; set +a
+    echo "✅ Loaded credentials from .env"
+else
+    echo "❌ Error: .env file not found"
+    echo "Please copy .env.example to .env and fill in your credentials"
+    exit 1
+fi
+
 # Configuration
-CYODA_HOST="cyoda-develop.kube3.cyoda.org"
-USERNAME="demo.user"
-PASSWORD="k33pS8fe!!"
+# Note: This script uses user authentication (USERNAME/PASSWORD) instead of M2M credentials
+# If these are not in .env, you can pass them as environment variables or edit this script
+CYODA_HOST="${CYODA_HOST:-}"
+USERNAME="${WORKFLOW_USERNAME:-}"
+PASSWORD="${WORKFLOW_PASSWORD:-}"
 CLIENT_ID="cyoda-ui"
 ENTITY_VERSION="1"
+
+# Verify required variables
+if [ -z "$CYODA_HOST" ]; then
+    echo "❌ Error: CYODA_HOST not set in .env"
+    exit 1
+fi
+
+if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+    echo "⚠️  Warning: WORKFLOW_USERNAME and/or WORKFLOW_PASSWORD not set in .env"
+    echo "If you need user-based authentication, add them to .env:"
+    echo "  WORKFLOW_USERNAME=your-username"
+    echo "  WORKFLOW_PASSWORD=your-password"
+    echo ""
+    echo "Alternatively, consider using M2M credentials (CYODA_CLIENT_ID/CYODA_CLIENT_SECRET)"
+    exit 1
+fi
 
 # Colors for output
 GREEN='\033[0;32m'
