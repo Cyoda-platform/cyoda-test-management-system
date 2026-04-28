@@ -1,10 +1,10 @@
 # 🔗 Cyoda Integration Guide
 
-## ✅ Реальные Cyoda Credentials добавлены
+## ✅ Real Cyoda Credentials Added
 
-Приложение теперь настроено на подключение к реальному Cyoda EU instance.
+Application is now configured to connect to a real Cyoda EU instance.
 
-### 📋 Конфигурация
+### 📋 Configuration
 
 **Cyoda Host:** `client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net`
 
@@ -16,20 +16,20 @@
 
 ---
 
-## 🚀 Запуск с реальной Cyoda
+## 🚀 Running with Real Cyoda
 
-### Вариант 1: Использовать скрипт (РЕКОМЕНДУЕТСЯ)
+### Option 1: Use Script (RECOMMENDED)
 
 ```bash
 bash RUN_WITH_CYODA.sh
 ```
 
-Скрипт автоматически:
-- Устанавливает Java path
-- Собирает проект
-- Запускает приложение с реальными credentials
+Script automatically:
+- Sets Java path
+- Builds project
+- Runs application with real credentials
 
-### Вариант 2: Ручной запуск
+### Option 2: Manual Run
 
 ```bash
 export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
@@ -40,7 +40,7 @@ export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
           --app.config.cyoda-client-secret=OAIsUzQMP4LoW19JTwoi'
 ```
 
-### Вариант 3: Через environment variables
+### Option 3: Via Environment Variables
 
 ```bash
 export CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
@@ -52,7 +52,7 @@ export CYODA_CLIENT_SECRET="OAIsUzQMP4LoW19JTwoi"
 
 ---
 
-## 📊 Что изменилось
+## 📊 What changed
 
 ### application.yml
 ```yaml
@@ -71,26 +71,26 @@ gRPC Port: 443
 
 ---
 
-## ✅ Проверка подключения
+## ✅ Connection Verification
 
-### 1. Запустить приложение
+### 1. Start Application
 ```bash
 bash RUN_WITH_CYODA.sh
 ```
 
-### 2. Проверить статус gRPC
+### 2. Check gRPC Status
 ```bash
-# Получить токен
+# Get Token
 ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/api/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}' | jq -r '.token')
 
-# Проверить gRPC статус
+# Check gRPC Status
 curl http://localhost:8080/api/admin/grpc/status \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
 ```
 
-**Ожидаемый результат:**
+**Expected Result:**
 ```json
 {
   "connectionState": "READY",
@@ -99,67 +99,67 @@ curl http://localhost:8080/api/admin/grpc/status \
 }
 ```
 
-### 3. Проверить логи
-Ищите в логах:
+### 3. Check Logs
+Look for in logs:
 - ✅ `gRPC Managed Channel state changed: CONNECTING -> READY`
 - ✅ `Keep alive received`
 - ✅ `Stream Observer state changes: ... -> READY`
 
 ---
 
-## 🔐 Безопасность
+## 🔐 Security
 
-### ⚠️ ВАЖНО: Не коммитить credentials в git!
+### ⚠️ IMPORTANT: Do not commit credentials to git!
 
-Credentials уже добавлены в `application.yml` для удобства разработки.
+Credentials are already added to `application.yml` for development convenience.
 
-**Для production:**
-1. Удалить credentials из `application.yml`
-2. Использовать environment variables
-3. Использовать secrets management (AWS Secrets Manager, HashiCorp Vault и т.д.)
+**For production:**
+1. Delete credentials from `application.yml`
+2. Use environment variables
+3. Use secrets management (AWS Secrets Manager, HashiCorp Vault, etc.)
 
-### Использование environment variables (безопасно)
+### Using environment variables (secure)
 
 ```bash
-# Очистить application.yml
-# Установить переменные окружения
+# Clean application.yml
+# Set environment variables
 export APP_CONFIG_CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
 export APP_CONFIG_CYODA_CLIENT_ID="kLXY45"
 export APP_CONFIG_CYODA_CLIENT_SECRET="OAIsUzQMP4LoW19JTwoi"
 
-# Запустить
+# Start
 ./gradlew bootRun
 ```
 
 ---
 
-## 📝 Файлы конфигурации
+## 📝 Configuration Files
 
 ### .env.example
-Пример файла с переменными окружения. Скопируйте в `.env` и обновите значения.
+Example file with environment variables. Copy to `.env` and update values.
 
 ### RUN_WITH_CYODA.sh
-Скрипт для запуска с реальными credentials.
+Script for running with real credentials.
 
 ### application.yml
-Основной конфиг приложения (содержит credentials для разработки).
+Main application config (contains credentials for development).
 
 ---
 
-## 🧪 Тестирование с реальной Cyoda
+## 🧪 Testing with Real Cyoda
 
-### Запустить все тесты
+### Run all tests
 ```bash
 bash TESTING_SCRIPT.sh
 ```
 
-### Проверить gRPC соединение
+### Check gRPC Connection
 ```bash
 curl http://localhost:8080/api/admin/grpc/status \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.connectionState'
 ```
 
-### Переподключиться к Cyoda
+### Reconnect to Cyoda
 ```bash
 curl -X POST "http://localhost:8080/api/admin/grpc/reconnect?force=true" \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
@@ -167,65 +167,65 @@ curl -X POST "http://localhost:8080/api/admin/grpc/reconnect?force=true" \
 
 ---
 
-## 🐛 Решение проблем
+## 🐛 Troubleshooting
 
-### Проблема: "Unable to resolve host"
+### Problem: "Unable to resolve host"
 ```
-Failed to resolve name. status=Status{code=UNAVAILABLE, 
+Failed to resolve name. status=Status{code=UNAVAILABLE,
 description=Unable to resolve host grpc-client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net
 ```
 
-**Решение:**
-- Проверить интернет соединение
-- Проверить что Cyoda сервер доступен
-- Проверить DNS резолюцию: `nslookup client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net`
+**Solution:**
+- Check internet connection
+- Check that Cyoda server is available
+- Check DNS resolution: `nslookup client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net`
 
-### Проблема: "Failed to get access token"
+### Problem: "Failed to get access token"
 ```
 Failed to get access token. Will not set the Bearer Token
 ```
 
-**Решение:**
-- Проверить что credentials правильные
-- Проверить что Cyoda сервер доступен
-- Проверить логи для деталей ошибки
+**Solution:**
+- Check that credentials are correct
+- Check that Cyoda server is available
+- Check logs for error details
 
-### Проблема: "TRANSIENT_FAILURE"
+### Problem: "TRANSIENT_FAILURE"
 ```
 connectionState: TRANSIENT_FAILURE
 ```
 
-**Решение:**
-- Это нормально при первом подключении
-- Приложение автоматически переподключится
-- Проверить логи для деталей
+**Solution:**
+- This is normal on first connection
+- Application will automatically reconnect
+- Check logs for details
 
 ---
 
-## 📊 Статус подключения
+## 📊 Connection status
 
-### Возможные состояния
+### Possible states
 
-| Состояние | Описание |
+| Status | Description |
 |---|---|
-| `IDLE` | Неактивно |
-| `CONNECTING` | Подключается |
-| `READY` | ✅ Готово |
-| `TRANSIENT_FAILURE` | Временная ошибка (переподключается) |
-| `SHUTDOWN` | Отключено |
+| `IDLE` | Idle |
+| `CONNECTING` | Connecting |
+| `READY` | ✅ Ready |
+| `TRANSIENT_FAILURE` | Temporary error (reconnecting) |
+| `SHUTDOWN` | Shutdown |
 
 ---
 
-## ✨ Итог
+## ✨ Summary
 
-Приложение теперь полностью интегрировано с реальной Cyoda EU instance.
+Application is now fully integrated with real Cyoda EU instance.
 
-**Запустить:**
+**Start:**
 ```bash
 bash RUN_WITH_CYODA.sh
 ```
 
-**Тестировать:**
+**Test:**
 ```bash
 bash TESTING_SCRIPT.sh
 ```

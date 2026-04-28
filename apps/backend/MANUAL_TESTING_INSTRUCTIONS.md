@@ -1,32 +1,32 @@
-# 🧪 TMS API — Полное руководство по ручному тестированию
+# 🧪 TMS API — Full Manual Testing Guide
 
-## 📌 Быстрый старт
+## 📌 Quick Start
 
-### Вариант 1: Автоматическое тестирование (рекомендуется)
+### Option 1: Automatic Testing (Recommended)
 ```bash
-# Убедитесь что приложение запущено, затем:
+# Make sure the application is running, then:
 bash TESTING_SCRIPT.sh
 ```
 
-### Вариант 2: Ручное тестирование через Swagger UI
+### Option 2: Manual Testing via Swagger UI
 ```
 http://localhost:8080/api
 ```
 
-### Вариант 3: Ручное тестирование через curl
-Следуйте инструкциям ниже
+### Option 3: Manual Testing via curl
+Follow the instructions below
 
 ---
 
-## 🚀 Подготовка
+## 🚀 Preparation
 
-### Шаг 1: Запустить приложение
+### Step 1: Start Application
 ```bash
 export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
 ./gradlew bootRun --args='--app.config.cyoda-host=localhost --app.config.cyoda-client-id=prototype --app.config.cyoda-client-secret=prototype'
 ```
 
-### Шаг 2: Получить токены (в отдельном терминале)
+### Step 2: Get Tokens (in a separate terminal)
 ```bash
 # Admin token
 ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/api/login \
@@ -38,16 +38,16 @@ TESTER_TOKEN=$(curl -s -X POST http://localhost:8080/api/login \
   -H "Content-Type: application/json" \
   -d '{"username":"tester","password":"tester123"}' | jq -r '.token')
 
-# Проверить
+# Check
 echo "Admin: $ADMIN_TOKEN"
 echo "Tester: $TESTER_TOKEN"
 ```
 
 ---
 
-## 📋 Полный порядок тестирования (31 эндпоинт)
+## 📋 Full Testing Order (31 Endpoints)
 
-### ФАЗА 1: AUTHENTICATION (2 эндпоинта)
+### PHASE 1: AUTHENTICATION (2 endpoints)
 
 **1.1 POST /login (Admin)**
 ```bash
@@ -55,11 +55,11 @@ curl -X POST http://localhost:8080/api/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}' | jq
 ```
-✅ Проверить:
+✅ Check:
 - HTTP 200
-- Поле `token` содержит JWT
-- Поле `role` = "ADMIN"
-- Поле `expiresAt` содержит дату
+- Field `token` contains JWT
+- Field `role` = "ADMIN"
+- Field `expiresAt` contains a date
 
 **1.2 POST /login (Tester)**
 ```bash
@@ -67,13 +67,13 @@ curl -X POST http://localhost:8080/api/login \
   -H "Content-Type: application/json" \
   -d '{"username":"tester","password":"tester123"}' | jq
 ```
-✅ Проверить:
+✅ Check:
 - HTTP 200
-- Поле `role` = "TESTER"
+- Field `role` = "TESTER"
 
 ---
 
-### ФАЗА 2: PROJECTS (5 эндпоинтов)
+### PHASE 2: PROJECTS (5 endpoints)
 
 **2.1 POST /projects (Create)**
 ```bash
@@ -85,21 +85,21 @@ curl -X POST http://localhost:8080/api/projects \
     "description":"Testing e-commerce website"
   }' | jq
 ```
-💾 Сохранить `PROJECT_ID` из ответа
+💾 Save `PROJECT_ID` from response
 
 **2.2 GET /projects (List all)**
 ```bash
 curl http://localhost:8080/api/projects \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
 ```
-✅ Проверить: Массив содержит созданный проект
+✅ Check: Array contains the created project
 
 **2.3 GET /projects/{id} (Get by ID)**
 ```bash
 curl http://localhost:8080/api/projects/$PROJECT_ID \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
 ```
-✅ Проверить: Один проект с полной информацией
+✅ Check: One project with complete information
 
 **2.4 PUT /projects/{id} (Update)**
 ```bash
@@ -111,9 +111,9 @@ curl -X PUT http://localhost:8080/api/projects/$PROJECT_ID \
     "description":"Updated description"
   }' | jq
 ```
-✅ Проверить:
-- `name` обновлён на "E-Commerce Platform v2"
-- `createdAt` сохранён (не изменился)
+✅ Check:
+- `name` updated to "E-Commerce Platform v2"
+- `createdAt` saved (not changed)
 - `status` = "ACTIVE"
 
 **2.5 DELETE /projects/{id} (Soft delete)**
@@ -121,11 +121,11 @@ curl -X PUT http://localhost:8080/api/projects/$PROJECT_ID \
 curl -X DELETE http://localhost:8080/api/projects/$PROJECT_ID \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
 ```
-✅ Проверить: HTTP 200
+✅ Check: HTTP 200
 
 ---
 
-### ФАЗА 3: SUITES (5 эндпоинтов)
+### PHASE 3: SUITES (5 endpoints)
 
 **3.1 POST /projects/{id}/suites (Create)**
 ```bash
@@ -137,7 +137,7 @@ curl -X POST http://localhost:8080/api/projects/$PROJECT_ID/suites \
     "description":"Login, logout, password reset"
   }' | jq
 ```
-💾 Сохранить `SUITE_ID`
+💾 Save `SUITE_ID`
 
 **3.2 GET /projects/{id}/suites (List)**
 ```bash
@@ -161,7 +161,7 @@ curl -X PUT http://localhost:8080/api/projects/$PROJECT_ID/suites/$SUITE_ID \
     "description":"Updated suite"
   }' | jq
 ```
-✅ Проверить: `createdAt` сохранён
+✅ Check: `createdAt` is preserved
 
 **3.5 DELETE /projects/{id}/suites/{id} (Delete)**
 ```bash
@@ -171,7 +171,7 @@ curl -X DELETE http://localhost:8080/api/projects/$PROJECT_ID/suites/$SUITE_ID \
 
 ---
 
-### ФАЗА 4: TEST CASES (5 эндпоинтов)
+### PHASE 4: TEST CASES (5 endpoints)
 
 **4.1 POST /projects/{id}/suites/{id}/cases (Create)**
 ```bash
@@ -184,8 +184,8 @@ curl -X POST http://localhost:8080/api/projects/$PROJECT_ID/suites/$SUITE_ID/cas
     "priority":"HIGH"
   }' | jq
 ```
-💾 Сохранить `CASE_ID`
-✅ **ВАЖНО**: Проверить что поле `title` сохранено (не `name`)
+💾 Save `CASE_ID`
+✅ **IMPORTANT**: Check that field `title` is saved (not `name`)
 
 **4.2 GET /projects/{id}/suites/{id}/cases (List)**
 ```bash
@@ -210,10 +210,10 @@ curl -X PUT http://localhost:8080/api/projects/$PROJECT_ID/suites/$SUITE_ID/case
     "priority":"CRITICAL"
   }' | jq
 ```
-✅ Проверить:
-- `title` обновлён
+✅ Check:
+- `title` updated
 - `status` = "ACTIVE"
-- `createdAt` сохранён
+- `createdAt` saved
 
 **4.5 DELETE /projects/{id}/suites/{id}/cases/{id} (Delete)**
 ```bash
@@ -223,7 +223,7 @@ curl -X DELETE http://localhost:8080/api/projects/$PROJECT_ID/suites/$SUITE_ID/c
 
 ---
 
-### ФАЗА 5: TEST STEPS (5 эндпоинтов)
+### PHASE 5: TEST STEPS (5 endpoints)
 
 **5.1 POST /projects/{id}/suites/{id}/cases/{id}/steps (Create)**
 ```bash
@@ -235,8 +235,8 @@ curl -X POST http://localhost:8080/api/projects/$PROJECT_ID/suites/$SUITE_ID/cas
     "expectedResult":"Login form is displayed"
   }' | jq
 ```
-💾 Сохранить `STEP_ID`
-✅ **ВАЖНО**: Проверить что поле `description` сохранено (не `action`)
+💾 Save `STEP_ID`
+✅ **IMPORTANT**: Check that field `description` is saved (not `action`)
 
 **5.2 GET /projects/{id}/suites/{id}/cases/{id}/steps (List)**
 ```bash
@@ -269,7 +269,7 @@ curl -X DELETE http://localhost:8080/api/projects/$PROJECT_ID/suites/$SUITE_ID/c
 
 ---
 
-### ФАЗА 6: TEST RUNS (7 эндпоинтов)
+### PHASE 6: TEST RUNS (7 endpoints)
 
 **6.1 POST /projects/{id}/runs (Create)**
 ```bash
@@ -281,8 +281,8 @@ curl -X POST http://localhost:8080/api/projects/$PROJECT_ID/runs \
     "environment":"QA"
   }' | jq
 ```
-💾 Сохранить `RUN_ID`
-✅ **ВАЖНО**: Проверить что поле `name` сохранено (не `title`), `status` = "CREATED"
+💾 Save `RUN_ID`
+✅ **IMPORTANT**: Check that field `name` is saved (not `title`), `status` = "CREATED"
 
 **6.2 GET /projects/{id}/runs (List)**
 ```bash
@@ -306,26 +306,26 @@ curl -X PUT http://localhost:8080/api/projects/$PROJECT_ID/runs/$RUN_ID \
     "environment":"Staging"
   }' | jq
 ```
-✅ Проверить:
-- `name` обновлён
+✅ Check:
+- `name` updated
 - `status` = "CREATED"
-- `createdAt` сохранён
+- `createdAt` saved
 
 **6.5 POST /projects/{id}/runs/{id}/complete (Complete)**
 ```bash
 curl -X POST http://localhost:8080/api/projects/$PROJECT_ID/runs/$RUN_ID/complete \
   -H "Authorization: Bearer $TESTER_TOKEN" | jq
 ```
-✅ Проверить:
+✅ Check:
 - `status` = "COMPLETED"
-- `completedAt` заполнен
+- `completedAt` is filled
 
 **6.6 POST /projects/{id}/runs/{id}/unlock (Unlock)**
 ```bash
 curl -X POST http://localhost:8080/api/projects/$PROJECT_ID/runs/$RUN_ID/unlock \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
 ```
-✅ Проверить: `status` = "UNLOCKED"
+✅ Check: `status` = "UNLOCKED"
 
 **6.7 DELETE /projects/{id}/runs/{id} (Delete)**
 ```bash
@@ -335,59 +335,59 @@ curl -X DELETE http://localhost:8080/api/projects/$PROJECT_ID/runs/$RUN_ID \
 
 ---
 
-### ФАЗА 7: ADMIN GRPC (2 эндпоинта)
+### PHASE 7: ADMIN GRPC (2 endpoints)
 
 **7.1 GET /admin/grpc/status (Check status)**
 ```bash
 curl http://localhost:8080/api/admin/grpc/status \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
 ```
-✅ Проверить: JSON с `connectionState`, `observerState`
+✅ Check: JSON with `connectionState`, `observerState`
 
 **7.2 POST /admin/grpc/reconnect (Reconnect)**
 ```bash
 curl -X POST "http://localhost:8080/api/admin/grpc/reconnect?force=true" \
   -H "Authorization: Bearer $ADMIN_TOKEN" | jq
 ```
-✅ Проверить: Сообщение о переподключении
+✅ Check: Reconnection message
 
 ---
 
-## ✅ Финальный чеклист
+## ✅ Final Checklist
 
-- [ ] **ФАЗА 1**: Оба логина работают, токены получены
-- [ ] **ФАЗА 2**: Все 5 Project эндпоинтов работают, PUT сохраняет createdAt
-- [ ] **ФАЗА 3**: Все 5 Suite эндпоинтов работают
-- [ ] **ФАЗА 4**: Все 5 TestCase эндпоинтов работают, `title` сохранено
-- [ ] **ФАЗА 5**: Все 5 TestStep эндпоинтов работают, `description` сохранено
-- [ ] **ФАЗА 6**: Все 7 TestRun эндпоинтов работают, `name` сохранено, complete/unlock работают
-- [ ] **ФАЗА 7**: Оба gRPC эндпоинта работают
-- [ ] Все эндпоинты возвращают HTTP 200/201
-- [ ] Все DTO поля правильно маппированы
-- [ ] PUT операции сохраняют `createdAt` и `status`
-- [ ] Swagger UI доступен на http://localhost:8080/api
-
----
-
-## 🐛 Если что-то не работает
-
-1. **Проверить логи приложения** — ищите ERROR или WARN
-2. **Убедиться что токен не истёк** — токены действуют 24 часа
-3. **Проверить что используются правильные ID** — скопируйте из предыдущего ответа
-4. **Запустить unit тесты** — `./gradlew test` (все должны пройти)
-5. **Перезапустить приложение** — иногда помогает
+- [ ] **PHASE 1**: Both login endpoints work, tokens obtained
+- [ ] **PHASE 2**: All 5 Project endpoints work, PUT preserves createdAt
+- [ ] **PHASE 3**: All 5 Suite endpoints work
+- [ ] **PHASE 4**: All 5 TestCase endpoints work, `title` is saved
+- [ ] **PHASE 5**: All 5 TestStep endpoints work, `description` is saved
+- [ ] **PHASE 6**: All 7 TestRun endpoints work, `name` is saved, complete/unlock work
+- [ ] **PHASE 7**: Both gRPC endpoints work
+- [ ] All endpoints return HTTP 200/201
+- [ ] All DTO fields are properly mapped
+- [ ] PUT operations preserve `createdAt` and `status`
+- [ ] Swagger UI is available at http://localhost:8080/api
 
 ---
 
-## 📊 Итого
+## 🐛 If Something Doesn't Work
 
-- **Всего эндпоинтов**: 31
-- **Фаз тестирования**: 7
-- **Время на полное тестирование**: ~15-20 минут
-- **Требуемые инструменты**: curl, jq (опционально)
+1. **Check Application Logs** — look for ERROR or WARN
+2. **Ensure Token is Valid** — tokens are valid for 24 hours
+3. **Verify Correct IDs are Used** — copy from previous response
+4. **Run Unit Tests** — `./gradlew test` (all should pass)
+5. **Restart Application** — sometimes helps
 
 ---
 
-## 🎯 Успешное завершение
+## 📊 Summary
 
-Если все чеклисты пройдены ✅, то прототип **полностью готов к использованию**!
+- **Total endpoints**: 31
+- **Testing phases**: 7
+- **Time for full testing**: ~15-20 minutes
+- **Required tools**: curl, jq (optional)
+
+---
+
+## 🎯 Successful Completion
+
+If all checklists are completed ✅, the prototype is **fully ready for use**!

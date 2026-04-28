@@ -90,7 +90,7 @@ selectedRuns.size > 0 ? Array.from(selectedRuns) : runs.map(r => r.id)
 Send `snapshotData: JSON.stringify({ totalPassed, totalFailed, totalSkipped, totalUntested, suiteData, defects })` in the create body.
 
 ### UX
-- Button shows `"Формируем отчёт…"` while fetching
+- Button shows `"Building report…"` while fetching
 - If any fetch fails: create report without `snapshotData` (fallback, do not block user)
 
 ### Hooks to add to CreateReport
