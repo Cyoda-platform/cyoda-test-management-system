@@ -78,6 +78,15 @@ public class ProjectCounterService {
      */
     private final ConcurrentHashMap<UUID, Object> projectLocks = new ConcurrentHashMap<>();
 
+    /**
+     * In-memory counter cache: avoids a gRPC search on every batch reservation.
+     * The first call per project fetches from Cyoda; subsequent calls reuse the
+     * cached entity and only pay for the update gRPC call (~1.7s vs ~3.4s).
+     * Safe for single-instance deployments. On restart the counter re-fetches
+     * from Cyoda so no IDs are ever reused.
+     */
+    private final ConcurrentHashMap<UUID, ProjectCounterDTO> counterCache = new ConcurrentHashMap<>();
+
     public ProjectCounterService(EntityService entityService, ObjectMapper objectMapper) {
         this.entityService = entityService;
         this.objectMapper = objectMapper;
@@ -131,6 +140,7 @@ public class ProjectCounterService {
      * Called during cascade deletion of a Project entity.
      */
     public void deleteCounterForProject(UUID projectId) {
+        counterCache.remove(projectId);
         findCounterForProject(projectId).ifPresent(counter -> {
             entityService.deleteById(counter.getId());
             logger.info("Deleted ProjectCounter for project {}", projectId);
@@ -155,7 +165,12 @@ public class ProjectCounterService {
         if (count <= 0) throw new IllegalArgumentException("count must be > 0");
         Object lock = projectLocks.computeIfAbsent(projectId, k -> new Object());
         synchronized (lock) {
-            Optional<ProjectCounterDTO> existing = findCounterForProject(projectId);
+            // Use in-memory cache to skip the gRPC search on every call.
+            // First call per project pays the search cost; subsequent calls only pay for update.
+            ProjectCounterDTO cached = counterCache.get(projectId);
+            Optional<ProjectCounterDTO> existing = cached != null
+                    ? Optional.of(cached)
+                    : findCounterForProject(projectId);
 
             long firstAssigned;
             if (existing.isPresent()) {
@@ -167,8 +182,9 @@ public class ProjectCounterService {
                 }
                 setter.accept(counter, firstAssigned + count);
                 entityService.update(counter.getId(), counter, null);
-                logger.debug("Assigned {}-{}..{}-{} for project {} (batch={})",
-                        prefix, firstAssigned, prefix, firstAssigned + count - 1, projectId, count);
+                counterCache.put(projectId, counter);
+                logger.debug("Assigned {}-{}..{}-{} for project {} (batch={}, cached={})",
+                        prefix, firstAssigned, prefix, firstAssigned + count - 1, projectId, count, cached != null);
             } else {
                 long maxUsed = bootstrap.getAsLong();
                 firstAssigned = maxUsed + 1;
@@ -182,6 +198,7 @@ public class ProjectCounterService {
                 counter.setNextDefectId(prefix.equals("DEF") ? firstAssigned + count : 1);
                 counter.setNextReportId(prefix.equals("REP") ? firstAssigned + count : 1);
                 entityService.create(counter);
+                counterCache.put(projectId, counter);
 
                 logger.info("Initialized {} counter for project {} — first batch: {}-{}..{}-{} (prev max: {})",
                         prefix, projectId, prefix, firstAssigned, prefix, firstAssigned + count - 1, maxUsed);
