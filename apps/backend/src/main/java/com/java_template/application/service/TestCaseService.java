@@ -311,7 +311,9 @@ public class TestCaseService {
                                                   List<BatchImportCaseDTO> items) {
         if (items == null || items.isEmpty()) return java.util.Collections.emptyList();
 
+        long t0 = System.currentTimeMillis();
         List<String> displayIds = projectCounterService.nextDisplayIdBatch(projectId, items.size());
+        log.info("[BatchImport] counter reserved {} IDs in {}ms", items.size(), System.currentTimeMillis() - t0);
 
         TestCaseDTO[] results = new TestCaseDTO[items.size()];
         List<CompletableFuture<Void>> futures = new java.util.ArrayList<>(items.size());
@@ -322,6 +324,7 @@ public class TestCaseService {
             final String displayId = displayIds.get(i);
 
             futures.add(CompletableFuture.runAsync(() -> {
+                long tCase = System.currentTimeMillis();
                 TestCaseDTO tc = new TestCaseDTO();
                 tc.setProjectId(projectId);
                 tc.setSuiteId(suiteId);
@@ -347,11 +350,27 @@ public class TestCaseService {
                     tc.setSteps(embeddedSteps);
                 }
 
+                long tCreate = System.currentTimeMillis();
                 TestCaseDTO saved = withId(entityService.create(tc));
-                saved.setDisplayId(displayId);
-                saved.setSteps(tc.getSteps());
-                entityService.update(saved.getId(), saved, null);
+                long createMs = System.currentTimeMillis() - tCreate;
+
+                // Cyoda may strip displayId/steps from the create-reload response —
+                // restore them explicitly then persist with a single update.
+                boolean needsUpdate = saved.getDisplayId() == null || !displayId.equals(saved.getDisplayId());
+                if (needsUpdate) {
+                    saved.setDisplayId(displayId);
+                    saved.setSteps(tc.getSteps());
+                    long tUpdate = System.currentTimeMillis();
+                    entityService.update(saved.getId(), saved, null);
+                    log.info("[BatchImport] {} create={}ms update={}ms (displayId stripped → update needed)",
+                            displayId, createMs, System.currentTimeMillis() - tUpdate);
+                } else {
+                    saved.setSteps(tc.getSteps());
+                    log.info("[BatchImport] {} create={}ms (displayId preserved, skipped update)",
+                            displayId, createMs);
+                }
                 results[idx] = saved;
+                log.debug("[BatchImport] {} total case time={}ms", displayId, System.currentTimeMillis() - tCase);
             }));
         }
 
@@ -362,6 +381,7 @@ public class TestCaseService {
             throw new RuntimeException("Batch import failed: " + cause.getMessage(), cause);
         }
 
+        log.info("[BatchImport] {} cases total={}ms", items.size(), System.currentTimeMillis() - t0);
         return java.util.Arrays.asList(results);
     }
 }
