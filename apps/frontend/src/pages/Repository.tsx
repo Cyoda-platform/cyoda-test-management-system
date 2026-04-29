@@ -1841,8 +1841,6 @@ const Repository = () => {
                   <SelectItem value="csv">CSV (.csv)</SelectItem>
                   <SelectItem value="json">JSON (.json)</SelectItem>
                   <SelectItem value="xml">XML (.xml)</SelectItem>
-                  <SelectItem value="excel">Excel (.xlsx)</SelectItem>
-                  <SelectItem value="pdf">PDF (.pdf)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1930,16 +1928,16 @@ const Repository = () => {
 
             {/* Suite Target */}
             <div>
-              <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Fallback Destination Suite</label>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest">Where to Import Cases</label>
               <p className="text-xs text-muted-foreground mb-1.5">
-                Used only for cases without suite info in the file. CYODA exports preserve original suite structure automatically.
+                If the file contains suite info, cases are placed in their original suites. Otherwise, choose where to put them.
               </p>
               <Select value={importSuiteTarget} onValueChange={setImportSuiteTarget}>
                 <SelectTrigger className="bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="root">Auto-create suite(s) from file</SelectItem>
+                  <SelectItem value="root">Create new suite(s)</SelectItem>
                   {localSuites.map((s) => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}

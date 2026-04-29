@@ -145,81 +145,11 @@ function exportXML(opts: ExportOptions) {
   return new Blob([xml], { type: 'application/xml;charset=utf-8' });
 }
 
-// ── Excel (simple CSV with .xlsx-compatible TSV) ──
-
-function exportExcel(opts: ExportOptions) {
-  // Generate a real xlsx using a minimal XLSX approach via CSV tab-separated
-  // For a proper xlsx we build a simple spreadsheet XML (SpreadsheetML)
-  const rows = flattenCases(opts.suites, opts.includeSteps, opts.includePreconditions);
-  const headers = ['Suite_ID', 'Suite_Name', 'Case_ID', 'Title', 'Priority', 'Description'];
-  if (opts.includePreconditions) headers.push('Pre_Conditions');
-  if (opts.includeSteps) headers.push('Step_Order', 'Step_Action', 'Step_Expected_Result');
-
-  // Build minimal xlsx via tab-separated CSV that Excel can open
-  const lines = [headers.join('\t')];
-  for (const r of rows) {
-    const vals = [r.suiteId, r.suiteName, r.caseId, r.title, r.priority, r.description];
-    if (opts.includePreconditions) vals.push(r.preconditions);
-    if (opts.includeSteps) vals.push(String(r.stepOrder), r.stepAction, r.stepExpected);
-    lines.push(vals.map(v => v.replace(/\t/g, ' ')).join('\t'));
-  }
-  // Use xls extension with TSV content - Excel opens this natively
-  return new Blob(['\uFEFF' + lines.join('\n')], { type: 'application/vnd.ms-excel;charset=utf-8' });
-}
-
-// ── PDF ──
-
-function exportPDF(opts: ExportOptions) {
-  // Generate a printable HTML document and trigger print/save as PDF
-  const rows = flattenCases(opts.suites, opts.includeSteps, opts.includePreconditions);
-
-  let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Test Cases Export</title>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #1e293b; }
-  h1 { font-size: 18px; margin-bottom: 4px; }
-  .meta { color: #64748b; font-size: 10px; margin-bottom: 16px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th { background: #f1f5f9; text-align: left; padding: 6px 8px; border: 1px solid #e2e8f0; font-size: 10px; text-transform: uppercase; color: #475569; }
-  td { padding: 5px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
-  tr:nth-child(even) { background: #f8fafc; }
-  .priority-HIGH { color: #F43F5E; font-weight: 600; }
-  .priority-MEDIUM { color: #F59E0B; font-weight: 600; }
-  .priority-LOW { color: #64748b; }
-  @media print { body { margin: 0; } }
-</style></head><body>
-<h1>Test Cases — ${opts.projectName}</h1>
-<div class="meta">Exported on ${formatDate(new Date())} | ${rows.length} rows</div>
-<table><thead><tr>
-<th>Suite</th><th>Case ID</th><th>Title</th><th>Priority</th><th>Description</th>`;
-  if (opts.includePreconditions) html += '<th>Pre-Conditions</th>';
-  if (opts.includeSteps) html += '<th>Step #</th><th>Action</th><th>Expected</th>';
-  html += '</tr></thead><tbody>';
-  for (const r of rows) {
-    html += `<tr><td>${escapeXML(r.suiteName)}</td><td>${escapeXML(r.caseId)}</td><td>${escapeXML(r.title)}</td><td class="priority-${r.priority}">${r.priority}</td><td>${escapeXML(r.description)}</td>`;
-    if (opts.includePreconditions) html += `<td>${escapeXML(r.preconditions)}</td>`;
-    if (opts.includeSteps) html += `<td>${r.stepOrder}</td><td>${escapeXML(r.stepAction)}</td><td>${escapeXML(r.stepExpected)}</td>`;
-    html += '</tr>';
-  }
-  html += '</tbody></table></body></html>';
-
-  // Open in new window for print-to-PDF
-  const w = window.open('', '_blank');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-    setTimeout(() => w.print(), 500);
-  }
-}
 
 // ── Main export dispatcher ──
 
 export async function performExport(opts: ExportOptions): Promise<void> {
   const filename = `CYODA_Export_${opts.projectName.replace(/\s+/g, '_')}_${dateStamp()}`;
-
-  if (opts.format === 'pdf') {
-    exportPDF(opts);
-    return;
-  }
 
   let blob: Blob;
   let ext: string;
@@ -228,8 +158,6 @@ export async function performExport(opts: ExportOptions): Promise<void> {
       blob = exportJSON(opts); ext = 'json'; break;
     case 'xml':
       blob = exportXML(opts); ext = 'xml'; break;
-    case 'excel':
-      blob = exportExcel(opts); ext = 'xls'; break;
     default:
       blob = exportCSV(opts); ext = 'csv'; break;
   }
