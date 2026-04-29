@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Plus, Eye, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
@@ -58,9 +58,9 @@ const Reports = () => {
     (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
   );
 
-  const listRef = useRef<HTMLDivElement>(null);
+  const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
   const estimateSize = useCallback(() => 52, []);
-  const { virtualItems, totalSize } = useVirtualList(listRef, {
+  const { virtualItems, totalSize } = useVirtualList(listEl, {
     count: sorted.length,
     estimateSize,
     overscan: 5,
@@ -68,7 +68,7 @@ const Reports = () => {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-auto surface-base">
+      <div ref={setListEl} className="flex-1 overflow-auto surface-base">
         <div className="max-w-7xl mx-auto w-full px-6 py-6">
           {/* Breadcrumbs & Title */}
           <div className="mb-4">

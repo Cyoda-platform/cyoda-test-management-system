@@ -288,14 +288,14 @@ const RunExecution = () => {
     return items;
   }, [filteredSuitesWithCases]);
 
-  const caseListRef = useRef<HTMLDivElement>(null);
+  const [caseListEl, setCaseListEl] = useState<HTMLDivElement | null>(null);
 
   const estimateRunItemSize = useCallback((i: number) => {
     return runItems[i]?.type === 'suite-header' ? 36 : 52;
   }, [runItems]);
 
   const { virtualItems: runVirtualItems, totalSize: runTotalSize } =
-    useVirtualList(caseListRef, {
+    useVirtualList(caseListEl, {
       count: runItems.length,
       estimateSize: estimateRunItemSize,
       overscan: 8,
@@ -1314,7 +1314,7 @@ const RunExecution = () => {
             </div>
           </div>
           {/* Scroll container — only this div scrolls, height is flex-1 */}
-          <div ref={caseListRef} className="flex-1 overflow-auto px-1.5 pb-2">
+          <div ref={setCaseListEl} className="flex-1 overflow-auto px-1.5 pb-2">
             <div style={{ height: runTotalSize, position: 'relative' }}>
               {runVirtualItems.map((vi) => {
                 const item = runItems[vi.index];
