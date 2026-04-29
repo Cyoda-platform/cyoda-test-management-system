@@ -165,9 +165,14 @@ public class TestRunCaseService {
             for (TestCaseDTO.StepDTO step : steps) {
                 TestRunStepDTO runStep = new TestRunStepDTO();
                 runStep.setTestRunCaseId(runCaseId);
+                // testStepId is a legacy reference to the now-removed TestStep entity.
+                // Steps are embedded in TestCase.steps[]; use a placeholder UUID so
+                // Cyoda's schema validation (UUID field, non-null) does not reject the entity.
+                runStep.setTestStepId(UUID.randomUUID());
                 runStep.setStepNumber(step.getStepNumber());
                 runStep.setAction(step.getAction());
                 runStep.setExpectedResult(step.getExpectedResult());
+                runStep.setStatus("UNTESTED");
                 TestRunStepDTO createdStep = testRunStepService.createTestRunStep(runStep);
                 createdStepIds.add(createdStep.getId());
             }

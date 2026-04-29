@@ -523,10 +523,11 @@ export const testRunCasesApi = {
  */
 export interface TestRunStep {
   id: string;
-  /** References the TestRunCase.id (NOT the original TestCase.id) */
   testRunCaseId: string;
-  /** References the original TestStep.id */
-  testStepId: string;
+  /** Snapshot fields copied from TestCase.steps[] at run-creation time. */
+  stepNumber?: number;
+  action?: string;
+  expectedResult?: string;
   /** Uppercase: 'UNTESTED' | 'PASSED' | 'FAILED' | 'SKIPPED' */
   status: string;
   actualResult?: string;
