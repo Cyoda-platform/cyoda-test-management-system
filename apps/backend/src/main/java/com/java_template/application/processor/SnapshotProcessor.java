@@ -111,11 +111,10 @@ public class SnapshotProcessor implements CyodaProcessor {
         caseSnapshot.setPriority(tc.getPriority());
         caseSnapshot.setDisplayId(tc.getDisplayId());
         caseSnapshot.setSuiteId(tc.getSuiteId());
+        caseSnapshot.setSteps(tc.getSteps());
 
-        List<TestCaseDTO.StepDTO> steps = tc.getSteps();
-
-        testRunCaseService.createTestRunCaseWithStepSnapshots(caseSnapshot, steps);
-        log.debug("SnapshotProcessor: snapshotted case {} with {} step(s)", caseId, steps.size());
+        testRunCaseService.createTestRunCase(caseSnapshot);
+        log.debug("SnapshotProcessor: snapshotted case {} with {} step(s)", caseId, tc.getSteps() != null ? tc.getSteps().size() : 0);
     }
 
     private UUID parseUuid(JsonNode data, String field, UUID testRunId) {

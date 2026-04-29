@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.cyoda.cloud.api.event.common.ModelSpec;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -42,6 +43,8 @@ public class TestRunCaseDTO implements CyodaEntity {
     private Priority priority;
     private String displayId;
     private UUID suiteId;
+
+    private List<TestCaseDTO.StepDTO> steps;
 
     private String startedAt;
     private String completedAt;

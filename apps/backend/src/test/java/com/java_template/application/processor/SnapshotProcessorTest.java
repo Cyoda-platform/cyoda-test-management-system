@@ -99,7 +99,7 @@ class SnapshotProcessorTest {
 
         TestRunCaseDTO createdCase = new TestRunCaseDTO();
         createdCase.setId(UUID.randomUUID());
-        when(testRunCaseService.createTestRunCaseWithStepSnapshots(any(), any()))
+        when(testRunCaseService.createTestRunCase(any()))
                 .thenReturn(createdCase);
 
         EntityProcessorCalculationResponse response = processor.process(context(request));
@@ -109,7 +109,7 @@ class SnapshotProcessorTest {
 
         // Verify the snapshot was built correctly
         ArgumentCaptor<TestRunCaseDTO> caseCaptor = ArgumentCaptor.forClass(TestRunCaseDTO.class);
-        verify(testRunCaseService).createTestRunCaseWithStepSnapshots(caseCaptor.capture(), eq(List.of()));
+        verify(testRunCaseService).createTestRunCase(caseCaptor.capture());
 
         TestRunCaseDTO captured = caseCaptor.getValue();
         assertEquals(testRunId, captured.getTestRunId());
@@ -124,7 +124,7 @@ class SnapshotProcessorTest {
     }
 
     @Test
-    @DisplayName("passes embedded step data from tc.getSteps() to createTestRunCaseWithStepSnapshots")
+    @DisplayName("passes embedded step data from tc.getSteps() to createTestRunCase")
     void passesEmbeddedStepData() throws Exception {
         UUID testRunId = UUID.randomUUID();
         UUID projectId = UUID.randomUUID();
@@ -147,15 +147,15 @@ class SnapshotProcessorTest {
 
         TestRunCaseDTO createdCase = new TestRunCaseDTO();
         createdCase.setId(UUID.randomUUID());
-        when(testRunCaseService.createTestRunCaseWithStepSnapshots(any(), any()))
+        when(testRunCaseService.createTestRunCase(any()))
                 .thenReturn(createdCase);
 
         processor.process(context(request));
 
-        ArgumentCaptor<List<TestCaseDTO.StepDTO>> stepsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(testRunCaseService).createTestRunCaseWithStepSnapshots(any(), stepsCaptor.capture());
+        ArgumentCaptor<TestRunCaseDTO> caseCaptor = ArgumentCaptor.forClass(TestRunCaseDTO.class);
+        verify(testRunCaseService).createTestRunCase(caseCaptor.capture());
 
-        List<TestCaseDTO.StepDTO> captured = stepsCaptor.getValue();
+        List<TestCaseDTO.StepDTO> captured = caseCaptor.getValue().getSteps();
         assertEquals(1, captured.size());
         assertEquals(1,                captured.get(0).getStepNumber());
         assertEquals("Click checkout", captured.get(0).getAction());
@@ -222,7 +222,7 @@ class SnapshotProcessorTest {
 
         TestRunCaseDTO created = new TestRunCaseDTO();
         created.setId(UUID.randomUUID());
-        when(testRunCaseService.createTestRunCaseWithStepSnapshots(any(), any()))
+        when(testRunCaseService.createTestRunCase(any()))
                 .thenReturn(created);
 
         EntityProcessorCalculationResponse response = processor.process(context(request));
@@ -230,7 +230,7 @@ class SnapshotProcessorTest {
         assertTrue(response.getSuccess());
         // Only the present case is snapshotted
         verify(testRunCaseService, times(1))
-                .createTestRunCaseWithStepSnapshots(any(), any());
+                .createTestRunCase(any());
     }
 
     // ---- helpers -----------------------------------------------------------

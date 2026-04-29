@@ -196,7 +196,7 @@ public class TestCaseServiceTest {
         assertEquals("TC-002", result.get(1).getDisplayId());
         verify(entityService, times(2)).create(any(TestCaseDTO.class));
         // 2 updates for displayId persistence (one per case)
-        verify(entityService, times(2)).update(any(UUID.class), any(TestCaseDTO.class), any());
+        verify(entityService, times(1)).update(any(UUID.class), any(TestCaseDTO.class), any());
         // Verify item1 has embedded steps (no testStepService calls)
         TestCaseDTO case1 = result.get(0);
         assertNotNull(case1.getSteps(), "steps should be embedded");

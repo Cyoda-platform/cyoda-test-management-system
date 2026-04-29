@@ -139,65 +139,7 @@ public class TestRunCaseService {
                 .toList();
     }
 
-    /**
-     * Creates a {@link TestRunCaseDTO} together with all of its {@link TestRunStepDTO}
-     * records, copying snapshot content from the case's embedded steps.
-     *
-     * <p>Steps are now embedded directly in {@link TestCaseDTO} — there are no separate
-     * TestStep entities. This method snapshots the step data at run-creation time so
-     * the run remains self-contained even if the original case is updated later.</p>
-     *
-     * <p>Uses a compensating-transaction pattern: if any step creation fails, all
-     * successfully created steps and the parent case are deleted before re-throwing.</p>
-     *
-     * @param testRunCase the case to create (snapshot fields must already be set by caller)
-     * @param steps       embedded steps from {@link TestCaseDTO#getSteps()}
-     * @return the persisted {@link TestRunCaseDTO} with its assigned {@code id}
-     */
-    @CacheEvict(value = "runCasesByRun", allEntries = true)
-    public TestRunCaseDTO createTestRunCaseWithStepSnapshots(TestRunCaseDTO testRunCase,
-                                                              List<TestCaseDTO.StepDTO> steps) {
-        TestRunCaseDTO created = createTestRunCase(testRunCase);
-        UUID runCaseId = created.getId();
 
-        List<UUID> createdStepIds = new ArrayList<>();
-        try {
-            for (TestCaseDTO.StepDTO step : steps) {
-                TestRunStepDTO runStep = new TestRunStepDTO();
-                runStep.setTestRunCaseId(runCaseId);
-                // testStepId is a legacy reference to the now-removed TestStep entity.
-                // Steps are embedded in TestCase.steps[]; use a placeholder UUID so
-                // Cyoda's schema validation (UUID field, non-null) does not reject the entity.
-                runStep.setTestStepId(UUID.randomUUID());
-                runStep.setStepNumber(step.getStepNumber());
-                runStep.setAction(step.getAction());
-                runStep.setExpectedResult(step.getExpectedResult());
-                runStep.setStatus("UNTESTED");
-                TestRunStepDTO createdStep = testRunStepService.createTestRunStep(runStep);
-                createdStepIds.add(createdStep.getId());
-            }
-        } catch (Exception stepException) {
-            log.error("Step snapshot creation failed for TestRunCase {}. Rolling back {} step(s) and the case.",
-                    runCaseId, createdStepIds.size(), stepException);
-            createdStepIds.forEach(stepId -> {
-                try {
-                    entityService.deleteById(stepId);
-                } catch (Exception ignored) {
-                    log.warn("Cleanup failed for TestRunStep {}", stepId);
-                }
-            });
-            try {
-                entityService.deleteById(runCaseId);
-            } catch (Exception ignored) {
-                log.warn("Cleanup failed for TestRunCase {}", runCaseId);
-            }
-            throw new RuntimeException(
-                    "Failed to initialise TestRunCase " + runCaseId +
-                    ": step snapshot creation failed. The partial write has been rolled back.", stepException);
-        }
-
-        return created;
-    }
 
     public Optional<TestRunCaseDTO> getTestRunCaseById(UUID id) {
         try {
