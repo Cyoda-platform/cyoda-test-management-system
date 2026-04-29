@@ -398,6 +398,13 @@ export function useTestRunDetails(projectId: string, runId: string) {
     // switch back to the page), not on every query invalidation.
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
+    // Poll every 2 s while SnapshotProcessor is still creating TestRunCase/TestRunStep
+    // records asynchronously (ASYNC_NEW_TX). Stop as soon as runCases arrive.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 2_000;
+      return data.runCases.length === 0 ? 2_000 : false;
+    },
     select: (data: TestRunDetail) => data,
   });
 }
