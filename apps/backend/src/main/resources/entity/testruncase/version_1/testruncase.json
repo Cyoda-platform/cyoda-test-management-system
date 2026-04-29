@@ -12,5 +12,12 @@
   "preconditions": "User is logged in",
   "priority": "MEDIUM",
   "displayId": "TC-001",
-  "suiteId": "550e8400-e29b-41d4-a716-446655440044"
+  "suiteId": "550e8400-e29b-41d4-a716-446655440044",
+  "steps": [
+    {
+      "stepNumber": 1,
+      "action": "Sample action",
+      "expectedResult": "Sample expected result"
+    }
+  ]
 }

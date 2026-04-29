@@ -633,9 +633,13 @@ const RunExecution = () => {
           id:          d.id,
           displayId:   d.displayId ?? previous?.displayId ?? d.id.slice(0, 8).toUpperCase(),
           caseId:      (() => {
-            // Map testRunCaseId → original testCaseId so getCaseSourceLabel works.
+            // Primary: testCaseId stored directly on the defect (most reliable).
+            if (d.testCaseId) return d.testCaseId;
+            // Secondary: resolve via testRunCaseId → TestRunCase → testCaseId.
             const rc = d.testRunCaseId ? runCases.find((r) => r.id === d.testRunCaseId) : undefined;
-            return rc ? getRunCaseTestCaseId(rc) : (previous?.caseId ?? '');
+            if (rc) return getRunCaseTestCaseId(rc);
+            // Fallback: preserve from previous in-session state.
+            return previous?.caseId ?? '';
           })(),
           caseTitle:   previous?.caseTitle ?? (d.testRunCaseId ? runCaseIdToCaseTitleRef.current.get(d.testRunCaseId) ?? '' : ''),
           stepIdx:     (() => {
@@ -981,11 +985,8 @@ const RunExecution = () => {
         source:      defect.source,
         link:        defect.link,
         // ── Persist run / case links so the table survives a page reload ────
-        testRunId:     runId,
-        // runCaseId may be undefined for cases not yet opened — that is safe;
-        // the defect will still be linked to the run and appear in the run's
-        // defect table.  The testRunCaseId will be enriched on next page load
-        // via the server-side defect list which scopes by testRunId.
+        testRunId:   runId,
+        testCaseId:  defectContext.caseId,
         ...(runCaseId ? { testRunCaseId: runCaseId } : {}),
       });
 
@@ -1029,9 +1030,9 @@ const RunExecution = () => {
       // handleBugClick). This ensures the defect badge persists after page reload.
       if (!runCaseId) {
         void ensureRunCaseId(defectContext.caseId)
-          .then((resolvedId) => {
+          .then(async (resolvedId) => {
             if (!resolvedId) return;
-            return defectsApi.update(projectId!, created.id, {
+            await defectsApi.update(projectId!, created.id, {
               id:          created.id,
               projectId:   projectId!,
               title:       created.title,
@@ -1041,8 +1042,10 @@ const RunExecution = () => {
               source:      created.source ?? '',
               link:        created.link ?? '',
               testRunId:   runId,
+              testCaseId:  defectContext.caseId,
               testRunCaseId: resolvedId,
             });
+            qc.invalidateQueries({ queryKey: keys.runDefects.all(projectId!, runId!) });
           })
           .catch(() => {});
       }
@@ -1076,7 +1079,9 @@ const RunExecution = () => {
     if (!projectId) return;
 
     try {
-      // Update defect via API
+      // Update defect via API — preserve testRunId/testRunCaseId so the defect
+      // remains visible on this run page after a reload.
+      const originalDefect = serverRunDefects.find((d) => d.id === updatedDefect.id);
       await defectsApi.update(projectId!, updatedDefect.id, {
         title: updatedDefect.title,
         description: updatedDefect.description,
@@ -1084,6 +1089,9 @@ const RunExecution = () => {
         status: updatedDefect.status,
         source: updatedDefect.source,
         link: updatedDefect.link,
+        testRunId: originalDefect?.testRunId ?? runId,
+        testRunCaseId: originalDefect?.testRunCaseId,
+        testCaseId: originalDefect?.testCaseId,
       });
 
       // Upload new files
@@ -1433,7 +1441,7 @@ const RunExecution = () => {
                   ?? 'untested';
                 const totalEvidenceCount = stepEvidenceCounts[`${activeCase.id}::${step.stepNumber}`] ?? 0;
                 const stepDefectCount = createdDefects.filter(
-                  (d) => d.caseId === activeCase.id && d.stepIdx === sIdx,
+                  (d) => d.caseId === activeCase.id && d.stepIdx === step.stepNumber - 1,
                 ).length;
                 return (
                   <div key={sIdx} className="rounded-md border border-border/60 bg-card p-3">

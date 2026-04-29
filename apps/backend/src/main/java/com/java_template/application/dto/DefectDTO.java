@@ -68,6 +68,14 @@ public class DefectDTO implements CyodaEntity {
      */
     private UUID testRunCaseId;
 
+    /**
+     * ID of the original TestCase (repository entity) this defect was raised against.
+     * Stored directly on the defect so caseId resolution on the Run Execution page
+     * does not depend on the testRunCaseId → TestRunCase → testCaseId chain, which
+     * can break when TestRunCase records are not yet indexed by Cyoda on page reload.
+     */
+    private UUID testCaseId;
+
     private String createdAt;
     private String updatedAt;
 

@@ -306,6 +306,12 @@ export interface Defect {
    * Used to scope per-case defect counts without an extra query.
    */
   testRunCaseId?: string;
+  /**
+   * ID of the original TestCase (repository entity) this defect was raised against.
+   * Stored directly on the defect so caseId resolution does not depend on the
+   * testRunCaseId → TestRunCase → testCaseId lookup chain.
+   */
+  testCaseId?: string;
 }
 
 export const defectsApi = {
