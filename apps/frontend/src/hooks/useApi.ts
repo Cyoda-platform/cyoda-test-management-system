@@ -27,6 +27,7 @@ import {
   type Project,
   type Suite,
   type TestCase,
+  type TestStep,
 
   type TestRun,
   type TestRunCase,
@@ -336,6 +337,75 @@ export function useMoveTestCase() {
       qc.invalidateQueries({ queryKey: keys.cases.all(projectId, targetSuiteId) });
       qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
     },
+  });
+}
+
+// ── Test Steps ────────────────────────────────────────────────────────────────
+
+export function useTestSteps(projectId: string, suiteId: string, caseId: string) {
+  return useQuery({
+    queryKey: keys.steps.all(projectId, suiteId, caseId),
+    queryFn:  () => testStepsApi.list(projectId, suiteId, caseId),
+    enabled:  !!projectId && !!suiteId && !!caseId,
+  });
+}
+
+export function useCreateTestStep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      suiteId,
+      caseId,
+      body,
+    }: {
+      projectId: string;
+      suiteId: string;
+      caseId: string;
+      body: Partial<TestStep>;
+    }) => testStepsApi.create(projectId, suiteId, caseId, body),
+    onSuccess: (_data, { projectId, suiteId, caseId }) =>
+      qc.invalidateQueries({ queryKey: keys.steps.all(projectId, suiteId, caseId) }),
+  });
+}
+
+export function useUpdateTestStep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      suiteId,
+      caseId,
+      id,
+      body,
+    }: {
+      projectId: string;
+      suiteId: string;
+      caseId: string;
+      id: string;
+      body: Partial<TestStep>;
+    }) => testStepsApi.update(projectId, suiteId, caseId, id, body),
+    onSuccess: (_data, { projectId, suiteId, caseId }) =>
+      qc.invalidateQueries({ queryKey: keys.steps.all(projectId, suiteId, caseId) }),
+  });
+}
+
+export function useDeleteTestStep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      suiteId,
+      caseId,
+      id,
+    }: {
+      projectId: string;
+      suiteId: string;
+      caseId: string;
+      id: string;
+    }) => testStepsApi.delete(projectId, suiteId, caseId, id),
+    onSuccess: (_data, { projectId, suiteId, caseId }) =>
+      qc.invalidateQueries({ queryKey: keys.steps.all(projectId, suiteId, caseId) }),
   });
 }
 
@@ -826,6 +896,26 @@ export function useTestRunCaseSteps(
   });
 }
 
+export function useCreateTestRunStep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      runId,
+      runCaseId,
+      testStepId,
+    }: {
+      projectId: string;
+      runId: string;
+      runCaseId: string;
+      testStepId: string;
+    }) => testRunStepsRunApi.create(projectId, runId, runCaseId, testStepId),
+    onSuccess: (_data, { projectId, runId, runCaseId }) => {
+      qc.invalidateQueries({ queryKey: keys.runSteps.all(projectId, runId, runCaseId) });
+    },
+  });
+}
+
 export function useUpdateTestRunStepStatus() {
   const qc = useQueryClient();
   return useMutation({
@@ -861,6 +951,15 @@ export function useRepository(projectId: string) {
     queryKey: keys.repository.all(projectId),
     queryFn:  () => repositoryApi.get(projectId),
     enabled:  !!projectId,
+    staleTime: 30_000,
+  });
+}
+
+export function useEvidenceByRun(projectId: string, runId: string) {
+  return useQuery({
+    queryKey: ['attachments', projectId, 'run', runId, 'evidence'],
+    queryFn: () => attachmentsApi.listByRun(projectId, runId),
+    enabled: !!projectId && !!runId,
     staleTime: 30_000,
   });
 }

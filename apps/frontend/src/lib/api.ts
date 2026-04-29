@@ -394,6 +394,8 @@ export interface Attachment {
 export const attachmentsApi = {
   list:       (projectId: string) =>
     api.get<{ data: Attachment[] }>(`/projects/${projectId}/attachments`),
+  listByRun: (projectId: string, runId: string) =>
+    api.get<Attachment[]>(`/projects/${projectId}/attachments/by-run/${runId}`),
   listByCase: (projectId: string, caseId: string) =>
     api.get<Attachment[]>(`/projects/${projectId}/attachments/by-case/${caseId}`),
   listByDefect: (projectId: string, defectId: string) =>
@@ -499,6 +501,8 @@ export interface TestRunCase {
   startedAt?: string;
   /** Optional ISO timestamp when execution completed */
   completedAt?: string;
+  /** Snapshot of steps copied from the test case at run creation time */
+  steps?: BatchImportStep[];
 }
 
 export const testRunCasesApi = {

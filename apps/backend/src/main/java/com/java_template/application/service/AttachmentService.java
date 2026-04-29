@@ -203,6 +203,32 @@ public class AttachmentService {
     }
 
     /**
+     * Retrieves all Evidence attachments for a specific test run.
+     * Filters by attachmentType=EVIDENCE and runId.
+     */
+    public List<AttachmentDTO> getEvidenceByRunId(UUID runId) {
+        SimpleConditionDto c1 = new SimpleConditionDto()
+                .jsonPath("$.attachmentType").operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree("EVIDENCE"));
+        c1.setType(QueryConditionTypeDto.SIMPLE);
+
+        SimpleConditionDto c2 = new SimpleConditionDto()
+                .jsonPath("$.runId").operation(OperatorTypeDto.EQUALS)
+                .value(objectMapper.valueToTree(runId.toString()));
+        c2.setType(QueryConditionTypeDto.SIMPLE);
+
+        GroupConditionDto group = new GroupConditionDto()
+                .operator(GroupOperatorDto.AND)
+                .conditions(List.of(c1, c2));
+        group.setType(QueryConditionTypeDto.GROUP);
+
+        return entityService.search(MODEL_SPEC, group, AttachmentDTO.class).data()
+                .stream()
+                .map(this::withId)
+                .toList();
+    }
+
+    /**
      * Retrieves Evidence attachments for a specific step in a specific test run.
      * Filters by attachmentType=EVIDENCE, runId, caseId, and stepKey.
      */

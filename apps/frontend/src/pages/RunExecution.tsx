@@ -20,10 +20,9 @@ import {
   useCompleteTestRun,
   useUnlockTestRun,
   useAttachmentsByCase,
-  useTestRunCaseSteps,
   useUpdateTestRunCaseStatus,
-  useUpdateTestRunStepStatus,
   useDefectsByRun,
+  useEvidenceByRun,
   keys,
 } from '@/hooks/useApi';
 import {
@@ -328,11 +327,24 @@ const RunExecution = () => {
   // ── Server-persisted defects for this run ────────────────────────────────────
   const { data: serverRunDefects = [] } =
     useDefectsByRun(projectId!, runId!);
+  const { data: serverRunEvidence = [] } =
+    useEvidenceByRun(projectId!, runId!);
+
+  useEffect(() => {
+    if (serverRunEvidence.length === 0) return;
+    const counts: Record<string, number> = {};
+    for (const attachment of serverRunEvidence) {
+      if (attachment.caseId && attachment.stepKey) {
+        const key = `${attachment.caseId}::${attachment.stepKey}`;
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+    setStepEvidenceCounts(counts);
+  }, [serverRunEvidence]);
 
   // Mutations
   const updateRun               = useUpdateTestRun();
   const updateTestRunCaseStatus = useUpdateTestRunCaseStatus();
-  const updateTestRunStepStatus = useUpdateTestRunStepStatus();
   const completeRun = useCompleteTestRun();
   const unlockRun   = useUnlockTestRun();
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -497,18 +509,9 @@ const RunExecution = () => {
   }, [projectId, qc, runId, testCaseToRunCaseId]);
 
   /** Run-step records for the currently visible case. */
-  const { data: activeCaseRunSteps = [] } = useTestRunCaseSteps(
-    projectId!, runId!, activeCaseRunCaseId,
-  );
+  const activeCaseRunSteps = activeCase?.steps || [];
 
-  /** stepNumber → TestRunStep.id — used when firing per-step DB mutations. */
-  const stepNumberToRunStepId = useMemo(() => {
-    const map = new Map<number, string>();
-    activeCaseRunSteps.forEach((rs) => { if (rs.stepNumber != null) map.set(rs.stepNumber, rs.id); });
-    return map;
-  }, [activeCaseRunSteps]);
-
-  // Steps come from TestRunStep snapshot — no separate TestCase step fetch needed.
+  // Steps come from TestRunCase snapshot (includes stepNumber, action, expectedResult).
   const sortedSteps = useMemo(() =>
     [...activeCaseRunSteps].sort((a, b) => (a.stepNumber || 0) - (b.stepNumber || 0)),
     [activeCaseRunSteps]
@@ -749,38 +752,14 @@ const RunExecution = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCase?.id, sortedSteps.length]);
 
-  // Pre-load evidence counts for every step of the active case.
-  // Must use listByRunCaseStep (not listByCase) because the backend's /by-case
-  // endpoint explicitly filters out EVIDENCE-type attachments.
-  useEffect(() => {
-    if (!activeCase || sortedSteps.length === 0 || !projectId || !runId) return;
-    const caseId = activeCase.id;
-    void Promise.all(
-      sortedSteps.map(async (step) => {
-        try {
-          const atts = await attachmentsApi.listByRunCaseStep(
-            projectId, runId, caseId, String(step.stepNumber),
-          );
-          return [`${caseId}::${step.stepNumber}`, (atts ?? []).length] as const;
-        } catch {
-          return [`${caseId}::${step.stepNumber}`, 0] as const;
-        }
-      }),
-    ).then((results) => {
-      setStepEvidenceCounts((prev) => {
-        const next = { ...prev };
-        results.forEach(([key, count]) => { next[key] = count; });
-        return next;
-      });
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCase?.id, sortedSteps.length, projectId, runId]);
+  // Pre-loading evidence counts for every step was removed to fix N+1 query performance issues.
+  // We will load attachments only when the user clicks the evidence icon.
 
   const getStepStatuses = (caseId: string): StepStatus[] => {
     return stepStatuses[caseId] || [];
   };
 
-  const setStepStatus = (caseId: string, stepNumber: number, globalStepId: string, status: StepStatus) => {
+  const setStepStatus = (caseId: string, stepNumber: number, status: StepStatus) => {
     if (isReadOnly) return;
 
     // ── 1. Update local state immediately for instant UI feedback ────────────
@@ -831,22 +810,9 @@ const RunExecution = () => {
       });
     }
 
-    // ── 4. Also update DB-backed TestRunStep and TestRunCase records ──────────
-    // These are the dedicated per-run execution records (not the flat map on the
-    // Run entity). Keeping both in sync means the /cases and /steps endpoints
-    // always reflect the real execution state for reporting & external consumers.
+    // ── 4. Update DB-backed TestRunCase record (case-level status) ──────────
     const runCaseId = testCaseToRunCaseId.get(caseId);
-    const runStepId = stepNumberToRunStepId.get(stepNumber);
     const derivedCaseStatus = computeCaseStatus(updated).toUpperCase();
-    if (runCaseId && runStepId) {
-      updateTestRunStepStatus.mutate({
-        projectId: projectId!,
-        runId:     runId!,
-        runCaseId,
-        id:        runStepId,
-        status:    status.toUpperCase(),
-      });
-    }
     if (runCaseId) {
       updateTestRunCaseStatus.mutate({
         projectId: projectId!,
@@ -1484,7 +1450,7 @@ const RunExecution = () => {
                           {(['untested', 'passed', 'failed', 'skipped'] as StepStatus[]).map((s) => (
                             <button
                               key={s}
-                              onClick={() => setStepStatus(activeCase.id, step.stepNumber, step.id, s)}
+                              onClick={() => setStepStatus(activeCase.id, step.stepNumber!, s)}
                               disabled={isReadOnly}
                               className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-medium uppercase tracking-widest transition-colors ${
                                 currentStatus === s ? statusColors[s] : statusOutline[s]

@@ -84,6 +84,24 @@ public class AttachmentController {
         }
     }
 
+    @GetMapping("/by-run/{runId}")
+    @Operation(summary = "Get all Evidence attachments for a specific test run")
+    public ResponseEntity<List<AttachmentMetadataDTO>> getEvidenceByRunId(
+            @PathVariable UUID projectId,
+            @PathVariable UUID runId) {
+        try {
+            List<AttachmentMetadataDTO> result = attachmentService
+                    .getEvidenceByRunId(runId)
+                    .stream()
+                    .map(AttachmentMetadataDTO::from)
+                    .toList();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.warn("Failed to fetch evidence for run={}: {}", runId, e.getMessage());
+            return ResponseEntity.ok(List.of());
+        }
+    }
+
     @GetMapping("/by-run/{runId}/case/{caseId}/step/{stepKey}")
     @Operation(summary = "Get Evidence attachments for a specific step in a test run")
     public ResponseEntity<List<AttachmentMetadataDTO>> getEvidenceByRunCaseStep(
