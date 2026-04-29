@@ -1,8 +1,0 @@
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "testCaseId": "550e8400-e29b-41d4-a716-446655440001",
-  "stepNumber": 1,
-  "action": "Click on the login button",
-  "expectedResult": "Login form is displayed",
-  "deleted": false
-}

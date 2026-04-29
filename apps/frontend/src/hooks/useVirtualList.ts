@@ -1,18 +1,18 @@
 /**
  * Minimal virtual list hook — no external dependencies needed.
  *
- * Renders only the items currently visible in the scroll container plus an
- * overscan buffer, keeping the DOM node count low regardless of total item count.
+ * Accepts an HTMLElement (or null) directly so the effect re-runs whenever the
+ * container element is assigned, even when it appears after an initial loading state.
  *
  * Usage:
- *   const containerRef = useRef<HTMLDivElement>(null);
- *   const { virtualItems, totalSize, scrollToIndex } = useVirtualList(containerRef, {
+ *   const [el, setEl] = useState<HTMLDivElement | null>(null);
+ *   const { virtualItems, totalSize, scrollToIndex } = useVirtualList(el, {
  *     count: items.length,
- *     estimateSize: (i) => 44,   // height in px
+ *     estimateSize: (i) => 44,
  *   });
  *
  *   return (
- *     <div ref={containerRef} style={{ overflow: 'auto', height: '100%' }}>
+ *     <div ref={setEl} style={{ overflow: 'auto', height: '100%' }}>
  *       <div style={{ height: totalSize, position: 'relative' }}>
  *         {virtualItems.map(vi => (
  *           <div key={vi.key} style={{ position: 'absolute', top: vi.start, width: '100%', height: vi.size }}>
@@ -24,7 +24,7 @@
  *   );
  */
 
-import { useRef, useState, useCallback, useEffect, useMemo, RefObject } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 export interface VirtualItem {
   index: number;
@@ -45,7 +45,7 @@ export interface UseVirtualListOptions {
 }
 
 export function useVirtualList(
-  containerRef: RefObject<HTMLElement>,
+  containerEl: HTMLElement | null,
   options: UseVirtualListOptions,
 ) {
   const { count, estimateSize, overscan = 5 } = options;
@@ -53,27 +53,26 @@ export function useVirtualList(
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
 
+  // Re-runs whenever containerEl changes (null → element when loading skeleton disappears).
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    if (!containerEl) return;
 
-    const onScroll = () => setScrollTop(el.scrollTop);
-    const ro = new ResizeObserver(() => setContainerHeight(el.clientHeight));
+    const onScroll = () => setScrollTop(containerEl.scrollTop);
+    const measure = () => setContainerHeight(containerEl.clientHeight);
+    const ro = new ResizeObserver(measure);
 
-    el.addEventListener('scroll', onScroll, { passive: true });
-    ro.observe(el);
-    // Capture initial values
-    setContainerHeight(el.clientHeight);
-    setScrollTop(el.scrollTop);
+    containerEl.addEventListener('scroll', onScroll, { passive: true });
+    ro.observe(containerEl);
+    measure();
+    setScrollTop(containerEl.scrollTop);
 
     return () => {
-      el.removeEventListener('scroll', onScroll);
+      containerEl.removeEventListener('scroll', onScroll);
       ro.disconnect();
     };
-  }, [containerRef]);
+  }, [containerEl]);
 
   // Build a cumulative-offset array so we can binary-search for the visible range.
-  // Re-computed only when count or estimateSize changes.
   const { offsets, totalSize } = useMemo(() => {
     const off = new Float64Array(count + 1);
     for (let i = 0; i < count; i++) off[i + 1] = off[i] + estimateSize(i);
@@ -116,17 +115,16 @@ export function useVirtualList(
   /** Programmatically scroll the container so the given item is visible. */
   const scrollToIndex = useCallback(
     (index: number, align: 'start' | 'center' | 'end' = 'start') => {
-      const el = containerRef.current;
-      if (!el || index < 0 || index >= count) return;
+      if (!containerEl || index < 0 || index >= count) return;
       const itemStart = offsets[index];
       const itemSize = offsets[index + 1] - offsets[index];
       let top: number;
       if (align === 'center') top = itemStart - (containerHeight - itemSize) / 2;
       else if (align === 'end') top = itemStart - containerHeight + itemSize;
       else top = itemStart;
-      el.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      containerEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
     },
-    [containerRef, offsets, count, containerHeight],
+    [containerEl, offsets, count, containerHeight],
   );
 
   return { virtualItems, totalSize, scrollToIndex };

@@ -91,16 +91,20 @@ const Repository = () => {
 
   const [selectedCase, setSelectedCase] = useState<TestCase | null>(null);
 
-  // Expand all suites once they first load
+  // Expand all suites on first load and whenever genuinely new suites appear (e.g. after import).
+  // seenSuiteIdsRef tracks which IDs have ever been returned by the server so we never
+  // re-expand a suite the user deliberately collapsed.
   const [expandedSuites, setExpandedSuites] = useState<Set<string>>(new Set());
+  const seenSuiteIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const apiSuitesData = repositoryData?.suites ?? [];
-    if (apiSuitesData.length > 0) {
-      setExpandedSuites(prev => {
-        if (prev.size === 0) return new Set(apiSuitesData.map(s => s.id));
-        return prev;
-      });
-    }
+    if (apiSuitesData.length === 0) return;
+    const newIds = apiSuitesData
+      .map(s => s.id)
+      .filter(id => !seenSuiteIdsRef.current.has(id));
+    apiSuitesData.forEach(s => seenSuiteIdsRef.current.add(s.id));
+    if (newIds.length === 0) return;
+    setExpandedSuites(prev => new Set([...prev, ...newIds]));
   }, [repositoryData]);
 
   // Auto-select first case only once when data is fully loaded.
@@ -471,7 +475,7 @@ const Repository = () => {
     return rows;
   }, [filteredSuites, expandedSuites]);
 
-  const casePanelRef = useRef<HTMLDivElement>(null);
+  const [casePanelEl, setCasePanelEl] = useState<HTMLDivElement | null>(null);
 
   const estimateCasePanelSize = useCallback((i: number) => {
     const row = flatRows[i];
@@ -482,7 +486,7 @@ const Repository = () => {
   }, [flatRows]);
 
   const { virtualItems: caseVirtualItems, totalSize: caseTotalSize, scrollToIndex: caseScrollToIndex } =
-    useVirtualList(casePanelRef, { count: flatRows.length, estimateSize: estimateCasePanelSize, overscan: 5 });
+    useVirtualList(casePanelEl, { count: flatRows.length, estimateSize: estimateCasePanelSize, overscan: 5 });
 
   // Highlight helper
   const HighlightText = ({ text, query }: { text: string; query: string }) => {
@@ -760,13 +764,17 @@ const Repository = () => {
       // Run up to CONCURRENCY suite groups simultaneously. Steps are now embedded
       // in the case payload (no separate TestStep entities), so parallel suite
       // imports no longer overload Cyoda gRPC with step creates.
+      const importGroups = (toCreate as ImportSuiteGroup[]).filter(group => group.cases.length > 0);
+      const existingSuiteCount = localSuites.length;
       await pooledRun(
-        (toCreate as ImportSuiteGroup[])
-          .filter(group => group.cases.length > 0)
-          .map(group => async () => {
+        importGroups.map((group, groupIndex) => async () => {
             let suiteId = group.suiteId ?? '';
             if (group.isNewSuite || !suiteId) {
-              const created = await suitesApi.create(projectId, { name: group.suiteName });
+              // Pass explicit sortOrder so parallel creates preserve import file order
+              const created = await suitesApi.create(projectId, {
+                name: group.suiteName,
+                sortOrder: existingSuiteCount + groupIndex,
+              });
               suiteId = created.id;
             }
             affectedSuiteIds.add(suiteId);
@@ -1294,7 +1302,7 @@ const Repository = () => {
 
           {/* Case List — virtualised: only visible rows are in the DOM */}
           <ResizablePanel id="middle" order={2} defaultSize={selectedCase ? panelSizes.middle : 100 - panelSizes.left} minSize={30}>
-            <div ref={casePanelRef} className="h-full min-w-0 overflow-auto bg-card">
+            <div ref={setCasePanelEl} className="h-full min-w-0 overflow-auto bg-card">
               {/* Empty-state: shown when the project has no suites/cases yet */}
               {!isLoadingRepo && localSuites.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8 select-none">

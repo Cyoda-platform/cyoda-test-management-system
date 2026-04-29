@@ -49,7 +49,7 @@ const ProjectLayout = () => {
             onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
           />
         </div>
-        <main className="flex-1 overflow-auto surface-base print:overflow-visible print:flex-none">
+        <main className="flex-1 overflow-hidden surface-base print:overflow-visible print:flex-none">
           <Outlet />
         </main>
       </div>

@@ -357,15 +357,21 @@ public class TestCaseService {
                 // Cyoda may strip displayId/steps from the create-reload response —
                 // restore them explicitly then persist with a single update.
                 boolean needsUpdate = saved.getDisplayId() == null || !displayId.equals(saved.getDisplayId());
+
+                // Always restore steps if they were provided (Cyoda may strip them during create)
+                boolean hasSteps = tc.getSteps() != null && !tc.getSteps().isEmpty();
+                if (hasSteps) {
+                    saved.setSteps(tc.getSteps());
+                    needsUpdate = true; // Force update to persist steps
+                }
+
                 if (needsUpdate) {
                     saved.setDisplayId(displayId);
-                    saved.setSteps(tc.getSteps());
                     long tUpdate = System.currentTimeMillis();
                     entityService.update(saved.getId(), saved, null);
-                    log.info("[BatchImport] {} create={}ms update={}ms (displayId stripped → update needed)",
+                    log.info("[BatchImport] {} create={}ms update={}ms (displayId/steps restored)",
                             displayId, createMs, System.currentTimeMillis() - tUpdate);
                 } else {
-                    saved.setSteps(tc.getSteps());
                     log.info("[BatchImport] {} create={}ms (displayId preserved, skipped update)",
                             displayId, createMs);
                 }

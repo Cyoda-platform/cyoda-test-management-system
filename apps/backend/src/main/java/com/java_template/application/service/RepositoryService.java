@@ -81,7 +81,8 @@ public class RepositoryService {
                                     c.getPreconditions(),
                                     c.getPriority(),
                                     c.getSortOrder(),
-                                    c.isDeleted()))
+                                    c.isDeleted(),
+                                    c.getSteps() != null ? c.getSteps() : java.util.Collections.emptyList()))
                             .toList();
 
                     return new RepositoryDTO.SuiteView(

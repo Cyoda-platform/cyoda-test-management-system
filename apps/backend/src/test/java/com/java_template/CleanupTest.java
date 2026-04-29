@@ -39,7 +39,6 @@ class CleanupTest {
             "TestCase",
             "Suite",
             "Project",
-            "TestStep",
             "ProjectCounter"
         };
 

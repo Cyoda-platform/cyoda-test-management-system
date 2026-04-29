@@ -1,5 +1,6 @@
 package com.java_template.application.dto;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,6 +30,7 @@ public record RepositoryDTO(List<SuiteView> suites) {
             String preconditions,
             Priority priority,
             Integer sortOrder,
-            boolean deleted
+            boolean deleted,
+            List<TestCaseDTO.StepDTO> steps
     ) {}
 }

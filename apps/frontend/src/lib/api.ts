@@ -454,6 +454,7 @@ export interface RepositoryCase {
   status: string;
   sortOrder: number;
   deleted: boolean;
+  steps?: BatchImportStep[];
 }
 
 export interface RepositorySuite {
