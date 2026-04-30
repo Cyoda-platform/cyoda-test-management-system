@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Plus, Eye, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Plus, Eye, Trash2, AlertTriangle, Loader2, Search } from 'lucide-react';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { useProject, useReports, useDeleteReport } from '@/hooks/useApi';
@@ -27,6 +28,7 @@ const Reports = () => {
 
   const [deleteOpen,   setDeleteOpen]   = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Report | null>(null);
+  const [search, setSearch] = useState('');
 
   // Stable display-ID map: prefer the persisted displayId, fall back to
   // position-based generation only for legacy records that predate the fix.
@@ -54,9 +56,19 @@ const Reports = () => {
     );
   };
 
-  const sorted = [...reports].sort((a, b) =>
-    (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
-  );
+  const sorted = useMemo(() => {
+    const searchLower = search.toLowerCase().trim();
+    const filtered = searchLower
+      ? reports.filter((r) =>
+          r.name.toLowerCase().includes(searchLower) ||
+          r.type?.toLowerCase().includes(searchLower) ||
+          r.createdBy?.toLowerCase().includes(searchLower)
+        )
+      : reports;
+    return [...filtered].sort((a, b) =>
+      (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
+    );
+  }, [reports, search]);
 
   const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
   const estimateSize = useCallback(() => 52, []);
@@ -88,6 +100,19 @@ const Reports = () => {
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={1.5} /> Create Report
               </Button>
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="mb-4">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search reports..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 h-8 text-xs bg-secondary border-0"
+              />
             </div>
           </div>
 
