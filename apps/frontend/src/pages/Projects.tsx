@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, ExternalLink, Pencil, Trash2, Loader2, AlertCircle, FolderOpen } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import AppHeader from '@/components/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import {
   useCreateProject,
   useUpdateProject,
   useDeleteProject,
+  keys,
 } from '@/hooks/useApi';
 import type { Project } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
@@ -22,6 +24,7 @@ const initials = (name: string) => name.substring(0, 2).toUpperCase();
 
 const Projects = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(0); // 0-indexed for API
   const [createOpen, setCreateOpen] = useState(false);
   const [editProject, setEditProject] = useState<Project | null>(null);
@@ -70,8 +73,9 @@ const Projects = () => {
       onSuccess: () => {
         toast.success('Project deleted');
         setDeleteProject(null);
+        // Invalidate current page to refetch updated list
+        queryClient.invalidateQueries({ queryKey: keys.projects.list(page) });
         // If we deleted the last item on a page beyond 0, go back one page
-        // (cache invalidation from the mutation handles the list refresh automatically)
         if (projects.length === 1 && page > 0) {
           setPage(page - 1);
         }
