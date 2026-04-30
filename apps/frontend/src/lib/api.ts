@@ -131,6 +131,37 @@ export const projectsApi = {
     api.get<Project[]>(`/projects/search?query=${encodeURIComponent(query)}`),
 };
 
+// ── Global Search ────────────────────────────────────────────────────────────
+
+export interface SearchResult {
+  type: 'project' | 'suite' | 'testcase' | 'testrun' | 'testruncases' | 'testrunchstep' | 'defect' | 'report';
+  id: string;
+  displayId?: string;
+  title: string;
+  description?: string;
+  metadata?: string;
+  parentProjectId?: string;
+  matchedFields?: string[];
+  score: number;
+  externalLink?: string;
+  createdAt?: string;
+}
+
+export interface GlobalSearchResponse {
+  query: string;
+  results: SearchResult[];
+  resultsByType?: Record<string, SearchResult[]>;
+  totalResults: number;
+  pageNumber: number;
+  pageSize: number;
+  executionTimeMs: number;
+}
+
+export const searchApi = {
+  global: (query: string, pageNumber = 0, pageSize = 10) =>
+    api.get<GlobalSearchResponse>(`/v1/search?query=${encodeURIComponent(query)}&pageNumber=${pageNumber}&pageSize=${pageSize}`),
+};
+
 // ── Suites ───────────────────────────────────────────────────────────────────
 
 export interface Suite {
@@ -576,3 +607,19 @@ export const testRunStepsRunApi = {
       body,
     ),
 };
+
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+export interface SearchResult {
+  id: string;
+  displayId?: string;
+  type: string;
+  title: string;
+  description?: string;
+  metadata?: string;
+  parentProjectId?: string;
+  score: number;
+  createdAt?: string;
+  matchedFields?: string[];
+}

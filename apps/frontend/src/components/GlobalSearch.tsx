@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, FolderOpen, Loader2 } from 'lucide-react';
+import { Search, FolderOpen, Loader2, FileText, CheckSquare, AlertCircle, BarChart3 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { projectsApi, Project } from '@/lib/api';
+import { searchApi, SearchResult, GlobalSearchResponse } from '@/lib/api';
 
 const HighlightMatch = ({ text, query }: { text: string; query: string }) => {
   if (!query.trim()) return <>{text}</>;
@@ -45,6 +45,49 @@ const SnippetHighlight = ({ snippet, query }: { snippet: string; query: string }
   );
 };
 
+const getIconForType = (type: string) => {
+  const className = "h-4 w-4 shrink-0 text-muted-foreground";
+  switch (type) {
+    case 'project':
+      return <FolderOpen className={className} strokeWidth={1.5} />;
+    case 'suite':
+      return <FileText className={className} strokeWidth={1.5} />;
+    case 'testcase':
+      return <CheckSquare className={className} strokeWidth={1.5} />;
+    case 'testrun':
+      return <BarChart3 className={className} strokeWidth={1.5} />;
+    case 'defect':
+      return <AlertCircle className={className} strokeWidth={1.5} />;
+    case 'report':
+      return <BarChart3 className={className} strokeWidth={1.5} />;
+    default:
+      return <Search className={className} strokeWidth={1.5} />;
+  }
+};
+
+const getTypeLabel = (type: string) => {
+  switch (type) {
+    case 'project':
+      return 'Project';
+    case 'suite':
+      return 'Suite';
+    case 'testcase':
+      return 'Test Case';
+    case 'testrun':
+      return 'Test Run';
+    case 'testruncases':
+      return 'Run Case';
+    case 'testrunchstep':
+      return 'Step';
+    case 'defect':
+      return 'Defect';
+    case 'report':
+      return 'Report';
+    default:
+      return type;
+  }
+};
+
 const GlobalSearch = () => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -62,17 +105,17 @@ const GlobalSearch = () => {
 
   const trimmed = debouncedQuery.trim();
 
-  const { data: projectResults = [], isFetching } = useQuery({
-    queryKey: ['global-search-projects', trimmed],
-    queryFn: () => projectsApi.search(trimmed),
+  const { data: searchResponse, isFetching } = useQuery({
+    queryKey: ['global-search', trimmed],
+    queryFn: () => searchApi.global(trimmed, 0, 10),
     enabled: trimmed.length >= 2,
     staleTime: 10_000,
   });
 
-  const allResults = (projectResults as Project[]).map((p) => ({
-    type: 'project' as const,
-    id: p.id,
-    item: p,
+  const allResults = (searchResponse?.results ?? []).map((result) => ({
+    type: result.type,
+    id: result.id,
+    item: result,
   }));
 
   const hasResults = allResults.length > 0;
@@ -84,7 +127,34 @@ const GlobalSearch = () => {
       setQuery('');
       setDebouncedQuery('');
       inputRef.current?.blur();
-      navigate(`/projects/${result.id}/repository`);
+
+      const searchResult = result.item as SearchResult;
+      const projectId = searchResult.parentProjectId || result.id;
+
+      // Navigate based on result type
+      switch (result.type) {
+        case 'project':
+          navigate(`/projects/${result.id}/repository`);
+          break;
+        case 'suite':
+          navigate(`/projects/${projectId}/suites/${result.id}`);
+          break;
+        case 'testcase':
+          navigate(`/projects/${projectId}/testcases/${result.id}`);
+          break;
+        case 'defect':
+          navigate(`/projects/${projectId}/defects/${result.id}`);
+          break;
+        case 'report':
+          navigate(`/projects/${projectId}/reports/${result.id}`);
+          break;
+        case 'testrun':
+          navigate(`/projects/${projectId}/testruns/${result.id}`);
+          break;
+        default:
+          // For other types, navigate to project
+          navigate(`/projects/${projectId}/repository`);
+      }
     },
     [navigate]
   );
@@ -136,7 +206,7 @@ const GlobalSearch = () => {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder="Search projects"
+          placeholder="Search"
           className="flex-1 bg-transparent text-xs text-white/90 placeholder:text-white/40 outline-none"
         />
       </div>
@@ -153,32 +223,37 @@ const GlobalSearch = () => {
             <p className="py-6 text-center text-sm text-muted-foreground">No results found.</p>
           ) : (
             <div className="p-1">
-              <p className="px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Projects
-              </p>
-              {(projectResults as Project[]).map((p, idx) => {
-                const q = trimmed;
-                const snippet = p.name.toLowerCase().includes(q)
-                  ? buildSnippet(p.description, query)
-                  : null;
+              {allResults.map((result, idx) => {
+                const searchResult = result.item as SearchResult;
+                const icon = getIconForType(result.type);
+                const typeLabel = getTypeLabel(result.type);
+                const snippet = buildSnippet(searchResult.description || '', query);
+
                 return (
                   <button
-                    key={p.id}
-                    onClick={() => handleSelect({ type: 'project', id: p.id, item: p })}
+                    key={`${result.type}-${result.id}`}
+                    onClick={() => handleSelect(result)}
                     className={`w-full flex items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-sm transition-colors ${
                       idx === activeIndex
                         ? 'bg-accent text-accent-foreground'
                         : 'hover:bg-muted/50'
                     }`}
                   >
-                    <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
+                    {icon}
                     <div className="min-w-0 flex-1">
-                      <span className="font-medium text-foreground">
-                        <HighlightMatch text={p.name} query={query} />
-                      </span>
-                      <span className="ml-2 text-xs text-muted-foreground font-mono">
-                        <HighlightMatch text={p.id} query={query} />
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-foreground">
+                          <HighlightMatch text={searchResult.title} query={query} />
+                        </span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">
+                          {typeLabel}
+                        </span>
+                      </div>
+                      {searchResult.metadata && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {searchResult.metadata}
+                        </p>
+                      )}
                       {snippet && (
                         <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5">
                           <SnippetHighlight snippet={snippet} query={query} />
