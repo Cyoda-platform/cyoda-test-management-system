@@ -397,11 +397,11 @@ const Defects = () => {
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36 h-8 text-xs bg-secondary border-0">
-                <SelectValue placeholder="All statuses" />
+              <SelectTrigger className="w-36 h-9 bg-card border border-border">
+                <SelectValue placeholder="Status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
+              <SelectContent className="glass-surface border-0">
+                <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="Open">Open</SelectItem>
                 <SelectItem value="In Progress">In Progress</SelectItem>
                 <SelectItem value="Fixed">Fixed</SelectItem>
