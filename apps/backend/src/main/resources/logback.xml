@@ -30,6 +30,9 @@
         </encoder>
     </appender>
 
+    <!-- Enable DEBUG logging for TestCaseService to see import progress -->
+    <logger name="com.java_template.application.service.TestCaseService" level="DEBUG"/>
+
     <!-- Default: plain text console -->
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
