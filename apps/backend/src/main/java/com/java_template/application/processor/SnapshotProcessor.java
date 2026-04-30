@@ -71,7 +71,12 @@ public class SnapshotProcessor implements CyodaProcessor {
             }
 
             for (String caseIdStr : caseIds) {
-                snapshotCase(testRunId, projectId, caseIdStr);
+                try {
+                    snapshotCase(testRunId, projectId, caseIdStr);
+                } catch (Exception e) {
+                    log.error("SnapshotProcessor: failed to snapshot case {} for run {}: {}",
+                            caseIdStr, testRunId, e.getMessage(), e);
+                }
             }
 
             log.info("SnapshotProcessor completed for testRunId={}, snapshotted {} case(s)",
@@ -111,7 +116,9 @@ public class SnapshotProcessor implements CyodaProcessor {
         caseSnapshot.setPriority(tc.getPriority());
         caseSnapshot.setDisplayId(tc.getDisplayId());
         caseSnapshot.setSuiteId(tc.getSuiteId());
-        caseSnapshot.setSteps(tc.getSteps());
+        // Steps are NOT embedded in TestRunCase to avoid Cyoda schema rejection
+        // (the `steps` field isn't in the Cyoda schema for TestRunCase yet).
+        // Steps are read at execution time from the repository TestCase entity.
 
         testRunCaseService.createTestRunCase(caseSnapshot);
         log.debug("SnapshotProcessor: snapshotted case {} with {} step(s)", caseId, tc.getSteps() != null ? tc.getSteps().size() : 0);

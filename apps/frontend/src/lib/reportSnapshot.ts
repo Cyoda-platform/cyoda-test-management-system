@@ -38,11 +38,19 @@ function computeCaseStatusFromSteps(steps: string[]): string {
  * and ReportDetail. Falls back to TestRunCase.status when stepStatuses has no
  * entries for a given case.
  */
+/**
+ * Optional mapping of caseId → suiteId from the repository.
+ * Used as fallback for suite analytics when TestRunCase records are unavailable
+ * (e.g. Cyoda schema not yet updated to include the `steps` field on TestRunCase).
+ */
+export type CaseToSuiteMap = Map<string, string>;
+
 export function computeSnapshotData(
-  rawRunCases: TestRunCase[],
-  runs:        TestRun[],
-  suites:      Suite[],
-  rawDefects:  Defect[],
+  rawRunCases:     TestRunCase[],
+  runs:            TestRun[],
+  suites:          Suite[],
+  rawDefects:      Defect[],
+  caseToSuiteMap?: CaseToSuiteMap,
 ): ReportSnapshotData {
   // Parse each run's flat step-status map.
   // stepStatuses may arrive as a Record<string, string> (typed) or as a
@@ -83,20 +91,61 @@ export function computeSnapshotData(
 
   const deduped = deduplicateRunCases(all);
 
-  // KPI totals
-  const totalPassed   = deduped.filter(rc => rc.status === 'PASSED').length;
-  const totalFailed   = deduped.filter(rc => rc.status === 'FAILED').length;
-  const totalSkipped  = deduped.filter(rc => rc.status === 'SKIPPED').length;
-  const totalUntested = deduped.filter(rc => rc.status === 'UNTESTED').length;
+  // KPI totals — prefer per-case computation; fall back to run-level aggregates
+  // when TestRunCase records are unavailable (e.g. Cyoda schema not yet re-imported).
+  const totalPassed   = deduped.length > 0
+    ? deduped.filter(rc => rc.status === 'PASSED').length
+    : runs.reduce((s, r) => s + (r.passed  ?? 0), 0);
+  const totalFailed   = deduped.length > 0
+    ? deduped.filter(rc => rc.status === 'FAILED').length
+    : runs.reduce((s, r) => s + (r.failed  ?? 0), 0);
+  const totalSkipped  = deduped.length > 0
+    ? deduped.filter(rc => rc.status === 'SKIPPED').length
+    : runs.reduce((s, r) => s + (r.skipped ?? 0), 0);
+  const totalUntested = deduped.length > 0
+    ? deduped.filter(rc => rc.status === 'UNTESTED').length
+    : runs.reduce((s, r) => s + (r.untested ?? 0), 0);
 
   // Suite data — sorted by suite sortOrder
   const suiteNameMap = new Map(suites.map(s => [s.id, s.name]));
-  const rawSuiteData = groupBySuite(deduped, suiteNameMap);
   const suiteOrderMap = new Map(
     [...suites]
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
       .map((s, i) => [s.name, i]),
   );
+
+  let rawSuiteData;
+  if (deduped.length > 0) {
+    rawSuiteData = groupBySuite(deduped, suiteNameMap);
+  } else if (caseToSuiteMap && caseToSuiteMap.size > 0) {
+    // Fallback: derive per-case statuses from run data + repository case→suite mapping.
+    // Case IDs come from run.caseIds when available; otherwise extracted from
+    // run.stepStatuses keys (format: "caseId::stepNumber") so we still get suite data
+    // for runs that were created before caseIds was persisted on the run entity.
+    const fallbackCases: RunCaseWithMeta[] = runs.flatMap(run => {
+      const stepMap = runStepStatusMap.get(run.id) ?? {};
+
+      // Prefer explicit caseIds; fall back to keys present in stepStatuses.
+      const caseIds: string[] = run.caseIds?.length
+        ? run.caseIds
+        : [...new Set(Object.keys(stepMap).map(k => k.split('::')[0]).filter(Boolean))];
+
+      return caseIds.flatMap(caseId => {
+        const suiteId = caseToSuiteMap.get(caseId);
+        if (!suiteId) return [];
+        const caseSteps = Object.entries(stepMap)
+          .filter(([k]) => k.startsWith(`${caseId}::`))
+          .map(([, v]) => v.toLowerCase());
+        const status = computeCaseStatusFromSteps(caseSteps).toUpperCase();
+        return [{ testCaseId: caseId, suiteId, testRunId: run.id, status, runCreatedAt: run.createdAt ?? '' }];
+      });
+    });
+    const dedupedFallback = deduplicateRunCases(fallbackCases);
+    rawSuiteData = groupBySuite(dedupedFallback, suiteNameMap);
+  } else {
+    rawSuiteData = [];
+  }
+
   const suiteData = [...rawSuiteData].sort(
     (a, b) => (suiteOrderMap.get(a.suite) ?? Infinity) - (suiteOrderMap.get(b.suite) ?? Infinity),
   );

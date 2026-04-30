@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PieChart, BarChart3, Bug, Server } from 'lucide-react';
 import { toast } from 'sonner';
-import { useProject, useTestRuns, useReports, useCreateReport, useSuites } from '@/hooks/useApi';
+import { useProject, useTestRuns, useReports, useCreateReport, useSuites, useRepository } from '@/hooks/useApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { listDisplayId } from '@/lib/utils';
 import { testRunCasesApi, defectsApi } from '@/lib/api';
@@ -32,7 +32,14 @@ const CreateReport = () => {
   const { data: existingReports = [] } = useReports(projectId!);
   const createReport               = useCreateReport();
   const { data: suitesList = [] } = useSuites(projectId!);
+  const { data: repositoryData }  = useRepository(projectId!);
   const [isBuilding, setIsBuilding] = useState(false);
+
+  const caseToSuiteMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (repositoryData?.suites ?? []).forEach(s => s.cases.forEach(c => map.set(c.id, s.id)));
+    return map;
+  }, [repositoryData]);
 
   const runDisplayIdMap = useMemo(() => {
     const sorted = [...runs].sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
@@ -96,7 +103,7 @@ const CreateReport = () => {
       const allDefects  = defectResults.flatMap(r => r.data ?? []);
       const effectiveRuns = runs.filter(r => effectiveRunIds.includes(r.id));
 
-      const snapshot = computeSnapshotData(allRunCases, effectiveRuns, suitesList, allDefects);
+      const snapshot = computeSnapshotData(allRunCases, effectiveRuns, suitesList, allDefects, caseToSuiteMap);
       snapshotDataStr = JSON.stringify(snapshot);
     } catch {
       // snapshot failed — create report without it rather than blocking the user

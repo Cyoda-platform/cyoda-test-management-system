@@ -141,6 +141,128 @@ describe('computeSnapshotData — suiteData', () => {
   });
 });
 
+describe('computeSnapshotData — fallback to run aggregates when no TestRunCase records', () => {
+  it('uses run.passed/failed/skipped/untested when rawRunCases is empty', () => {
+    const runs: TestRun[] = [
+      baseRun({ passed: 3, failed: 1, skipped: 2, untested: 4 }),
+    ];
+    const result = computeSnapshotData([], runs, [], []);
+    expect(result.totalPassed).toBe(3);
+    expect(result.totalFailed).toBe(1);
+    expect(result.totalSkipped).toBe(2);
+    expect(result.totalUntested).toBe(4);
+  });
+
+  it('sums run aggregates across multiple runs when rawRunCases is empty', () => {
+    const runs: TestRun[] = [
+      baseRun({ id: 'r1', passed: 2, failed: 1, skipped: 0, untested: 1 }),
+      baseRun({ id: 'r2', passed: 1, failed: 2, skipped: 1, untested: 0 }),
+    ];
+    const result = computeSnapshotData([], runs, [], []);
+    expect(result.totalPassed).toBe(3);
+    expect(result.totalFailed).toBe(3);
+    expect(result.totalSkipped).toBe(1);
+    expect(result.totalUntested).toBe(1);
+  });
+
+  it('prefers TestRunCase records over run aggregates when both are present', () => {
+    const cases: TestRunCase[] = [
+      baseCase({ testCaseId: 'c1', status: 'PASSED' }),
+      baseCase({ id: 'rc2', testCaseId: 'c2', status: 'FAILED' }),
+    ];
+    const runs: TestRun[] = [baseRun({ passed: 99, failed: 99, skipped: 99, untested: 99 })];
+    const result = computeSnapshotData(cases, runs, [baseSuite()], []);
+    expect(result.totalPassed).toBe(1);
+    expect(result.totalFailed).toBe(1);
+    expect(result.totalSkipped).toBe(0);
+    expect(result.totalUntested).toBe(0);
+  });
+});
+
+describe('computeSnapshotData — suiteData fallback via caseToSuiteMap when no TestRunCase records', () => {
+  it('computes suiteData from run.caseIds + stepStatuses + caseToSuiteMap', () => {
+    const runs: TestRun[] = [
+      baseRun({
+        caseIds: ['c1', 'c2'],
+        stepStatuses: JSON.stringify({ 'c1::1': 'PASSED', 'c2::1': 'FAILED' }) as unknown as Record<string, string>,
+      }),
+    ];
+    const suites = [baseSuite({ id: 's1', name: 'Suite A' })];
+    const caseToSuiteMap = new Map([['c1', 's1'], ['c2', 's1']]);
+    const result = computeSnapshotData([], runs, suites, [], caseToSuiteMap);
+    expect(result.suiteData).toHaveLength(1);
+    expect(result.suiteData[0].suite).toBe('Suite A');
+    expect(result.suiteData[0].passed).toBe(1);
+    expect(result.suiteData[0].failed).toBe(1);
+  });
+
+  it('maps untested when case has no stepStatuses entries', () => {
+    const runs: TestRun[] = [
+      baseRun({ caseIds: ['c1'], stepStatuses: {} }),
+    ];
+    const suites = [baseSuite({ id: 's1', name: 'Suite A' })];
+    const caseToSuiteMap = new Map([['c1', 's1']]);
+    const result = computeSnapshotData([], runs, suites, [], caseToSuiteMap);
+    expect(result.suiteData[0].untested).toBe(1);
+  });
+
+  it('ignores cases not in caseToSuiteMap', () => {
+    const runs: TestRun[] = [
+      baseRun({
+        caseIds: ['c1', 'c-unknown'],
+        stepStatuses: JSON.stringify({ 'c1::1': 'PASSED' }) as unknown as Record<string, string>,
+      }),
+    ];
+    const suites = [baseSuite({ id: 's1', name: 'Suite A' })];
+    const caseToSuiteMap = new Map([['c1', 's1']]);
+    const result = computeSnapshotData([], runs, suites, [], caseToSuiteMap);
+    expect(result.suiteData[0].passed).toBe(1);
+    expect(result.suiteData[0].passed + result.suiteData[0].failed +
+      result.suiteData[0].skipped + result.suiteData[0].untested).toBe(1);
+  });
+
+  it('includes untested cases from run.caseIds not present in stepStatuses', () => {
+    const runs: TestRun[] = [
+      baseRun({
+        caseIds: ['c1', 'c2', 'c3'],  // 3 cases in run
+        stepStatuses: JSON.stringify({ 'c1::1': 'PASSED' }) as unknown as Record<string, string>,
+        // c2 and c3 were never clicked → should appear as untested
+      }),
+    ];
+    const suites = [baseSuite({ id: 's1', name: 'Suite A' })];
+    const caseToSuiteMap = new Map([['c1', 's1'], ['c2', 's1'], ['c3', 's1']]);
+    const result = computeSnapshotData([], runs, suites, [], caseToSuiteMap);
+    expect(result.suiteData).toHaveLength(1);
+    expect(result.suiteData[0].passed).toBe(1);
+    expect(result.suiteData[0].untested).toBe(2);
+  });
+
+  it('derives case IDs from stepStatuses keys when run.caseIds is absent', () => {
+    const runs: TestRun[] = [
+      baseRun({
+        // caseIds not set — simulates older runs where caseIds wasn't persisted
+        stepStatuses: JSON.stringify({ 'c1::1': 'PASSED', 'c2::1': 'FAILED' }) as unknown as Record<string, string>,
+      }),
+    ];
+    const suites = [baseSuite({ id: 's1', name: 'Suite A' })];
+    const caseToSuiteMap = new Map([['c1', 's1'], ['c2', 's1']]);
+    const result = computeSnapshotData([], runs, suites, [], caseToSuiteMap);
+    expect(result.suiteData).toHaveLength(1);
+    expect(result.suiteData[0].passed).toBe(1);
+    expect(result.suiteData[0].failed).toBe(1);
+  });
+
+  it('does not use caseToSuiteMap when TestRunCase records are present', () => {
+    const cases: TestRunCase[] = [
+      baseCase({ testCaseId: 'c1', suiteId: 's1', status: 'PASSED' }),
+    ];
+    const wrongMap = new Map([['c1', 's-wrong']]);
+    const suites = [baseSuite({ id: 's1', name: 'Suite A' })];
+    const result = computeSnapshotData(cases, [baseRun()], suites, [], wrongMap);
+    expect(result.suiteData[0].suite).toBe('Suite A');
+  });
+});
+
 describe('computeSnapshotData — defects', () => {
   const baseDefect = (overrides: Partial<Defect> = {}): Defect => ({
     id: 'd1', projectId: 'p1', title: 'Bug 1', description: '',

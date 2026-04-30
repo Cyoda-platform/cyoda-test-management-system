@@ -818,6 +818,21 @@ export function useTestRunCases(projectId: string, runId: string) {
 }
 
 /**
+ * Fetches full TestRun entities (with caseIds, stepStatuses, etc.) for multiple run IDs.
+ * Uses the per-run detail endpoint so array fields like caseIds are not stripped by Cyoda.
+ */
+export function useTestRunsForIds(projectId: string, runIds: string[]) {
+  return useQueries({
+    queries: runIds.map(runId => ({
+      queryKey: keys.runs.detail(projectId, runId),
+      queryFn:  () => testRunsApi.get(projectId, runId),
+      enabled:  !!projectId && !!runId,
+      staleTime: 30_000,
+    })),
+  });
+}
+
+/**
  * Fetches TestRunCase records for multiple runs in parallel.
  * Returns one query result per runId in the same order.
  */

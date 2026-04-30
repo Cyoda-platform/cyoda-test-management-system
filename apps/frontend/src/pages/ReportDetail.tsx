@@ -2,9 +2,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Download, ExternalLink } from 'lucide-react';
-import { useProject, useTestRuns, useDefects, useSuites, useReport, useTestRunCasesForRuns } from '@/hooks/useApi';
+import { useProject, useTestRuns, useDefects, useSuites, useReport, useTestRunCasesForRuns, useRepository, useTestRunsForIds } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
-import type { ReportSnapshotData, SnapshotDefect } from '@/lib/reportSnapshot';
+import type { ReportSnapshotData, SnapshotDefect, CaseToSuiteMap } from '@/lib/reportSnapshot';
+import { computeSnapshotData } from '@/lib/reportSnapshot';
 import { formatDate } from '@/lib/utils';
 import { useMemo } from 'react';
 import { deduplicateRunCases, groupBySuite } from '@/lib/reportAggregation';
@@ -51,6 +52,13 @@ const ReportDetail = () => {
   const { data: defects  = [] }  = useDefects(projectId!);
   const { data: suites   = [] }  = useSuites(projectId!);
   const { data: report, isLoading: reportLoading } = useReport(projectId!, reportId!);
+  const { data: repositoryData }                   = useRepository(projectId!);
+
+  const caseToSuiteMap = useMemo((): CaseToSuiteMap => {
+    const map = new Map<string, string>();
+    (repositoryData?.suites ?? []).forEach(s => s.cases.forEach(c => map.set(c.id, s.id)));
+    return map;
+  }, [repositoryData]);
 
   const parsedSnapshot = useMemo((): ReportSnapshotData | null => {
     if (!report?.snapshotData) return null;
@@ -59,9 +67,10 @@ const ReportDetail = () => {
   }, [report?.snapshotData]);
 
   // Resolve run IDs before early returns so hook call count is stable.
-  // Falls back to all project runs when the report has no selectedRuns.
+  // Skip live fetch only when snapshot is fully populated (has suite data too).
+  // When suiteData is empty we still need TestRunCase records for the suite chart.
   const resolvedRunIds = useMemo(() => {
-    if (parsedSnapshot) return [];          // snapshot present — no live fetch needed
+    if (parsedSnapshot?.suiteData?.length) return [];   // complete snapshot — no fetch needed
     if (!report) return [];
     const ids = report.selectedRuns ?? [];
     return ids.length > 0 ? ids : allRuns.map(r => r.id);
@@ -130,19 +139,39 @@ const ReportDetail = () => {
     return deduplicateRunCases(all);
   }, [rawRunCases, allRuns, runStepStatusMap]);
 
+  // Resolve linked run IDs — must happen before hooks below.
+  const linkedRunIds = report?.selectedRuns ?? [];
+
+  // Fetch each selected run individually via the detail endpoint so we get the full
+  // entity including caseIds (the list endpoint may not return array fields).
+  const linkedRunQueries = useTestRunsForIds(projectId!, linkedRunIds);
+  const linkedRuns = useMemo(() => {
+    const fetched = linkedRunQueries.map(q => q.data).filter(Boolean) as import('@/lib/api').TestRun[];
+    if (fetched.length > 0) return fetched;
+    // Fallback to allRuns while individual fetches are loading.
+    return linkedRunIds.length > 0 ? allRuns.filter(r => linkedRunIds.includes(r.id)) : allRuns;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedRunQueries.map(q => q.dataUpdatedAt).join(), allRuns, linkedRunIds.join(',')]);
+
   const suiteData = useMemo(() => {
-    if (parsedSnapshot?.suiteData) return parsedSnapshot.suiteData;
+    if (parsedSnapshot?.suiteData?.length) return parsedSnapshot.suiteData;
+
     const suiteNameMap = new Map(suites.map(s => [s.id, s.name]));
-    const data = groupBySuite(deduped, suiteNameMap);
     const suiteOrderMap = new Map(
       [...suites]
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
         .map((s, i) => [s.name, i]),
     );
-    return data.sort(
-      (a, b) => (suiteOrderMap.get(a.suite) ?? Infinity) - (suiteOrderMap.get(b.suite) ?? Infinity),
-    );
-  }, [parsedSnapshot, deduped, suites]);
+    const sort = (data: ReturnType<typeof groupBySuite>) =>
+      data.sort((a, b) => (suiteOrderMap.get(a.suite) ?? Infinity) - (suiteOrderMap.get(b.suite) ?? Infinity));
+
+    // Primary: TestRunCase records have suiteId — most accurate.
+    if (deduped.length > 0) return sort(groupBySuite(deduped, suiteNameMap));
+
+    // Fallback: derive from run.caseIds + run.stepStatuses + repository case→suite map.
+    const liveSnapshot = computeSnapshotData([], linkedRuns, suites, [], caseToSuiteMap);
+    return liveSnapshot.suiteData;
+  }, [parsedSnapshot, deduped, linkedRuns, suites, caseToSuiteMap]);
 
   if (reportLoading) {
     return (
@@ -160,18 +189,20 @@ const ReportDetail = () => {
     );
   }
 
-  // Linked runs — kept for Environment Info section (environment, buildVersion, createdBy)
-  const linkedRunIds: string[] = report.selectedRuns ?? [];
-  const linkedRuns = linkedRunIds.length > 0
-    ? allRuns.filter((r) => linkedRunIds.includes(r.id))
-    : allRuns;
-
-  // KPI totals from deduplicated TestRunCase records — no double-counting
-  // Falls back to snapshot values when present
-  const totalPassed   = parsedSnapshot?.totalPassed   ?? deduped.filter(rc => rc.status === 'PASSED').length;
-  const totalFailed   = parsedSnapshot?.totalFailed   ?? deduped.filter(rc => rc.status === 'FAILED').length;
-  const totalSkipped  = parsedSnapshot?.totalSkipped  ?? deduped.filter(rc => rc.status === 'SKIPPED').length;
-  const totalUntested = parsedSnapshot?.totalUntested ?? deduped.filter(rc => rc.status === 'UNTESTED').length;
+  // KPI totals: snapshot → per-case computation → run-level aggregates (fallback when
+  // TestRunCase records are missing, e.g. Cyoda schema not yet re-imported after refactor).
+  const totalPassed   = parsedSnapshot?.totalPassed   ?? (deduped.length > 0
+    ? deduped.filter(rc => rc.status === 'PASSED').length
+    : linkedRuns.reduce((s, r) => s + (r.passed  ?? 0), 0));
+  const totalFailed   = parsedSnapshot?.totalFailed   ?? (deduped.length > 0
+    ? deduped.filter(rc => rc.status === 'FAILED').length
+    : linkedRuns.reduce((s, r) => s + (r.failed  ?? 0), 0));
+  const totalSkipped  = parsedSnapshot?.totalSkipped  ?? (deduped.length > 0
+    ? deduped.filter(rc => rc.status === 'SKIPPED').length
+    : linkedRuns.reduce((s, r) => s + (r.skipped ?? 0), 0));
+  const totalUntested = parsedSnapshot?.totalUntested ?? (deduped.length > 0
+    ? deduped.filter(rc => rc.status === 'UNTESTED').length
+    : linkedRuns.reduce((s, r) => s + (r.untested ?? 0), 0));
   const totalExecuted = totalPassed + totalFailed + totalSkipped;
   const totalCases    = totalPassed + totalFailed + totalSkipped + totalUntested;
   const passRate      = totalExecuted > 0 ? ((totalPassed / totalExecuted) * 100).toFixed(1) : '0.0';

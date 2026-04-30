@@ -124,8 +124,8 @@ class SnapshotProcessorTest {
     }
 
     @Test
-    @DisplayName("passes embedded step data from tc.getSteps() to createTestRunCase")
-    void passesEmbeddedStepData() throws Exception {
+    @DisplayName("does NOT embed steps in TestRunCase snapshot (prevents Cyoda schema rejection)")
+    void doesNotEmbedStepsInSnapshot() throws Exception {
         UUID testRunId = UUID.randomUUID();
         UUID projectId = UUID.randomUUID();
         UUID caseId    = UUID.randomUUID();
@@ -155,11 +155,9 @@ class SnapshotProcessorTest {
         ArgumentCaptor<TestRunCaseDTO> caseCaptor = ArgumentCaptor.forClass(TestRunCaseDTO.class);
         verify(testRunCaseService).createTestRunCase(caseCaptor.capture());
 
-        List<TestCaseDTO.StepDTO> captured = caseCaptor.getValue().getSteps();
-        assertEquals(1, captured.size());
-        assertEquals(1,                captured.get(0).getStepNumber());
-        assertEquals("Click checkout", captured.get(0).getAction());
-        assertEquals("Order confirmed",captured.get(0).getExpectedResult());
+        // Steps must NOT be embedded — Cyoda schema for TestRunCase doesn't include the steps
+        // field yet, and including it causes entity rejection which breaks Suite Analysis.
+        assertNull(caseCaptor.getValue().getSteps());
     }
 
     // ---- process() — edge cases --------------------------------------------
@@ -231,6 +229,48 @@ class SnapshotProcessorTest {
         // Only the present case is snapshotted
         verify(testRunCaseService, times(1))
                 .createTestRunCase(any());
+    }
+
+    @Test
+    @DisplayName("continues snapshotting remaining cases when one case create throws")
+    void continuesAfterCreateFailure() throws Exception {
+        UUID testRunId  = UUID.randomUUID();
+        UUID projectId  = UUID.randomUUID();
+        UUID failingId  = UUID.randomUUID();
+        UUID successId  = UUID.randomUUID();
+
+        ObjectNode runJson = objectMapper.createObjectNode();
+        runJson.put("projectId", projectId.toString());
+        runJson.putArray("caseIds")
+               .add(failingId.toString())
+               .add(successId.toString());
+
+        EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
+
+        TestCaseDTO failing = new TestCaseDTO();
+        failing.setId(failingId);
+        failing.setTitle("Failing case");
+        when(testCaseService.getTestCaseById(failingId)).thenReturn(Optional.of(failing));
+
+        TestCaseDTO success = new TestCaseDTO();
+        success.setId(successId);
+        success.setTitle("Success case");
+        when(testCaseService.getTestCaseById(successId)).thenReturn(Optional.of(success));
+
+        TestRunCaseDTO created = new TestRunCaseDTO();
+        created.setId(UUID.randomUUID());
+
+        // First create throws (simulates Cyoda schema rejection for steps field),
+        // second create succeeds.
+        when(testRunCaseService.createTestRunCase(any()))
+                .thenThrow(new RuntimeException("Cyoda schema rejected steps field"))
+                .thenReturn(created);
+
+        EntityProcessorCalculationResponse response = processor.process(context(request));
+
+        assertTrue(response.getSuccess());
+        // Both cases were attempted — second one succeeded
+        verify(testRunCaseService, times(2)).createTestRunCase(any());
     }
 
     // ---- helpers -----------------------------------------------------------
