@@ -301,8 +301,8 @@ const ReportDetail = () => {
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
-                    {/* Legend — 2 cols × 2 rows, compact */}
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                    {/* Legend — single row */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                       {pieData.map((d) => {
                         const pct = totalCases > 0 ? ((d.value / totalCases) * 100).toFixed(0) : '0';
                         return (
@@ -359,9 +359,9 @@ const ReportDetail = () => {
               <div className="px-5 py-3.5 border-b border-border/40">
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Environment Details</h2>
               </div>
-              <div className="px-5 py-3">
+              <div className="px-5 py-2.5">
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2.5">
+                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Environment(s)</p>
                     <div className="flex flex-wrap gap-1.5">
                       {[...new Set(linkedRuns.map((r) => r.environment))].map((env) => (
@@ -369,7 +369,7 @@ const ReportDetail = () => {
                       ))}
                     </div>
                   </div>
-                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2.5">
+                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Build Version(s)</p>
                     <div className="flex flex-wrap gap-1.5">
                       {[...new Set(linkedRuns.map((r) => r.buildVersion).filter(Boolean))].map((v) => (
@@ -377,10 +377,12 @@ const ReportDetail = () => {
                       ))}
                     </div>
                   </div>
-                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2.5">
+                  <div className="bg-background rounded-lg border border-border/40 px-3 py-2">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Created By</p>
-                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">{report.createdBy}</p>
-                    <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{formatDate(report.createdAt)}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-xs font-mono bg-secondary px-2 py-0.5 rounded text-foreground">{report.createdBy}</span>
+                      <span className="text-xs font-mono bg-secondary px-2 py-0.5 rounded text-foreground">{formatDate(report.createdAt)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -418,7 +420,7 @@ const ReportDetail = () => {
                         iconSize={8}
                         wrapperStyle={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}
                       />
-                      <Bar dataKey="passed" name="Passed" fill={COLORS.passed} radius={[3, 3, 0, 0]} stackId="a" />
+                      <Bar dataKey="passed" name="Passed" fill={COLORS.passed} radius={[0, 0, 0, 0]} stackId="a" />
                       <Bar dataKey="failed" name="Failed" fill={COLORS.failed} radius={[0, 0, 0, 0]} stackId="a" />
                       <Bar dataKey="skipped" name="Skipped" fill={COLORS.skipped} radius={[0, 0, 0, 0]} stackId="a" />
                       <Bar dataKey="untested" name="Untested" fill={COLORS.untested} radius={[3, 3, 0, 0]} stackId="a" />

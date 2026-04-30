@@ -55,7 +55,7 @@ const CreateReport = () => {
   const [sections, setSections] = useState({
     executiveSummary: true,
     suiteAnalytics: true,
-    defectTable: false,
+    defectTable: true,
     environmentInfo: true,
   });
 
