@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#091426"/>
+  <!-- Grid logo - 2x2 squares -->
+  <!-- Top-left square -->
+  <rect x="12" y="12" width="16" height="16" fill="none" stroke="#ffffff" stroke-width="2.5" rx="2"/>
+  <!-- Top-right square -->
+  <rect x="36" y="12" width="16" height="16" fill="none" stroke="#ffffff" stroke-width="2.5" rx="2"/>
+  <!-- Bottom-left square -->
+  <rect x="12" y="36" width="16" height="16" fill="none" stroke="#ffffff" stroke-width="2.5" rx="2"/>
+  <!-- Bottom-right square -->
+  <rect x="36" y="36" width="16" height="16" fill="none" stroke="#ffffff" stroke-width="2.5" rx="2"/>
+</svg>
