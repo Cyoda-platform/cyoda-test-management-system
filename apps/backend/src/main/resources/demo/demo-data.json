@@ -1,0 +1,385 @@
+{
+  "project": {
+    "name": "E-commerce Platform",
+    "description": "End-to-end testing for the online retail platform, covering authentication, cart, checkout, and product catalog flows."
+  },
+  "testRun": {
+    "name": "Regression Run - Sprint Snapshot",
+    "environment": "Staging",
+    "buildVersion": "v2.4.1",
+    "description": "Full regression cycle for Sprint 24 release candidate. Covers auth, cart, payment, and catalog modules."
+  },
+  "suites": [
+    {
+      "ref": "auth",
+      "name": "Authentication",
+      "description": "Tests covering user login, session management, and password recovery flows.",
+      "cases": [
+        {
+          "ref": "tc-auth-login-valid",
+          "title": "Successful login with valid credentials",
+          "description": "Verify that a registered user can log in using correct email and password.",
+          "preconditions": "User account exists with email 'tester@shop.com' and password 'Test@1234'. Application is accessible on Staging.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Navigate to https://staging.shop.com/login", "expectedResult": "Login page is displayed with email and password fields visible" },
+            { "stepNumber": 2, "action": "Enter email 'tester@shop.com' and password 'Test@1234', click 'Sign In'", "expectedResult": "Credentials are accepted and the form is submitted" },
+            { "stepNumber": 3, "action": "Observe the page after authentication", "expectedResult": "User is redirected to the dashboard; username 'tester' is displayed in the header" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-auth-login-invalid",
+          "title": "Login with invalid password",
+          "description": "Verify that the system blocks login when an incorrect password is entered.",
+          "preconditions": "User account exists with email 'tester@shop.com'. Application is accessible on Staging.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Navigate to https://staging.shop.com/login", "expectedResult": "Login page is displayed" },
+            { "stepNumber": 2, "action": "Enter email 'tester@shop.com' and password 'WrongPass!', click 'Sign In'", "expectedResult": "Form is submitted with incorrect credentials" },
+            { "stepNumber": 3, "action": "Observe the error message", "expectedResult": "Error message 'Invalid email or password' is displayed; user remains on the login page" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-auth-session",
+          "title": "Session expiry and auto-logout",
+          "description": "Verify that an inactive session expires after the configured timeout and the user is logged out.",
+          "preconditions": "User is logged in. Session timeout is configured to 30 minutes in Staging environment.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Log in with valid credentials and navigate to the dashboard", "expectedResult": "User is successfully authenticated and dashboard is visible" },
+            { "stepNumber": 2, "action": "Leave the browser idle for 31 minutes without any interaction", "expectedResult": "No user interaction occurs during the wait period" },
+            { "stepNumber": 3, "action": "Attempt to navigate to the account settings page", "expectedResult": "User is redirected to the login page with message 'Your session has expired'" }
+          ],
+          "runOutcome": "FAILED",
+          "stepOutcomes": ["PASSED", "PASSED", "FAILED"],
+          "failedStepActualResults": {
+            "3": "Session remains active. User accesses the account settings page without being redirected to the login screen."
+          }
+        },
+        {
+          "ref": "tc-auth-password-reset",
+          "title": "Password reset via email",
+          "description": "Verify that the password reset flow sends an email and allows the user to set a new password.",
+          "preconditions": "User account exists. Email service is configured in Staging. Email inbox is accessible.",
+          "priority": "MEDIUM",
+          "steps": [
+            { "stepNumber": 1, "action": "Navigate to the login page and click 'Forgot password?'", "expectedResult": "Password reset form is displayed requesting the registered email address" },
+            { "stepNumber": 2, "action": "Enter 'tester@shop.com' and click 'Send reset link'", "expectedResult": "Confirmation message 'Check your inbox for a reset link' is displayed" },
+            { "stepNumber": 3, "action": "Open the reset email and click the reset link", "expectedResult": "Browser opens the password reset page with a new password form" },
+            { "stepNumber": 4, "action": "Enter a new password and confirm it, then click 'Reset password'", "expectedResult": "Password is updated; user is redirected to the login page with success message" }
+          ],
+          "runOutcome": "SKIPPED",
+          "stepOutcomes": ["SKIPPED", "SKIPPED", "SKIPPED", "SKIPPED"]
+        }
+      ]
+    },
+    {
+      "ref": "cart",
+      "name": "Shopping Cart",
+      "description": "Tests covering add-to-cart, quantity updates, coupon codes, and cart persistence.",
+      "cases": [
+        {
+          "ref": "tc-cart-add",
+          "title": "Add product to cart",
+          "description": "Verify that a user can add a product from the catalog to the shopping cart.",
+          "preconditions": "User is logged in. At least one in-stock product exists in the catalog.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Navigate to the product catalog and open any in-stock product detail page", "expectedResult": "Product detail page is displayed with 'Add to Cart' button enabled" },
+            { "stepNumber": 2, "action": "Click 'Add to Cart'", "expectedResult": "Product is added; cart icon in the header shows item count increased by 1" },
+            { "stepNumber": 3, "action": "Open the cart page", "expectedResult": "The product appears in the cart with correct name, price, and quantity of 1" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-cart-update-qty",
+          "title": "Update item quantity in cart",
+          "description": "Verify that the user can change the quantity of an item already in the cart.",
+          "preconditions": "User is logged in. Cart contains at least one product with quantity 1.",
+          "priority": "MEDIUM",
+          "steps": [
+            { "stepNumber": 1, "action": "Open the cart page", "expectedResult": "Cart page displays the product with current quantity 1" },
+            { "stepNumber": 2, "action": "Change the quantity selector for the product to 3", "expectedResult": "Quantity field updates to 3" },
+            { "stepNumber": 3, "action": "Click 'Update cart'", "expectedResult": "Cart subtotal updates to reflect 3× the unit price; no page errors" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-cart-remove",
+          "title": "Remove item from cart",
+          "description": "Verify that the user can remove a product from the shopping cart.",
+          "preconditions": "User is logged in. Cart contains exactly one product.",
+          "priority": "MEDIUM",
+          "steps": [
+            { "stepNumber": 1, "action": "Open the cart page", "expectedResult": "Cart displays the product with a 'Remove' button" },
+            { "stepNumber": 2, "action": "Click 'Remove' next to the product", "expectedResult": "Product is removed from the cart" },
+            { "stepNumber": 3, "action": "Observe the cart state", "expectedResult": "'Your cart is empty' message is displayed; cart icon shows 0 items" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-cart-persistence",
+          "title": "Cart persistence after page reload",
+          "description": "Verify that cart contents are preserved when the user reloads the browser.",
+          "preconditions": "User is logged in. Cart contains 2 different products.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Open the cart page and note the list of products", "expectedResult": "Cart displays 2 products with correct quantities and prices" },
+            { "stepNumber": 2, "action": "Reload the browser page (F5)", "expectedResult": "Page reloads and cart still displays the same 2 products with unchanged quantities" },
+            { "stepNumber": 3, "action": "Verify the cart total matches the pre-reload total", "expectedResult": "Cart subtotal is identical to the value observed before reload" }
+          ],
+          "runOutcome": "FAILED",
+          "stepOutcomes": ["PASSED", "FAILED", "UNTESTED"],
+          "failedStepActualResults": {
+            "2": "After reload in Safari 17.4, the cart is empty. Products are lost on page refresh. Reproducible 100% of the time on Safari; Chrome and Firefox are unaffected."
+          }
+        },
+        {
+          "ref": "tc-cart-coupon",
+          "title": "Apply discount coupon code",
+          "description": "Verify that a valid coupon code applies a discount to the cart total.",
+          "preconditions": "User is logged in. Cart contains at least one product. Coupon 'SAVE20' for 20% off is active in the system.",
+          "priority": "LOW",
+          "steps": [
+            { "stepNumber": 1, "action": "Open the cart page", "expectedResult": "Cart displays the coupon code input field" },
+            { "stepNumber": 2, "action": "Enter 'SAVE20' in the coupon field and click 'Apply'", "expectedResult": "Coupon is accepted; confirmation 'Coupon applied' is shown" },
+            { "stepNumber": 3, "action": "Verify the cart total", "expectedResult": "Cart total is reduced by 20%; discount line item shows '-20%' applied" }
+          ],
+          "runOutcome": "SKIPPED",
+          "stepOutcomes": ["SKIPPED", "SKIPPED", "SKIPPED"]
+        }
+      ]
+    },
+    {
+      "ref": "payment",
+      "name": "Payment & Checkout",
+      "description": "Tests covering the end-to-end checkout flow, payment processing, and order confirmation.",
+      "cases": [
+        {
+          "ref": "tc-pay-valid-card",
+          "title": "Checkout with valid credit card",
+          "description": "Verify that the user can complete a purchase using a valid credit card.",
+          "preconditions": "User is logged in. Cart contains at least one product. Test credit card 4111111111111111 (Visa) is configured in Stripe test mode.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Proceed to checkout from the cart page", "expectedResult": "Checkout page displays shipping address and payment sections" },
+            { "stepNumber": 2, "action": "Fill in a valid shipping address and click 'Continue to Payment'", "expectedResult": "Payment section becomes active; card input form is displayed" },
+            { "stepNumber": 3, "action": "Enter card number 4111111111111111, expiry 12/26, CVV 123 and click 'Place Order'", "expectedResult": "Order is processed successfully" },
+            { "stepNumber": 4, "action": "Observe the confirmation screen", "expectedResult": "Order confirmation page displays order number, summary, and estimated delivery date" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-pay-expired-card",
+          "title": "Checkout with expired credit card",
+          "description": "Verify that the system rejects payment with an expired credit card and shows an appropriate error.",
+          "preconditions": "User is logged in. Cart contains at least one product.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Proceed to checkout and navigate to the payment step", "expectedResult": "Payment form is displayed" },
+            { "stepNumber": 2, "action": "Enter card number 4000000000000069 (expired test card), expiry 01/20, CVV 123 and click 'Place Order'", "expectedResult": "Payment request is submitted with the expired card" },
+            { "stepNumber": 3, "action": "Observe the error feedback", "expectedResult": "Error message 'Your card has expired. Please use a different card.' is displayed; user remains on the payment page" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-pay-order-email",
+          "title": "Order confirmation email delivery",
+          "description": "Verify that the system sends an order confirmation email after a successful purchase.",
+          "preconditions": "User is logged in with email 'tester@shop.com'. Cart contains one product. Email service is configured in Staging.",
+          "priority": "MEDIUM",
+          "steps": [
+            { "stepNumber": 1, "action": "Complete a successful checkout using the valid test credit card", "expectedResult": "Order confirmation page is displayed with an order number" },
+            { "stepNumber": 2, "action": "Open the inbox for 'tester@shop.com' within 2 minutes", "expectedResult": "Order confirmation email is received from 'orders@shop.com'" },
+            { "stepNumber": 3, "action": "Open the email and verify its content", "expectedResult": "Email contains order number, itemised product list, total amount, and estimated delivery date" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-pay-guest-checkout",
+          "title": "Guest checkout flow",
+          "description": "Verify that an unauthenticated user can complete a purchase as a guest.",
+          "preconditions": "User is not logged in. At least one in-stock product exists.",
+          "priority": "MEDIUM",
+          "steps": [
+            { "stepNumber": 1, "action": "Add a product to cart without logging in and proceed to checkout", "expectedResult": "Checkout page offers 'Continue as Guest' option alongside login" },
+            { "stepNumber": 2, "action": "Click 'Continue as Guest', enter email 'guest@example.com' and shipping details", "expectedResult": "Guest checkout form accepts the details without requiring account creation" },
+            { "stepNumber": 3, "action": "Complete payment using the valid test credit card", "expectedResult": "Order is placed; confirmation page displays order number and a prompt to create an account" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-pay-gateway-timeout",
+          "title": "Payment gateway timeout handling",
+          "description": "Verify that the system handles a payment gateway timeout gracefully and shows a user-friendly error.",
+          "preconditions": "User is logged in. Cart contains one product. Staging environment is configured with a simulated 30-second gateway timeout for card 4000000000000341.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Proceed to checkout and navigate to the payment step", "expectedResult": "Payment form is displayed" },
+            { "stepNumber": 2, "action": "Enter the timeout-simulation card number 4000000000000341 and click 'Place Order'", "expectedResult": "Payment request is submitted; loading indicator is shown" },
+            { "stepNumber": 3, "action": "Wait for the gateway response (up to 35 seconds)", "expectedResult": "After timeout, the system should display a user-friendly error message" },
+            { "stepNumber": 4, "action": "Observe the error message and page state", "expectedResult": "Message 'Payment could not be processed. Please try again or contact support.' is displayed; cart is preserved" }
+          ],
+          "runOutcome": "FAILED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED", "FAILED"],
+          "failedStepActualResults": {
+            "4": "The page displays a generic HTTP 500 Internal Server Error page. The cart is cleared. No user-friendly message is shown. Browser console shows an unhandled promise rejection."
+          }
+        }
+      ]
+    },
+    {
+      "ref": "catalog",
+      "name": "Product Catalog",
+      "description": "Tests covering product search, filtering, product detail pages, and stock status display.",
+      "cases": [
+        {
+          "ref": "tc-cat-search",
+          "title": "Product search by keyword",
+          "description": "Verify that the search feature returns relevant results for a given keyword.",
+          "preconditions": "Application is accessible. Catalog contains products including 'Wireless Headphones'.",
+          "priority": "HIGH",
+          "steps": [
+            { "stepNumber": 1, "action": "Click the search bar in the header and type 'Wireless Headphones'", "expectedResult": "Search input accepts the text" },
+            { "stepNumber": 2, "action": "Press Enter or click the search icon", "expectedResult": "Search results page loads" },
+            { "stepNumber": 3, "action": "Verify the results list", "expectedResult": "At least one result matching 'Wireless Headphones' is displayed with name, price, and thumbnail" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-cat-filter",
+          "title": "Filter products by category and price range",
+          "description": "Verify that the filter panel correctly narrows results by category and maximum price.",
+          "preconditions": "User is on the catalog page. Products exist in the 'Electronics' category with prices ranging from $20 to $500.",
+          "priority": "MEDIUM",
+          "steps": [
+            { "stepNumber": 1, "action": "Open the catalog page and expand the filter panel", "expectedResult": "Filter panel displays category checkboxes and a price range slider" },
+            { "stepNumber": 2, "action": "Select category 'Electronics' and set max price to $100, then click 'Apply Filters'", "expectedResult": "Filter is applied; URL updates with filter parameters" },
+            { "stepNumber": 3, "action": "Review the product grid", "expectedResult": "Only products from the 'Electronics' category with price ≤ $100 are displayed" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-cat-detail",
+          "title": "Product detail page rendering",
+          "description": "Verify that all required elements are present and correctly rendered on a product detail page.",
+          "preconditions": "Catalog contains at least one product with images, description, price, and stock status.",
+          "priority": "MEDIUM",
+          "steps": [
+            { "stepNumber": 1, "action": "Click on any product in the catalog grid", "expectedResult": "Product detail page opens with URL containing the product slug/ID" },
+            { "stepNumber": 2, "action": "Verify all required elements are present", "expectedResult": "Page displays: product name, at least one image, price, stock status, description, and 'Add to Cart' button" },
+            { "stepNumber": 3, "action": "Check the image gallery interaction", "expectedResult": "Clicking thumbnail images updates the main product image without page reload" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        },
+        {
+          "ref": "tc-cat-out-of-stock",
+          "title": "Out-of-stock product display",
+          "description": "Verify that out-of-stock products are clearly indicated and cannot be added to the cart.",
+          "preconditions": "At least one product exists in the catalog with stock quantity set to 0.",
+          "priority": "LOW",
+          "steps": [
+            { "stepNumber": 1, "action": "Navigate to a product detail page for an out-of-stock product", "expectedResult": "Product detail page is displayed" },
+            { "stepNumber": 2, "action": "Observe the stock status and cart button", "expectedResult": "'Out of Stock' badge is visible; 'Add to Cart' button is disabled or replaced with 'Notify Me'" },
+            { "stepNumber": 3, "action": "Attempt to click the disabled cart button", "expectedResult": "No action is taken; product is not added to the cart" }
+          ],
+          "runOutcome": "PASSED",
+          "stepOutcomes": ["PASSED", "PASSED", "PASSED"]
+        }
+      ]
+    }
+  ],
+  "caseAttachments": [
+    {
+      "caseRef": "tc-auth-login-valid",
+      "fileName": "auth-wireframe.png",
+      "fileType": "image/png",
+      "content": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    },
+    {
+      "caseRef": "tc-cart-add",
+      "fileName": "cart-mockup.png",
+      "fileType": "image/png",
+      "content": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
+    },
+    {
+      "caseRef": "tc-pay-valid-card",
+      "fileName": "payment-flow-spec.pdf",
+      "fileType": "application/pdf",
+      "content": "JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSPj4Kc3RyZWFtCkJUCi9GMSAxMiBUZgoxMDAgNzAwIFRkCihQYXltZW50IEZsb3cgU3BlY2lmaWNhdGlvbikgVGoKRVQKZW5kc3RyZWFtCmVuZG9iag=="
+    },
+    {
+      "caseRef": "tc-cat-search",
+      "fileName": "search-ux-spec.pdf",
+      "fileType": "application/pdf",
+      "content": "JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSPj4Kc3RyZWFtCkJUCi9GMSAxMiBUZgoxMDAgNzAwIFRkCihTZWFyY2ggVVggU3BlY2lmaWNhdGlvbikgVGoKRVQKZW5kc3RyZWFtCmVuZG9iag=="
+    }
+  ],
+  "defects": [
+    {
+      "caseRef": "tc-auth-session",
+      "stepNumber": 3,
+      "title": "Session token not invalidated after configured timeout period",
+      "description": "The server-side session token remains valid after 30 minutes of inactivity. The user is not redirected to the login page, allowing continued access to authenticated routes. This is a security risk as unattended browser sessions remain active indefinitely.",
+      "severity": "Critical"
+    },
+    {
+      "caseRef": "tc-cart-persistence",
+      "stepNumber": 2,
+      "title": "Cart items lost on page refresh in Safari 17.x",
+      "description": "When a user reloads the shopping cart page in Safari 17.4 on macOS, all cart items are removed. The localStorage key 'cart_v2' is cleared on reload in Safari only. Chrome 123 and Firefox 124 are unaffected. Issue is 100% reproducible in Safari private and normal windows.",
+      "severity": "Major"
+    },
+    {
+      "caseRef": "tc-pay-gateway-timeout",
+      "stepNumber": 4,
+      "title": "Payment gateway timeout returns HTTP 500 instead of user-friendly error",
+      "description": "When the Stripe payment gateway does not respond within 30 seconds, the application throws an unhandled exception and renders a raw HTTP 500 error page. The cart is cleared during this process. The expected behaviour is a graceful error message and cart preservation.",
+      "severity": "Major"
+    }
+  ],
+  "evidenceAttachments": [
+    {
+      "caseRef": "tc-auth-session",
+      "stepNumber": 3,
+      "fileName": "session-timeout-screenshot.png",
+      "fileType": "image/png",
+      "content": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    },
+    {
+      "caseRef": "tc-cart-persistence",
+      "stepNumber": 2,
+      "fileName": "cart-persistence-error.png",
+      "fileType": "image/png",
+      "content": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="
+    },
+    {
+      "caseRef": "tc-pay-gateway-timeout",
+      "stepNumber": 4,
+      "fileName": "gateway-timeout-error.log",
+      "fileType": "text/plain",
+      "content": "RVJST1IgMjAyNC0wNC0xNVQxNDoyMzoxMVogUGF5bWVudEdhdGV3YXlFeGNlcHRpb246IFJlcXVlc3QgdGltZWQgb3V0IGFmdGVyIDMwMDAwbXMuIFN0cmlwZSBjaGFyZ2UgSUQ6IG51bGwuIENhcnQgc3RhdGUgY2xlYXJlZC4="
+    }
+  ],
+  "report": {
+    "name": "Sprint 24 Regression Report",
+    "type": "Regression",
+    "description": "Automated regression report for Sprint 24 release candidate (v2.4.1). Covers all four functional areas: Authentication, Shopping Cart, Payment & Checkout, and Product Catalog.",
+    "createdBy": "qa-automation"
+  }
+}
+

@@ -109,6 +109,18 @@ public class TestRunStepService {
         });
     }
 
+    /**
+     * Updates a TestRunStep's status and actual result in a single call.
+     * Used by DemoSeederService to populate demo data without two round-trips.
+     */
+    public TestRunStepDTO updateTestRunStep(UUID id, String status, String actualResult) {
+        return getTestRunStepById(id).map(trs -> {
+            trs.setStatus(status);
+            if (actualResult != null) trs.setActualResult(actualResult);
+            return withId(entityService.update(id, trs, null));
+        }).orElseThrow(() -> new RuntimeException("TestRunStep not found: " + id));
+    }
+
 
 }
 
