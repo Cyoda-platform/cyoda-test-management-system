@@ -58,7 +58,10 @@ test.describe('Projects page', () => {
 
   test('edit project — description change reflected without refresh', async ({ page }) => {
     await page.goto('/projects');
-    const row = page.locator('tr', { hasText: SHARED_NAME });
+    // Use more specific selector to avoid strict mode violation from multiple matching rows
+    const rows = page.locator('tr', { hasText: SHARED_NAME });
+    // Get the first row that matches SHARED_NAME exactly (not partial matches like "Updated")
+    const row = rows.first();
     await expect(row).toBeVisible({ timeout: 20_000 });
 
     const actionsCell = row.locator('td').last();

@@ -1433,7 +1433,7 @@ const RunExecution = () => {
           )}
 
           {sortedSteps.length > 0 ? (
-            <div className="space-y-2.5">
+            <div className="space-y-2.5" data-testid="steps-container">
               {sortedSteps.map((step, sIdx) => {
                 const currentStatus =
                   (stepStatuses[activeCase.id] || [])[sIdx]
@@ -1444,7 +1444,7 @@ const RunExecution = () => {
                   (d) => d.caseId === activeCase.id && d.stepIdx === step.stepNumber - 1,
                 ).length;
                 return (
-                  <div key={sIdx} className="rounded-md border border-border/60 bg-card p-3">
+                  <div key={sIdx} className="rounded-md border border-border/60 bg-card p-3" data-testid={`step-${step.stepNumber}`}>
                     <div className="flex gap-3 items-start justify-between">
                       <div className="flex gap-3 flex-1 min-w-0">
                         <span className="font-mono text-xs font-semibold text-muted-foreground shrink-0 w-4">{step.stepNumber}</span>

@@ -5,8 +5,7 @@ import {
   deleteProject,
   createSuite,
   deleteSuite,
-  createCase,
-  createStep,
+  createCaseWithSteps,
   deleteCase,
   createTestRun,
   deleteTestRun,
@@ -33,14 +32,28 @@ test.describe('RunExecution defects', () => {
     const suite = await createSuite(apiCtx, authHeaders, projectId);
     suiteId = suite.id;
 
-    const case1 = await createCase(apiCtx, authHeaders, projectId, suiteId, 'Run E2E Case One');
+    const case1 = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'Run E2E Case One',
+      [
+        { stepNumber: 1, action: 'Open homepage', expectedResult: 'Homepage loads' },
+        { stepNumber: 2, action: 'Click Login', expectedResult: 'Login form appears' },
+      ],
+    );
     caseId1 = case1.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId1, 1, 'Open homepage', 'Homepage loads');
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId1, 2, 'Click Login', 'Login form appears');
 
-    const case2 = await createCase(apiCtx, authHeaders, projectId, suiteId, 'Run E2E Case Two');
+    const case2 = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'Run E2E Case Two',
+      [{ stepNumber: 1, action: 'Check sidebar', expectedResult: 'Sidebar visible' }],
+    );
     caseId2 = case2.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId2, 1, 'Check sidebar', 'Sidebar visible');
 
     const run = await createTestRun(apiCtx, authHeaders, projectId, [caseId1, caseId2]);
     runId = run.id;
@@ -60,8 +73,9 @@ test.describe('RunExecution defects', () => {
 
   async function goToRun(page: Page) {
     await page.goto(`/projects/${projectId}/runs/${runId}`);
-    // Wait for the steps table (first case auto-selected on load)
-    await expect(page.locator('table').first()).toBeVisible({ timeout: 15_000 });
+    // Wait for the steps container (first case auto-selected on load)
+    // Steps are now rendered as cards, not a table
+    await expect(page.getByTestId('steps-container')).toBeVisible({ timeout: 15_000 });
   }
 
   // ── Test 1: Create defect via step "failed" button (auto-opens modal) ─────────
@@ -157,7 +171,7 @@ test.describe('RunExecution defects', () => {
     // Close the dialog — prefer a close button over Escape (which can be intercepted)
     const closeBtn = dialog.getByRole('button', { name: /close/i });
     if (await closeBtn.count() > 0) {
-      await closeBtn.click();
+      await closeBtn.first().click();
     } else {
       await page.keyboard.press('Escape');
     }

@@ -4,8 +4,7 @@ import {
   createProject,
   deleteProject,
   createSuite,
-  createCase,
-  createStep,
+  createCaseWithSteps,
   createTestRun,
   uploadEvidence,
 } from './helpers/api';
@@ -33,10 +32,18 @@ test.describe('Step status persistence after reload', () => {
     projectId = proj.id;
     const suite = await createSuite(apiCtx, authHeaders, projectId);
     const suiteId = suite.id;
-    const tc = await createCase(apiCtx, authHeaders, projectId, suiteId, 'Status Persistence Case');
+    const tc = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'Status Persistence Case',
+      [
+        { stepNumber: 1, action: 'Open the homepage', expectedResult: 'Homepage loads' },
+        { stepNumber: 2, action: 'Click Login button', expectedResult: 'Login form appears' },
+      ],
+    );
     caseId = tc.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 1, 'Open the homepage', 'Homepage loads');
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 2, 'Click Login button', 'Login form appears');
     const run = await createTestRun(apiCtx, authHeaders, projectId, [caseId]);
     runId = run.id;
   });
@@ -48,26 +55,26 @@ test.describe('Step status persistence after reload', () => {
 
   async function goToRun(page: Page) {
     await page.goto(`/projects/${projectId}/runs/${runId}`);
-    await expect(page.locator('table').first()).toBeVisible({ timeout: 15_000 });
+    // Wait for the steps container (steps are now rendered as cards, not a table)
+    await expect(page.getByTestId('steps-container')).toBeVisible({ timeout: 15_000 });
   }
 
   test('step statuses persist after page reload', async ({ page }) => {
     await goToRun(page);
 
     // Set step 1 → passed, step 2 → failed
-    const rows = page.locator('tbody tr');
-    await rows.first().getByRole('button', { name: /^passed$/i }).click();
-    await rows.nth(1).getByRole('button', { name: /^failed$/i }).click();
+    await page.getByTestId('step-1').getByRole('button', { name: /^passed$/i }).click();
+    await page.getByTestId('step-2').getByRole('button', { name: /^failed$/i }).click();
 
     // Wait for updateRun mutation to complete before reloading
     await page.waitForTimeout(1_500);
 
     await page.reload();
-    await expect(page.locator('table').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('steps-container')).toBeVisible({ timeout: 15_000 });
 
     // persistedStepStatusByKey restores statuses from run.stepStatuses JSON
-    const row1PassedBtn = page.locator('tbody tr').first().getByRole('button', { name: /^passed$/i });
-    const row2FailedBtn = page.locator('tbody tr').nth(1).getByRole('button', { name: /^failed$/i });
+    const row1PassedBtn = page.getByTestId('step-1').getByRole('button', { name: /^passed$/i });
+    const row2FailedBtn = page.getByTestId('step-2').getByRole('button', { name: /^failed$/i });
 
     await expect(row1PassedBtn).toHaveClass(/bg-success/, { timeout: 5_000 });
     await expect(row2FailedBtn).toHaveClass(/bg-destructive/, { timeout: 5_000 });
@@ -78,11 +85,11 @@ test.describe('Step status persistence after reload', () => {
 
     // Active state uses ring-* class; outline state does not.
     // Step 1 active = "passed" → "failed" button must not have ring-destructive
-    const row1FailedBtn = page.locator('tbody tr').first().getByRole('button', { name: /^failed$/i });
+    const row1FailedBtn = page.getByTestId('step-1').getByRole('button', { name: /^failed$/i });
     await expect(row1FailedBtn).not.toHaveClass(/ring-destructive/, { timeout: 5_000 });
 
     // Step 2 active = "failed" → "passed" button must not have ring-success
-    const row2PassedBtn = page.locator('tbody tr').nth(1).getByRole('button', { name: /^passed$/i });
+    const row2PassedBtn = page.getByTestId('step-2').getByRole('button', { name: /^passed$/i });
     await expect(row2PassedBtn).not.toHaveClass(/ring-success/, { timeout: 5_000 });
   });
 });
@@ -105,10 +112,18 @@ test.describe('Evidence badge persistence after reload', () => {
     projectId = proj.id;
     const suite = await createSuite(apiCtx, authHeaders, projectId);
     const suiteId = suite.id;
-    const tc = await createCase(apiCtx, authHeaders, projectId, suiteId, 'Evidence Badge Case');
+    const tc = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'Evidence Badge Case',
+      [
+        { stepNumber: 1, action: 'Open the homepage', expectedResult: 'Homepage loads' },
+        { stepNumber: 2, action: 'Click Login button', expectedResult: 'Login form appears' },
+      ],
+    );
     caseId = tc.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 1, 'Open the homepage', 'Homepage loads');
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 2, 'Click Login button', 'Login form appears');
     const run = await createTestRun(apiCtx, authHeaders, projectId, [caseId]);
     runId = run.id;
 
@@ -123,31 +138,31 @@ test.describe('Evidence badge persistence after reload', () => {
 
   async function goToRun(page: Page) {
     await page.goto(`/projects/${projectId}/runs/${runId}`);
-    await expect(page.locator('table').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('steps-container')).toBeVisible({ timeout: 15_000 });
   }
 
   test('evidence badge shows count on initial load', async ({ page }) => {
     await goToRun(page);
-    const badge = page.locator('tbody tr').first().getByTestId('step-evidence-badge');
+    const badge = page.getByTestId('step-1').getByTestId('step-evidence-badge');
     await expect(badge).toBeVisible({ timeout: 10_000 });
     await expect(badge).toHaveText('1');
   });
 
   test('evidence badge count persists after page reload', async ({ page }) => {
     await goToRun(page);
-    await expect(page.locator('tbody tr').first().getByTestId('step-evidence-badge')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('step-1').getByTestId('step-evidence-badge')).toBeVisible({ timeout: 10_000 });
 
     await page.reload();
-    await expect(page.locator('table').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('steps-container')).toBeVisible({ timeout: 15_000 });
 
-    const badge = page.locator('tbody tr').first().getByTestId('step-evidence-badge');
+    const badge = page.getByTestId('step-1').getByTestId('step-evidence-badge');
     await expect(badge).toBeVisible({ timeout: 10_000 });
     await expect(badge).toHaveText('1');
   });
 
   test('evidence badge does NOT appear on step 2 (no evidence there)', async ({ page }) => {
     await goToRun(page);
-    const row2Badge = page.locator('tbody tr').nth(1).getByTestId('step-evidence-badge');
+    const row2Badge = page.getByTestId('step-2').getByTestId('step-evidence-badge');
     await expect(row2Badge).not.toBeVisible({ timeout: 5_000 });
   });
 });
@@ -170,10 +185,18 @@ test.describe('Defect badge persistence after reload', () => {
     projectId = proj.id;
     const suite = await createSuite(apiCtx, authHeaders, projectId);
     const suiteId = suite.id;
-    const tc = await createCase(apiCtx, authHeaders, projectId, suiteId, 'Defect Badge Case');
+    const tc = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'Defect Badge Case',
+      [
+        { stepNumber: 1, action: 'Open the homepage', expectedResult: 'Homepage loads' },
+        { stepNumber: 2, action: 'Click Login button', expectedResult: 'Login form appears' },
+      ],
+    );
     caseId = tc.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 1, 'Open the homepage', 'Homepage loads');
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 2, 'Click Login button', 'Login form appears');
     const run = await createTestRun(apiCtx, authHeaders, projectId, [caseId]);
     runId = run.id;
   });
@@ -185,7 +208,7 @@ test.describe('Defect badge persistence after reload', () => {
 
   async function goToRun(page: Page) {
     await page.goto(`/projects/${projectId}/runs/${runId}`);
-    await expect(page.locator('table').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('steps-container')).toBeVisible({ timeout: 15_000 });
   }
 
   test('defect badge appears after creating defect via step bug button', async ({ page }) => {
@@ -202,7 +225,7 @@ test.describe('Defect badge persistence after reload', () => {
     await dialog.getByRole('button', { name: /create defect/i }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
 
-    const badge = page.locator('tbody tr').first().getByTestId('step-defect-badge');
+    const badge = page.getByTestId('step-1').getByTestId('step-defect-badge');
     await expect(badge).toBeVisible({ timeout: 5_000 });
     await expect(badge).toHaveText('1');
 
@@ -220,14 +243,14 @@ test.describe('Defect badge persistence after reload', () => {
 
     // The defect created in the previous test is persisted to the backend.
     // On reload, stepIdx is reconstructed from the source field regex "· Step N".
-    const badge = page.locator('tbody tr').first().getByTestId('step-defect-badge');
+    const badge = page.getByTestId('step-1').getByTestId('step-defect-badge');
     await expect(badge).toBeVisible({ timeout: 10_000 });
     await expect(badge).toHaveText('1');
   });
 
   test('defect badge does NOT appear on step 2 (defect was filed against step 1)', async ({ page }) => {
     await goToRun(page);
-    const row2Badge = page.locator('tbody tr').nth(1).getByTestId('step-defect-badge');
+    const row2Badge = page.getByTestId('step-2').getByTestId('step-defect-badge');
     await expect(row2Badge).not.toBeVisible({ timeout: 5_000 });
   });
 });

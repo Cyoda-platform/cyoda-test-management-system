@@ -117,6 +117,44 @@ export async function createCase(
   return { id: body.id };
 }
 
+/**
+ * Creates a test case with optional steps using batch endpoint.
+ * This is the new API - steps are embedded in the case creation.
+ */
+export async function createCaseWithSteps(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  suiteId: string,
+  title: string,
+  steps?: Array<{ stepNumber: number; action: string; expectedResult: string }>,
+): Promise<{ id: string; steps?: Array<{ id: string }> }> {
+  const batchItem = {
+    title,
+    description: 'E2E test case',
+    preconditions: '',
+    priority: 'MEDIUM',
+    steps: steps || [],
+  };
+
+  const res = await api.post(
+    `${BASE}/projects/${projectId}/suites/${suiteId}/cases/batch`,
+    {
+      data: [batchItem],
+      headers: { ...headers, 'Content-Type': 'application/json' },
+    },
+  );
+  const body = await res.json();
+  assertOk(res.status(), body, 'createCaseWithSteps');
+  // Return the first (and only) created case
+  const createdCase = Array.isArray(body) ? body[0] : body;
+  return { id: createdCase.id, steps: createdCase.steps };
+}
+
+/**
+ * @deprecated Use createCaseWithSteps instead - the old step endpoint no longer exists
+ * Creates a test case step (legacy - endpoint removed in favor of embedded steps)
+ */
 export async function createStep(
   api: APIRequestContext,
   headers: Record<string, string>,
@@ -127,16 +165,9 @@ export async function createStep(
   action: string,
   expectedResult: string,
 ): Promise<{ id: string }> {
-  const res = await api.post(
-    `${BASE}/projects/${projectId}/suites/${suiteId}/cases/${caseId}/steps`,
-    {
-      data: { stepNumber, action, expectedResult, testCaseId: caseId },
-      headers: { ...headers, 'Content-Type': 'application/json' },
-    },
+  throw new Error(
+    'createStep endpoint no longer exists. Use createCaseWithSteps instead to create cases with embedded steps.',
   );
-  const body = await res.json();
-  assertOk(res.status(), body, 'createStep');
-  return { id: body.id };
 }
 
 export async function deleteCase(
@@ -173,7 +204,29 @@ export async function createTestRun(
   });
   const body = await res.json();
   assertOk(res.status(), body, 'createTestRun');
-  return { id: body.id };
+
+  const runId = body.id;
+
+  // Trigger the initialize_run workflow transition by updating the run
+  // This causes the backend's SnapshotProcessor to create TestRunCase/TestRunStep records
+  // Backend detects status='initial' and automatically sends the 'initialize_run' operation
+  await api.put(`${BASE}/projects/${projectId}/runs/${runId}`, {
+    data: {
+      name: body.name,
+      environment: body.environment,
+      buildVersion: body.buildVersion,
+      description: body.description,
+      caseIds: body.caseIds,
+      stepStatuses: body.stepStatuses || '{}',
+    },
+    headers: { ...headers, 'Content-Type': 'application/json' },
+  });
+
+  // Wait for SnapshotProcessor to complete asynchronously (executionMode: ASYNC_NEW_TX)
+  // It runs in a separate transaction and takes variable time depending on system load
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
+  return { id: runId };
 }
 
 export async function deleteTestRun(

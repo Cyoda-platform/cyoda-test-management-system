@@ -4,8 +4,7 @@ import {
   createProject,
   deleteProject,
   createSuite,
-  createCase,
-  createStep,
+  createCaseWithSteps,
   uploadAttachmentToCase,
   listAttachmentsByCase,
   deleteAttachment,
@@ -34,9 +33,16 @@ test.describe('Case attachments', () => {
     projectId = proj.id;
     const suite = await createSuite(apiCtx, authHeaders, projectId);
     suiteId = suite.id;
-    const tc = await createCase(apiCtx, authHeaders, projectId, suiteId, 'Attachment E2E Case');
+    // Create case with embedded steps (new API)
+    const tc = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'Attachment E2E Case',
+      [{ stepNumber: 1, action: 'Do thing', expectedResult: 'Thing done' }],
+    );
     caseId = tc.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 1, 'Do thing', 'Thing done');
   });
 
   test.afterAll(async () => {

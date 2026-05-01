@@ -4,8 +4,7 @@ import {
   createProject,
   deleteProject,
   createSuite,
-  createCase,
-  createStep,
+  createCaseWithSteps,
   createTestRun,
   uploadEvidence,
   listAttachmentsByCase,
@@ -35,10 +34,19 @@ test.describe('Evidence attachments', () => {
     projectId = proj.id;
     const suite = await createSuite(apiCtx, authHeaders, projectId);
     const suiteId = suite.id;
-    const tc = await createCase(apiCtx, authHeaders, projectId, suiteId, 'Evidence E2E Case');
+    // Create case with embedded steps (new API)
+    const tc = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'Evidence E2E Case',
+      [
+        { stepNumber: 1, action: 'Step One', expectedResult: 'Expected One' },
+        { stepNumber: 2, action: 'Step Two', expectedResult: 'Expected Two' },
+      ],
+    );
     caseId = tc.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 1, 'Step One', 'Expected One');
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId, 2, 'Step Two', 'Expected Two');
     const run1 = await createTestRun(apiCtx, authHeaders, projectId, [caseId]);
     runId1 = run1.id;
     const run2 = await createTestRun(apiCtx, authHeaders, projectId, [caseId]);

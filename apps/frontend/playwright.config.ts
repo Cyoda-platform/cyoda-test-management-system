@@ -6,6 +6,8 @@ dotenv.config({ path: '.env.test' });
 export default defineConfig({
   testDir: './e2e',
   timeout: 60_000,
+  workers: 1, // Run tests sequentially (one at a time)
+  fullyParallel: false, // Disable fully parallel execution
   globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173',

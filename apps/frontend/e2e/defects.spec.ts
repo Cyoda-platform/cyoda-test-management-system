@@ -5,8 +5,7 @@ import {
   deleteProject,
   createSuite,
   deleteSuite,
-  createCase,
-  createStep,
+  createCaseWithSteps,
   deleteCase,
   createTestRun,
   deleteTestRun,
@@ -42,14 +41,28 @@ test.describe('Defects page', () => {
     const suite = await createSuite(apiCtx, authHeaders, projectId);
     suiteId = suite.id;
 
-    const case1 = await createCase(apiCtx, authHeaders, projectId, suiteId, 'E2E Case One');
+    const case1 = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'E2E Case One',
+      [
+        { stepNumber: 1, action: 'Open the app', expectedResult: 'App opens' },
+        { stepNumber: 2, action: 'Click submit', expectedResult: 'Form submits' },
+      ],
+    );
     caseId1 = case1.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId1, 1, 'Open the app', 'App opens');
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId1, 2, 'Click submit', 'Form submits');
 
-    const case2 = await createCase(apiCtx, authHeaders, projectId, suiteId, 'E2E Case Two');
+    const case2 = await createCaseWithSteps(
+      apiCtx,
+      authHeaders,
+      projectId,
+      suiteId,
+      'E2E Case Two',
+      [{ stepNumber: 1, action: 'Navigate to settings', expectedResult: 'Settings visible' }],
+    );
     caseId2 = case2.id;
-    await createStep(apiCtx, authHeaders, projectId, suiteId, caseId2, 1, 'Navigate to settings', 'Settings visible');
 
     const run = await createTestRun(apiCtx, authHeaders, projectId, [caseId1, caseId2]);
     runId = run.id;
