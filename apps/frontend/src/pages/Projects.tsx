@@ -265,6 +265,7 @@ const Projects = () => {
         onClose={() => setDeleteProject(null)}
         onConfirm={handleDelete}
         projectName={deleteProject?.name ?? ''}
+        isLoading={deleteProjectMutation.isPending}
       />
     </div>
   );

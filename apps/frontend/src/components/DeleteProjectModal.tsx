@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -9,9 +9,10 @@ interface DeleteProjectModalProps {
   onClose: () => void;
   onConfirm: () => void;
   projectName: string;
+  isLoading?: boolean;
 }
 
-const DeleteProjectModal = ({ open, onClose, onConfirm, projectName }: DeleteProjectModalProps) => {
+const DeleteProjectModal = ({ open, onClose, onConfirm, projectName, isLoading }: DeleteProjectModalProps) => {
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-sm bg-card">
@@ -25,8 +26,22 @@ const DeleteProjectModal = ({ open, onClose, onConfirm, projectName }: DeletePro
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="mt-6">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button variant="destructive" onClick={onConfirm}>Delete</Button>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={isLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={isLoading}
+            className="flex items-center gap-2"
+          >
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isLoading ? 'Deleting...' : 'Delete'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
