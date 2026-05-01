@@ -144,12 +144,135 @@ The `import-schemas.sh` script automates the entire process:
 ./import-schemas.sh
 ```
 
-The script:
-1. Loads credentials from .env
-2. Gets JWT token from Cyoda
-3. Imports all 11 entity schemas
-4. Imports all 11 workflows
-5. Locks all models
+The script performs 4 main operations in sequence.
+
+### Step A: Load Credentials from .env
+
+```bash
+set -a; source .env; set +a
+```
+
+Reads from `.env`:
+- `CYODA_HOST` — Cyoda instance URL
+- `CYODA_CLIENT_ID` — M2M client ID
+- `CYODA_CLIENT_SECRET` — M2M client secret
+
+### Step B: Obtain JWT Token via M2M Authentication
+
+```bash
+TOKEN=$(curl -s -u "$CYODA_CLIENT_ID:$CYODA_CLIENT_SECRET" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'grant_type=client_credentials&scope=ROLE_M2M' \
+  "https://$CYODA_HOST/api/oauth/token" | \
+  python3 -c 'import sys, json; print(json.load(sys.stdin).get("access_token",""))')
+```
+
+Uses Machine-to-Machine (M2M) authentication to get a JWT bearer token. This token is then used for all subsequent API calls.
+
+### Step C: Import All 10 Entity Schemas
+
+For each entity (Project, Suite, TestCase, Defect, TestRun, TestRunCase, TestRunStep, Attachment, Report, ProjectCounter):
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  --data @apps/backend/src/main/resources/entity/project/version_1/project.json \
+  "https://$CYODA_HOST/api/model/import/JSON/SAMPLE_DATA/Project/1"
+```
+
+**What happens:**
+1. Reads the JSON file from `src/main/resources/entity/{entity_name}/version_1/{entity_name}.json`
+2. Sends it as the request body to Cyoda API
+3. **Cyoda automatically determines the schema from the JSON structure**
+4. Creates a Model in Cyoda based on JSON fields
+
+**Example:** If `project.json` contains:
+```json
+{
+  "id": "uuid-value",
+  "name": "string-value",
+  "description": "string-value"
+}
+```
+
+Then the Project Model will have fields: `id` (UUID), `name` (STRING), `description` (STRING).
+
+### Step D: Import All 10 Workflows
+
+For each entity workflow:
+
+```bash
+WORKFLOW=$(cat apps/backend/src/main/resources/workflow/project/version_1/Project.json)
+WRAPPED="{\"workflows\": [$WORKFLOW], \"importMode\": \"REPLACE\"}"
+
+curl -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$WRAPPED" \
+  "https://$CYODA_HOST/api/model/Project/1/workflow/import"
+```
+
+**What happens:**
+1. Reads the workflow JSON file
+2. Wraps it in the required format: `{"workflows": [...], "importMode": "REPLACE"}`
+3. Sends to Cyoda API to import the workflow into the Model
+
+### Step E: Lock All Models
+
+For each Model:
+
+```bash
+curl -X PUT -H "Authorization: Bearer $TOKEN" \
+  "https://$CYODA_HOST/api/model/Project/1/lock"
+```
+
+After import, all models are locked to prevent accidental schema modifications in the Cyoda UI.
+
+### Data Sources
+
+**Entity Schemas** are stored in:
+```
+apps/backend/src/main/resources/entity/
+├── project/version_1/project.json
+├── suite/version_1/suite.json
+├── testcase/version_1/testcase.json
+├── defect/version_1/defect.json
+├── testrun/version_1/testrun.json
+├── testruncase/version_1/testruncase.json
+├── testrunstep/version_1/testrunstep.json
+├── attachment/version_1/attachment.json
+├── report/version_1/report.json
+└── projectcounter/version_1/projectcounter.json
+```
+
+**Workflows** are stored in:
+```
+apps/backend/src/main/resources/workflow/
+├── project/version_1/Project.json
+├── suite/version_1/Suite.json
+├── testcase/version_1/TestCase.json
+├── defect/version_1/Defect.json
+├── testrun/version_1/TestRun.json
+├── testruncase/version_1/TestRunCase.json
+├── testrunstep/version_1/TestRunStep.json
+├── attachment/version_1/Attachment.json
+├── report/version_1/Report.json
+└── projectcounter/version_1/projectcounter.json
+```
+
+### Why HTTP curl API instead of WorkflowImportTool?
+
+❌ **WorkflowImportTool** (old approach):
+- Loaded files from incorrect directories
+- Ignored certain fields during import
+- Inconsistent schema determination
+
+✅ **HTTP curl API** (current approach):
+- Direct import via REST API
+- Cyoda determines schema from JSON structure
+- Guarantees all fields are imported correctly
+- Better error reporting and control
 
 ---
 
