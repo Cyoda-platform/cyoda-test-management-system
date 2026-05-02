@@ -172,11 +172,12 @@ const Defects = () => {
   };
 
   // Build a stable display-ID map: prefer the persisted displayId, fall back to
-  // position-based generation only for legacy records that predate the fix.
+  // using the first 8 chars of UUID for legacy records that predate the fix.
   const defectDisplayIdMap = useMemo(() => {
-    const sorted = [...defects].sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
     const map: Record<string, string> = {};
-    sorted.forEach((d, i) => { map[d.id] = d.displayId || listDisplayId('DEF', i); });
+    defects.forEach((d) => {
+      map[d.id] = d.displayId || `DEF-${d.id.substring(0, 8).toUpperCase()}`;
+    });
     return map;
   }, [defects]);
 
