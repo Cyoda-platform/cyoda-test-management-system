@@ -3,6 +3,7 @@ package com.java_template.application.config;
 import com.java_template.application.service.DemoSeederService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -13,13 +14,14 @@ import java.util.Map;
  * Automatically seeds the "E-commerce Platform" demo project once,
  * right after the application is fully started.
  *
- * Runs in a background thread with a short delay so the application
- * is fully ready and Cyoda connections are established before the
- * first entity-service calls are made.
+ * Disabled by default — enable with {@code app.demo.seed-on-startup=true}.
+ * In normal deployments the demo project is seeded by running {@code seed-demo.sh}
+ * after the application is up, not automatically on every startup.
  *
  * Idempotent: if the demo project already exists the seed is skipped silently.
  */
 @Component
+@ConditionalOnProperty(name = "app.demo.seed-on-startup", havingValue = "true", matchIfMissing = false)
 public class DemoSeederRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DemoSeederRunner.class);

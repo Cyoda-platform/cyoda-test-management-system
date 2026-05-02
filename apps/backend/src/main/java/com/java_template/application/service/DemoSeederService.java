@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Seeds the "E-commerce Platform" demo project into the TMS.
@@ -30,6 +32,13 @@ public class DemoSeederService {
     private static final long PHASE_DELAY_MS = 3_000;
     /** Short pause between create + update on the same entity. */
     private static final long STEP_DELAY_MS  =   800;
+    /**
+     * Thread pool size for parallel entity creation.
+     * Kept intentionally low — Cyoda enforces a concurrent gRPC request limit
+     * (typically 300). With 3 threads each making sequential calls we stay well
+     * within that budget while still getting ~3× speedup over fully sequential.
+     */
+    private static final int  SEED_PARALLELISM = 3;
 
     // ── Injected services ────────────────────────────────────────────────────
     private final ProjectService      projectService;
@@ -92,9 +101,20 @@ public class DemoSeederService {
     // ── Core seed logic ───────────────────────────────────────────────────────
 
     private Map<String, Object> runSeed(DemoData data) {
-        String now = Instant.now().toString();
+        ExecutorService exec = Executors.newFixedThreadPool(SEED_PARALLELISM, r -> {
+            Thread t = new Thread(r, "demo-seed");
+            t.setDaemon(true);
+            return t;
+        });
+        try {
+            return doSeed(data, exec);
+        } finally {
+            exec.shutdown();
+        }
+    }
 
-        // STEP 1 – Project
+    private Map<String, Object> doSeed(DemoData data, ExecutorService exec) {
+        // STEP 1 – Project (sequential — everything depends on projectId)
         ProjectDTO projectDTO = new ProjectDTO();
         projectDTO.setName(data.project.name);
         projectDTO.setDescription(data.project.description);
@@ -102,115 +122,114 @@ public class DemoSeederService {
         UUID projectId = project.getId();
         log.info("[DemoSeeder] Created project: {}", projectId);
 
-        // STEP 2-3 – Suites + TestCases
-        // ref → created UUID, ref → demo case data
-        Map<String, UUID>         caseRefToId  = new LinkedHashMap<>();
-        Map<String, DemoCase>     caseRefToData = new LinkedHashMap<>();
-        List<String>              allCaseIds   = new ArrayList<>();
+        // STEP 2-3 – Suites + TestCases (parallel per suite)
+        ConcurrentHashMap<String, UUID>     caseRefToId   = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, DemoCase> caseRefToData = new ConcurrentHashMap<>();
+        List<String> allCaseIds = Collections.synchronizedList(new ArrayList<>());
 
-        for (DemoSuite suiteData : data.suites) {
-            SuiteDTO suiteDTO = new SuiteDTO();
-            suiteDTO.setProjectId(projectId);
-            suiteDTO.setName(suiteData.name);
-            suiteDTO.setDescription(suiteData.description);
-            SuiteDTO suite = suiteService.createSuite(suiteDTO);
-            UUID suiteId = suite.getId();
-            log.info("[DemoSeeder] Created suite '{}': {}", suiteData.name, suiteId);
+        List<CompletableFuture<Void>> suiteFutures = data.suites.stream()
+                .map(suiteData -> CompletableFuture.runAsync(() -> {
+                    SuiteDTO suiteDTO = new SuiteDTO();
+                    suiteDTO.setProjectId(projectId);
+                    suiteDTO.setName(suiteData.name);
+                    suiteDTO.setDescription(suiteData.description);
+                    SuiteDTO suite = suiteService.createSuite(suiteDTO);
+                    UUID suiteId = suite.getId();
+                    log.info("[DemoSeeder] Created suite '{}': {}", suiteData.name, suiteId);
 
-            for (DemoCase caseData : suiteData.cases) {
-                TestCaseDTO tc = new TestCaseDTO();
-                tc.setProjectId(projectId);
-                tc.setSuiteId(suiteId);
-                tc.setTitle(caseData.title);
-                tc.setDescription(caseData.description);
-                tc.setPreconditions(caseData.preconditions);
-                tc.setPriority(Priority.valueOf(caseData.priority));
-                tc.setSteps(toStepDTOs(caseData.steps));
+                    for (DemoCase caseData : suiteData.cases) {
+                        TestCaseDTO tc = new TestCaseDTO();
+                        tc.setProjectId(projectId);
+                        tc.setSuiteId(suiteId);
+                        tc.setTitle(caseData.title);
+                        tc.setDescription(caseData.description);
+                        tc.setPreconditions(caseData.preconditions);
+                        tc.setPriority(Priority.valueOf(caseData.priority));
+                        tc.setSteps(toStepDTOs(caseData.steps));
+                        TestCaseDTO created = testCaseService.createTestCase(tc);
+                        caseRefToId.put(caseData.ref, created.getId());
+                        caseRefToData.put(caseData.ref, caseData);
+                        allCaseIds.add(created.getId().toString());
+                        log.info("[DemoSeeder] Created case '{}' [{}]: {}", caseData.title, caseData.ref, created.getId());
+                    }
+                }, exec))
+                .toList();
+        joinAll(suiteFutures, "suites+cases");
+        sleep(PHASE_DELAY_MS);
 
-                TestCaseDTO created = testCaseService.createTestCase(tc);
-                caseRefToId.put(caseData.ref, created.getId());
-                caseRefToData.put(caseData.ref, caseData);
-                allCaseIds.add(created.getId().toString());
-                log.info("[DemoSeeder] Created case '{}' [{}]: {}", caseData.title, caseData.ref, created.getId());
-            }
-        }
+        // STEP 4 – Case attachments (parallel — independent of each other)
+        List<CompletableFuture<Void>> attFutures = data.caseAttachments.stream()
+                .map(att -> CompletableFuture.runAsync(() -> {
+                    UUID caseId = caseRefToId.get(att.caseRef);
+                    if (caseId == null) { log.warn("[DemoSeeder] Unknown caseRef for attachment: {}", att.caseRef); return; }
+                    AttachmentDTO a = buildAttachment(projectId, caseId, null, att.fileName, att.fileType, att.content, "CASE", null, null);
+                    attachmentService.uploadAttachment(a);
+                    log.info("[DemoSeeder] Attached '{}' to case {}", att.fileName, caseId);
+                }, exec))
+                .toList();
+        joinAll(attFutures, "case-attachments");
 
-        // STEP 4 – Case attachments (type = CASE)
-        for (DemoCaseAttachment att : data.caseAttachments) {
-            UUID caseId = caseRefToId.get(att.caseRef);
-            if (caseId == null) { log.warn("[DemoSeeder] Unknown caseRef for attachment: {}", att.caseRef); continue; }
-            AttachmentDTO a = buildAttachment(projectId, caseId, null, att.fileName, att.fileType, att.content, "CASE", null, null);
-            attachmentService.uploadAttachment(a);
-            log.info("[DemoSeeder] Attached '{}' to case {}", att.fileName, caseId);
-        }
-
-        // STEP 5 – TestRun (status will be set to 'initial' by createTestRun, then updated)
+        // STEP 5 – TestRun (sequential — needs complete caseIds list)
         TestRunDTO runDTO = new TestRunDTO();
         runDTO.setProjectId(projectId);
         runDTO.setName(data.testRun.name);
         runDTO.setEnvironment(data.testRun.environment);
         runDTO.setBuildVersion(data.testRun.buildVersion);
         runDTO.setDescription(data.testRun.description);
-        runDTO.setCaseIds(allCaseIds);
+        runDTO.setCaseIds(new ArrayList<>(allCaseIds));
         TestRunDTO run = testRunService.createTestRun(runDTO);
         UUID runId = run.getId();
         log.info("[DemoSeeder] Created TestRun: {}", runId);
-
-        // Wait for Cyoda to index the TestRun before creating TestRunCases
         sleep(PHASE_DELAY_MS);
 
-        // STEP 6-8 – TestRunCases + TestRunSteps + build stepStatuses map
-        Map<String, UUID>   caseRefToRunCaseId = new LinkedHashMap<>();
-        Map<String, String> stepStatusMap      = new LinkedHashMap<>(); // "caseId::stepN" → status
-        int totalPassed = 0, totalFailed = 0, totalSkipped = 0;
+        // STEP 6-8 – TestRunCases + TestRunSteps (parallel per case)
+        ConcurrentHashMap<String, UUID>   caseRefToRunCaseId = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, String> stepStatusMap      = new ConcurrentHashMap<>();
+        AtomicInteger totalPassed  = new AtomicInteger(0);
+        AtomicInteger totalFailed  = new AtomicInteger(0);
+        AtomicInteger totalSkipped = new AtomicInteger(0);
 
-        for (Map.Entry<String, UUID> entry : caseRefToId.entrySet()) {
-            String   ref    = entry.getKey();
-            UUID     caseId = entry.getValue();
-            DemoCase cd     = caseRefToData.get(ref);
+        List<CompletableFuture<Void>> trcFutures = new ArrayList<>(caseRefToId.entrySet()).stream()
+                .map(entry -> CompletableFuture.runAsync(() -> {
+                    String   ref    = entry.getKey();
+                    UUID     caseId = entry.getValue();
+                    DemoCase cd     = caseRefToData.get(ref);
 
-            TestRunCaseDTO trc = buildTestRunCase(runId, caseId, projectId, cd);
-            TestRunCaseDTO createdTrc = testRunCaseService.createTestRunCase(trc);
-            UUID trcId = createdTrc.getId();
-            caseRefToRunCaseId.put(ref, trcId);
+                    TestRunCaseDTO trc = buildTestRunCase(runId, caseId, projectId, cd);
+                    TestRunCaseDTO createdTrc = testRunCaseService.createTestRunCase(trc);
+                    UUID trcId = createdTrc.getId();
+                    caseRefToRunCaseId.put(ref, trcId);
 
-            // Create TestRunStep for every step, apply status
-            for (int i = 0; i < cd.steps.size(); i++) {
-                DemoStep   stepData   = cd.steps.get(i);
-                String     outcome    = (i < cd.stepOutcomes.size()) ? cd.stepOutcomes.get(i) : "UNTESTED";
+                    for (int i = 0; i < cd.steps.size(); i++) {
+                        DemoStep stepData = cd.steps.get(i);
+                        String   outcome  = (i < cd.stepOutcomes.size()) ? cd.stepOutcomes.get(i) : "UNTESTED";
 
-                TestRunStepDTO trs = new TestRunStepDTO();
-                trs.setTestRunCaseId(trcId);
-                trs.setStepNumber(stepData.stepNumber);
-                trs.setAction(stepData.action);
-                trs.setExpectedResult(stepData.expectedResult);
-                TestRunStepDTO createdTrs = testRunStepService.createTestRunStep(trs);
+                        TestRunStepDTO trs = new TestRunStepDTO();
+                        trs.setTestRunCaseId(trcId);
+                        trs.setStepNumber(stepData.stepNumber);
+                        trs.setAction(stepData.action);
+                        trs.setExpectedResult(stepData.expectedResult);
+                        TestRunStepDTO createdTrs = testRunStepService.createTestRunStep(trs);
 
-                // Short pause so Cyoda indexes the step before we update it
-                sleep(STEP_DELAY_MS);
-                // NOTE: actualResult is not passed — Cyoda entity schema defines it as null-only.
-                // Status is enough to show PASSED/FAILED/SKIPPED in the UI.
-                withRetry("updateTestRunStep " + createdTrs.getId(), 3, 1_500,
-                        () -> testRunStepService.updateTestRunStep(createdTrs.getId(), outcome, null));
+                        sleep(STEP_DELAY_MS);
+                        withRetry("updateTestRunStep " + createdTrs.getId(), 3, 1_500,
+                                () -> testRunStepService.updateTestRunStep(createdTrs.getId(), outcome, null));
 
-                // Accumulate into flat map: "testCaseId::stepNumber"
-                stepStatusMap.put(caseId + "::" + stepData.stepNumber, outcome.toUpperCase());
-            }
+                        stepStatusMap.put(caseId + "::" + stepData.stepNumber, outcome.toUpperCase());
+                    }
 
-            // Update TestRunCase status
-            testRunCaseService.updateTestRunCaseStatus(trcId, cd.runOutcome);
-            switch (cd.runOutcome) {
-                case "PASSED"  -> totalPassed++;
-                case "FAILED"  -> totalFailed++;
-                case "SKIPPED" -> totalSkipped++;
-            }
-        }
-
-        // Wait for Cyoda to settle all RunCase/RunStep writes before touching the Run FSM
+                    testRunCaseService.updateTestRunCaseStatus(trcId, cd.runOutcome);
+                    switch (cd.runOutcome) {
+                        case "PASSED"  -> totalPassed.incrementAndGet();
+                        case "FAILED"  -> totalFailed.incrementAndGet();
+                        case "SKIPPED" -> totalSkipped.incrementAndGet();
+                    }
+                }, exec))
+                .toList();
+        joinAll(trcFutures, "testRunCases+steps");
         sleep(PHASE_DELAY_MS);
 
-        // STEP 9 – Update TestRun: stepStatuses, counters, status=active
-        // Retry fetching the run in case Cyoda hasn't propagated the latest state yet
+        // STEP 9 – Update TestRun (sequential — FSM transition)
         final TestRunDTO[] runHolder = {run};
         withRetry("getTestRunById " + runId, 5, 2_000, () -> {
             runHolder[0] = testRunService.getTestRunById(runId)
@@ -218,54 +237,56 @@ public class DemoSeederService {
             return runHolder[0];
         });
         TestRunDTO latestRun = runHolder[0];
-        latestRun.setStepStatusesFromMap(stepStatusMap);
-        latestRun.setPassed(totalPassed);
-        latestRun.setFailed(totalFailed);
-        latestRun.setSkipped(totalSkipped);
+        latestRun.setStepStatusesFromMap(new HashMap<>(stepStatusMap));
+        latestRun.setPassed(totalPassed.get());
+        latestRun.setFailed(totalFailed.get());
+        latestRun.setSkipped(totalSkipped.get());
         latestRun.setUntested(0);
         latestRun.setStatus("active");
         withRetry("updateTestRun " + runId, 3, 2_000,
                 () -> testRunService.updateTestRun(runId, latestRun));
         log.info("[DemoSeeder] TestRun updated — passed={} failed={} skipped={}", totalPassed, totalFailed, totalSkipped);
-
-        // Wait before creating defects so the run update is indexed
         sleep(PHASE_DELAY_MS);
 
-        // STEP 10 – Defects (linked to run + runCase + case)
-        Map<String, UUID> defectRefToId = new LinkedHashMap<>();
-        for (DemoDefect dd : data.defects) {
-            UUID caseId    = caseRefToId.get(dd.caseRef);
-            UUID runCaseId = caseRefToRunCaseId.get(dd.caseRef);
-            if (caseId == null) { log.warn("[DemoSeeder] Unknown caseRef for defect: {}", dd.caseRef); continue; }
+        // STEP 10 – Defects (parallel — independent of each other)
+        ConcurrentHashMap<String, UUID> defectRefToId = new ConcurrentHashMap<>();
+        List<CompletableFuture<Void>> defectFutures = data.defects.stream()
+                .map(dd -> CompletableFuture.runAsync(() -> {
+                    UUID caseId    = caseRefToId.get(dd.caseRef);
+                    UUID runCaseId = caseRefToRunCaseId.get(dd.caseRef);
+                    if (caseId == null) { log.warn("[DemoSeeder] Unknown caseRef for defect: {}", dd.caseRef); return; }
+                    DefectDTO defect = new DefectDTO();
+                    defect.setProjectId(projectId);
+                    defect.setTestRunId(runId);
+                    defect.setTestRunCaseId(runCaseId);
+                    defect.setTestCaseId(caseId);
+                    defect.setTitle(dd.title);
+                    defect.setDescription(dd.description);
+                    defect.setSeverity(dd.severity);
+                    defect.setSource("Step " + dd.stepNumber);
+                    DefectDTO created = defectService.createDefect(defect);
+                    defectRefToId.put(dd.caseRef + "::" + dd.stepNumber, created.getId());
+                    log.info("[DemoSeeder] Created defect '{}': {}", dd.title, created.getId());
+                }, exec))
+                .toList();
+        joinAll(defectFutures, "defects");
 
-            DefectDTO defect = new DefectDTO();
-            defect.setProjectId(projectId);
-            defect.setTestRunId(runId);
-            defect.setTestRunCaseId(runCaseId);
-            defect.setTestCaseId(caseId);
-            defect.setTitle(dd.title);
-            defect.setDescription(dd.description);
-            defect.setSeverity(dd.severity);
-            defect.setSource("Step " + dd.stepNumber);
+        // STEP 11 – Evidence attachments (parallel — independent of each other)
+        List<CompletableFuture<Void>> evFutures = data.evidenceAttachments.stream()
+                .map(ev -> CompletableFuture.runAsync(() -> {
+                    UUID caseId = caseRefToId.get(ev.caseRef);
+                    if (caseId == null) { log.warn("[DemoSeeder] Unknown caseRef for evidence: {}", ev.caseRef); return; }
+                    AttachmentDTO a = buildAttachment(projectId, caseId, null,
+                            ev.fileName, ev.fileType, ev.content, "EVIDENCE", runId, String.valueOf(ev.stepNumber));
+                    attachmentService.uploadAttachment(a);
+                    log.info("[DemoSeeder] Attached evidence '{}' to case {} step {}", ev.fileName, caseId, ev.stepNumber);
+                }, exec))
+                .toList();
+        joinAll(evFutures, "evidence-attachments");
 
-            DefectDTO created = defectService.createDefect(defect);
-            defectRefToId.put(dd.caseRef + "::" + dd.stepNumber, created.getId());
-            log.info("[DemoSeeder] Created defect '{}': {}", dd.title, created.getId());
-        }
-
-        // STEP 11 – Evidence attachments (type = EVIDENCE, linked to run + case + step)
-        for (DemoEvidence ev : data.evidenceAttachments) {
-            UUID caseId = caseRefToId.get(ev.caseRef);
-            if (caseId == null) { log.warn("[DemoSeeder] Unknown caseRef for evidence: {}", ev.caseRef); continue; }
-            AttachmentDTO a = buildAttachment(projectId, caseId, null,
-                    ev.fileName, ev.fileType, ev.content, "EVIDENCE", runId, String.valueOf(ev.stepNumber));
-            attachmentService.uploadAttachment(a);
-            log.info("[DemoSeeder] Attached evidence '{}' to case {} step {}", ev.fileName, caseId, ev.stepNumber);
-        }
-
-        // STEP 12 – Report
-        String snapshotData = buildSnapshotData(data, totalPassed, totalFailed, totalSkipped,
-                run.getEnvironment(), run.getBuildVersion(), run.getName(), defectRefToId, data.defects);
+        // STEP 12 – Report (sequential — needs all data)
+        String snapshotData = buildSnapshotData(data, totalPassed.get(), totalFailed.get(), totalSkipped.get(),
+                run.getEnvironment(), run.getBuildVersion(), run.getName(), new HashMap<>(defectRefToId), data.defects);
         ReportDTO reportDTO = new ReportDTO();
         reportDTO.setProjectId(projectId);
         reportDTO.setName(data.report.name);
@@ -283,7 +304,7 @@ public class DemoSeederService {
                 "projectId", projectId.toString(),
                 "runId",     runId.toString(),
                 "reportId",  report.getId().toString(),
-                "summary",   Map.of("passed", totalPassed, "failed", totalFailed, "skipped", totalSkipped)
+                "summary",   Map.of("passed", totalPassed.get(), "failed", totalFailed.get(), "skipped", totalSkipped.get())
         );
     }
 
@@ -376,6 +397,16 @@ public class DemoSeederService {
         } catch (Exception e) {
             log.warn("[DemoSeeder] Could not build snapshotData: {}", e.getMessage());
             return "{}";
+        }
+    }
+
+    /** Waits for all futures; rethrows the first exception with a clear label. */
+    private void joinAll(List<CompletableFuture<Void>> futures, String label) {
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            throw new RuntimeException("Parallel " + label + " failed: " + cause.getMessage(), cause);
         }
     }
 

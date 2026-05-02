@@ -32,6 +32,10 @@ springdoc:
 # Environment-specific settings for Cross-Origin Resource Sharing
 # Override via environment variables or profile-specific YAML files for different environments (dev/staging/prod)
 app:
+  demo:
+    # Set to true to auto-seed the demo project on startup.
+    # Normally keep false and run seed-demo.sh once after deploy instead.
+    seed-on-startup: false
   auth:
     # Local PoC JWT signing secret. Set APP_AUTH_SECRET in any real environment.
     # MIGRATION: Delete this entire block when switching to a real IdP and add:
