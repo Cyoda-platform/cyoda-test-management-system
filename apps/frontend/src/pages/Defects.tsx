@@ -453,8 +453,8 @@ const Defects = () => {
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card cursor-pointer"
                       onClick={() => openView(d)}
                     >
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>{defectDisplayIdMap[d.id] ?? '-'}</td>
-                      <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider max-w-[80px] truncate" title={d.id}>{defectDisplayIdMap[d.id] ?? '-'}</td>
+                      <td className="px-5 py-3.5 font-medium text-foreground hover:text-accent transition-colors cursor-pointer">{d.title}</td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                         {updatingId === d.id ? (
                           <span className="inline-flex items-center gap-1 h-7 px-2.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
@@ -492,7 +492,7 @@ const Defects = () => {
                           </Select>
                         )}
                       </td>
-                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">
+                      <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider max-w-[150px] truncate">
                         {(() => {
                           const parts: string[] = [];
                           if (d.testRunId) {
@@ -503,7 +503,7 @@ const Defects = () => {
                           return parts.length > 0 ? parts.join(' · ') : '—';
                         })()}
                       </td>
-                      <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">{formatDate(d.createdAt)}</td>
+                      <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider max-w-[130px] truncate">{formatDate(d.createdAt)}</td>
                       <td className="px-5 py-3.5 w-px whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <button

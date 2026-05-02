@@ -237,7 +237,7 @@ const TestRuns = () => {
                 <td className="px-5 py-3.5 font-mono text-[10px] text-purple-600 tracking-wider" title={run.id ?? undefined}>{runDisplayIdMap[run.id] ?? '-'}</td>
                 <td className="px-5 py-3.5 font-medium text-foreground">
                   <button
-                    className="hover:text-primary transition-colors text-left cursor-pointer"
+                    className="hover:text-accent transition-colors text-left cursor-pointer"
                     onClick={() => navigate(`/projects/${projectId}/runs/${run.id}`)}
                   >
                     {run.name ?? 'Unnamed Run'}

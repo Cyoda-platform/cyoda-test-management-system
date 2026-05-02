@@ -112,16 +112,16 @@ const ViewDefectModal = ({
           {/* External Link */}
           <div>
             <label className={labelCls}>External Link</label>
-            <div className="mt-0 h-9 px-3 py-2 rounded-md bg-white border border-input flex items-center gap-2">
+            <div className="mt-0 min-h-9 px-3 py-2 rounded-md bg-white border border-input flex items-start gap-2">
               {defect.link ? (
                 <a
                   href={defect.link}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 underline text-sm inline-flex items-center gap-1"
+                  className="text-blue-600 hover:text-blue-800 underline text-sm inline-flex items-center gap-1 break-all"
                 >
                   {defect.link}
-                  <ExternalLink className="h-3 w-3" />
+                  <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
               ) : (
                 <p className="text-muted-foreground text-sm">-</p>

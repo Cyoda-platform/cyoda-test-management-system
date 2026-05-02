@@ -194,7 +194,7 @@ const Attachments = () => {
                             onClick={() => isPreviewable(f.fileType) ? setPreviewFile(f) : downloadWithAuth(downloadUrl(f), f.fileName)}
                           >
                             <Icon className="h-4 w-4 text-muted-foreground shrink-0" strokeWidth={1.5} />
-                            <span className="font-medium text-foreground hover:text-primary transition-colors">{f.fileName}</span>
+                            <span className="font-medium text-foreground hover:text-accent transition-colors">{f.fileName}</span>
                           </button>
                         </td>
                         <td className="px-5 py-3.5 text-muted-foreground font-mono text-xs">{formatSize(f.fileSize)}</td>

@@ -160,7 +160,7 @@ const Reports = () => {
                         <td className="px-5 py-3.5 font-medium text-foreground">
                           <Link
                             to={`/projects/${projectId}/reports/${r.id}`}
-                            className="hover:underline"
+                            className="hover:text-accent transition-colors"
                           >
                             {r.name}
                           </Link>
