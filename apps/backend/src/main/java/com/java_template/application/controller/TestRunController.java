@@ -114,10 +114,8 @@ public class TestRunController {
             @PathVariable UUID id,
             HttpServletRequest request) {
         String role = (String) request.getAttribute("role");
-        log.warn("===== UNLOCK_RUN ===== role={}", role);
-        // Allow both Tester and Admin to unlock runs (case-insensitive)
-        if (role == null || (!role.equalsIgnoreCase("Tester") && !role.equalsIgnoreCase("Admin"))) {
-            log.warn("===== UNLOCK_RUN FORBIDDEN ===== role={} is not Tester or Admin", role);
+        if (role == null || (!"TESTER".equals(role) && !"ADMIN".equals(role))) {
+            log.warn("===== UNLOCK_RUN FORBIDDEN ===== role={} is not TESTER or ADMIN", role);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return testRunService.getTestRunById(id)

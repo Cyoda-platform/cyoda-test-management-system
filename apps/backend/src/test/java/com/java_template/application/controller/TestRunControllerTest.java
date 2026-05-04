@@ -211,7 +211,7 @@ class TestRunControllerTest {
         when(testRunService.unlockTestRun(eq(runId))).thenReturn(Optional.of(dto));
 
         mockMvc.perform(post("/projects/{pid}/runs/{id}/unlock", projectId, runId)
-                        .requestAttr("role", "Admin"))
+                        .requestAttr("role", "ADMIN"))
                 .andExpect(status().isOk());
     }
 
@@ -224,7 +224,7 @@ class TestRunControllerTest {
         when(testRunService.unlockTestRun(eq(runId))).thenReturn(Optional.of(dto));
 
         mockMvc.perform(post("/projects/{pid}/runs/{id}/unlock", projectId, runId)
-                        .requestAttr("role", "Tester"))
+                        .requestAttr("role", "TESTER"))
                 .andExpect(status().isOk());
     }
 
