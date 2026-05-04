@@ -1,7 +1,7 @@
 {
   "project": {
     "name": "E-commerce Platform",
-    "description": "End-to-end testing for the online retail platform, covering authentication, cart, checkout, and product catalog flows."
+    "description": "[DEMO] Comprehensive test project demonstrating complete TMS functionality. Features realistic e-commerce workflows including authentication, cart management, payment processing, and product catalog flows."
   },
   "testRun": {
     "name": "Regression Run - Sprint Snapshot",
