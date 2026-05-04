@@ -16,6 +16,7 @@ import {
 } from '@/hooks/useApi';
 import type { Project } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 const PAGE_SIZE = 10;
 
@@ -34,6 +35,9 @@ const Projects = () => {
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
+
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
 
   const currentPage = page + 1; // 1-indexed for UI
   // Backend doesn't return total count yet — disable "Next" when fewer than PAGE_SIZE items came back
@@ -92,13 +96,15 @@ const Projects = () => {
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <h1 className="text-2xl font-bold text-foreground tracking-[-0.02em]">Projects</h1>
-            <Button
-              onClick={() => setCreateOpen(true)}
-              className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground gap-2 border-0"
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.5} />
-              Create Project
-            </Button>
+            {isAdmin && (
+              <Button
+                onClick={() => setCreateOpen(true)}
+                className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground gap-2 border-0"
+              >
+                <Plus className="h-4 w-4" strokeWidth={1.5} />
+                Create Project
+              </Button>
+            )}
           </div>
 
           {/* Loading */}
@@ -122,13 +128,15 @@ const Projects = () => {
             <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground">
               <FolderOpen className="h-12 w-12 opacity-30" strokeWidth={1} />
               <p className="text-sm">No projects yet. Create your first one.</p>
-              <Button
-                onClick={() => setCreateOpen(true)}
-                className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground gap-2 border-0"
-              >
-                <Plus className="h-4 w-4" strokeWidth={1.5} />
-                Create Project
-              </Button>
+              {isAdmin && (
+                <Button
+                  onClick={() => setCreateOpen(true)}
+                  className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground gap-2 border-0"
+                >
+                  <Plus className="h-4 w-4" strokeWidth={1.5} />
+                  Create Project
+                </Button>
+              )}
             </div>
           )}
 
@@ -187,22 +195,26 @@ const Projects = () => {
                           >
                             <ExternalLink className="h-4 w-4" strokeWidth={1.5} />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            onClick={() => setEditProject(project)}
-                          >
-                            <Pencil className="h-4 w-4" strokeWidth={1.5} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => setDeleteProject(project)}
-                          >
-                            <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                          </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              onClick={() => setEditProject(project)}
+                            >
+                              <Pencil className="h-4 w-4" strokeWidth={1.5} />
+                            </Button>
+                          )}
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => setDeleteProject(project)}
+                            >
+                              <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
