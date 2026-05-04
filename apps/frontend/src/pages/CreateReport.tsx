@@ -128,9 +128,9 @@ const CreateReport = () => {
         },
       },
       {
-        onSuccess: () => {
+        onSuccess: (report) => {
           toast.success(`Report "${reportName}" created`);
-          navigate(`/projects/${projectId}/reports`);
+          navigate(`/projects/${projectId}/reports/${report.id}`);
         },
         onError: (e) => toast.error(e.message),
       },
