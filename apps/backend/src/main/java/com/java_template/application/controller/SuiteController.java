@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import com.java_template.common.dto.PageResult;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -28,7 +29,11 @@ public class SuiteController {
 
     @PostMapping
     @Operation(summary = "Create a new test suite")
-    public ResponseEntity<SuiteDTO> createSuite(@PathVariable UUID projectId, @Valid @RequestBody SuiteDTO suite) {
+    public ResponseEntity<SuiteDTO> createSuite(@PathVariable UUID projectId, @Valid @RequestBody SuiteDTO suite, HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         suite.setProjectId(projectId);
         SuiteDTO created = suiteService.createSuite(suite);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -54,7 +59,11 @@ public class SuiteController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Update a test suite")
-    public ResponseEntity<SuiteDTO> updateSuite(@PathVariable UUID projectId, @PathVariable UUID id, @Valid @RequestBody SuiteDTO suite) {
+    public ResponseEntity<SuiteDTO> updateSuite(@PathVariable UUID projectId, @PathVariable UUID id, @Valid @RequestBody SuiteDTO suite, HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (!suiteService.suiteExists(id)) {
             return ResponseEntity.notFound().build();
         }
@@ -64,8 +73,12 @@ public class SuiteController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete a test suite")
-    public ResponseEntity<Void> deleteSuite(@PathVariable UUID projectId, @PathVariable UUID id) {
+    @Operation(summary = "Delete a test suite (Admin only)")
+    public ResponseEntity<Void> deleteSuite(@PathVariable UUID projectId, @PathVariable UUID id, HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (suiteService.deleteSuite(id)) {
             return ResponseEntity.noContent().build();
         }

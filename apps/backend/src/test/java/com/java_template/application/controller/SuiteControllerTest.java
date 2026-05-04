@@ -67,6 +67,7 @@ public class SuiteControllerTest {
         when(suiteService.createSuite(any(SuiteDTO.class))).thenReturn(suite);
 
         mockMvc.perform(post("/projects/" + projectId + "/suites")
+                .requestAttr("role", "ADMIN")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(newSuite)))
                 .andExpect(status().isCreated())
@@ -99,6 +100,67 @@ public class SuiteControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(suiteId.toString()))
                 .andExpect(jsonPath("$.name").value("Test Suite"));
+    }
+
+    @Test
+    @DisplayName("PUT /suites/{id} — ADMIN role — returns 200")
+    public void testUpdateSuite() throws Exception {
+        SuiteDTO update = new SuiteDTO();
+        update.setName("Updated");
+
+        when(suiteService.suiteExists(suiteId)).thenReturn(true);
+        when(suiteService.updateSuite(eq(suiteId), any(SuiteDTO.class))).thenReturn(suite);
+
+        mockMvc.perform(put("/projects/" + projectId + "/suites/" + suiteId)
+                .requestAttr("role", "ADMIN")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(suiteId.toString()));
+    }
+
+    @Test
+    @DisplayName("DELETE /suites/{id} — ADMIN role — returns 204")
+    public void testDeleteSuite() throws Exception {
+        when(suiteService.deleteSuite(suiteId)).thenReturn(true);
+
+        mockMvc.perform(delete("/projects/" + projectId + "/suites/" + suiteId)
+                .requestAttr("role", "ADMIN"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("POST /suites — TESTER role — returns 403")
+    public void testCreateSuiteRequiresAdminRole() throws Exception {
+        SuiteDTO newSuite = new SuiteDTO();
+        newSuite.setName("Should Fail");
+
+        mockMvc.perform(post("/projects/" + projectId + "/suites")
+                .requestAttr("role", "TESTER")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(newSuite)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PUT /suites/{id} — TESTER role — returns 403")
+    public void testUpdateSuiteRequiresAdminRole() throws Exception {
+        SuiteDTO update = new SuiteDTO();
+        update.setName("Updated");
+
+        mockMvc.perform(put("/projects/" + projectId + "/suites/" + suiteId)
+                .requestAttr("role", "TESTER")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(update)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("DELETE /suites/{id} — TESTER role — returns 403")
+    public void testDeleteSuiteRequiresAdminRole() throws Exception {
+        mockMvc.perform(delete("/projects/" + projectId + "/suites/" + suiteId)
+                .requestAttr("role", "TESTER"))
+                .andExpect(status().isForbidden());
     }
 
 }
