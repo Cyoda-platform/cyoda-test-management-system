@@ -34,6 +34,7 @@ import {
   type Attachment,
   type TestRunCase,
 } from '@/lib/api';
+import { shouldAutoAdvance } from '@/lib/runUtils';
 
 const BASE_URL = import.meta.env.VITE_API_URL ??
   (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api');
@@ -826,7 +827,12 @@ const RunExecution = () => {
       });
     }
 
-    // ── 5. Auto-trigger defect modal on 'failed' — opens synchronously ────────
+    // ── 5. Auto-advance to next case on pass/skip ─────────────────────────────
+    if (shouldAutoAdvance(updated, selectedIdx, allCases.length)) {
+      setTimeout(() => setSelectedIdx(selectedIdx + 1), 600);
+    }
+
+    // ── 6. Auto-trigger defect modal on 'failed' — opens synchronously ────────
     // Previously this awaited ensureRunCaseId() before calling setDefectModalOpen,
     // adding a full network round-trip delay before the dialog appeared.
     // Now the modal opens immediately using whatever run-case ID is in the cache;
