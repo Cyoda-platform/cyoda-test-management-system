@@ -114,34 +114,57 @@ export function computeSnapshotData(
       .map((s, i) => [s.name, i]),
   );
 
-  let rawSuiteData;
-  if (deduped.length > 0) {
-    rawSuiteData = groupBySuite(deduped, suiteNameMap);
-  } else if (caseToSuiteMap && caseToSuiteMap.size > 0) {
-    // Fallback: derive per-case statuses from run data + repository case→suite mapping.
-    // Case IDs come from run.caseIds when available; otherwise extracted from
-    // run.stepStatuses keys (format: "caseId::stepNumber") so we still get suite data
-    // for runs that were created before caseIds was persisted on the run entity.
-    const fallbackCases: RunCaseWithMeta[] = runs.flatMap(run => {
-      const stepMap = runStepStatusMap.get(run.id) ?? {};
+  // Enrich deduped records: use caseToSuiteMap as fallback when suiteId is empty.
+  const enrichedDeduped: RunCaseWithMeta[] = deduped.map(rc => ({
+    ...rc,
+    suiteId: rc.suiteId || (caseToSuiteMap?.get(rc.testCaseId) ?? ''),
+  }));
 
-      // Prefer explicit caseIds; fall back to keys present in stepStatuses.
+  // Add UNTESTED entries for cases in run.caseIds that have no TestRunCase record.
+  // Also compute their status from stepStatuses in case they were partially executed.
+  const knownCaseIds = new Set(enrichedDeduped.map(rc => rc.testCaseId));
+  const extraCases: RunCaseWithMeta[] = [];
+  if (caseToSuiteMap && caseToSuiteMap.size > 0) {
+    runs.forEach(run => {
+      const stepMap = runStepStatusMap.get(run.id) ?? {};
       const caseIds: string[] = run.caseIds?.length
         ? run.caseIds
         : [...new Set(Object.keys(stepMap).map(k => k.split('::')[0]).filter(Boolean))];
+      caseIds.forEach(caseId => {
+        if (knownCaseIds.has(caseId)) return;
+        const suiteId = caseToSuiteMap.get(caseId);
+        if (!suiteId) return;
+        const caseSteps = Object.entries(stepMap)
+          .filter(([k]) => k.startsWith(`${caseId}::`))
+          .map(([, v]) => v.toLowerCase());
+        const status = computeCaseStatusFromSteps(caseSteps);
+        extraCases.push({ testCaseId: caseId, suiteId, testRunId: run.id, status, runCreatedAt: runCreatedAtMap.get(run.id) ?? '' });
+      });
+    });
+  }
 
+  const allCasesForSuite = [...enrichedDeduped, ...deduplicateRunCases(extraCases)];
+
+  let rawSuiteData;
+  if (allCasesForSuite.length > 0) {
+    rawSuiteData = groupBySuite(allCasesForSuite, suiteNameMap);
+  } else if (caseToSuiteMap && caseToSuiteMap.size > 0) {
+    // Final fallback when no TestRunCase records and no run.caseIds:
+    // derive case IDs from stepStatuses keys only.
+    const fallbackCases: RunCaseWithMeta[] = runs.flatMap(run => {
+      const stepMap = runStepStatusMap.get(run.id) ?? {};
+      const caseIds = [...new Set(Object.keys(stepMap).map(k => k.split('::')[0]).filter(Boolean))];
       return caseIds.flatMap(caseId => {
         const suiteId = caseToSuiteMap.get(caseId);
         if (!suiteId) return [];
         const caseSteps = Object.entries(stepMap)
           .filter(([k]) => k.startsWith(`${caseId}::`))
           .map(([, v]) => v.toLowerCase());
-        const status = computeCaseStatusFromSteps(caseSteps).toUpperCase();
+        const status = computeCaseStatusFromSteps(caseSteps);
         return [{ testCaseId: caseId, suiteId, testRunId: run.id, status, runCreatedAt: run.createdAt ?? '' }];
       });
     });
-    const dedupedFallback = deduplicateRunCases(fallbackCases);
-    rawSuiteData = groupBySuite(dedupedFallback, suiteNameMap);
+    rawSuiteData = groupBySuite(deduplicateRunCases(fallbackCases), suiteNameMap);
   } else {
     rawSuiteData = [];
   }

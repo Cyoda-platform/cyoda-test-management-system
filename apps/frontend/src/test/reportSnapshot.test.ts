@@ -263,6 +263,74 @@ describe('computeSnapshotData — suiteData fallback via caseToSuiteMap when no 
   });
 });
 
+describe('computeSnapshotData — suite data with partial TestRunCase coverage', () => {
+  it('shows all suites including those with only untested cases and no TestRunCase records', () => {
+    // Exact user scenario: 1 run, 4 suites, only suite s1 has TestRunCase records (4 tested cases).
+    // Suites s2/s3/s4 have cases in run.caseIds but zero TestRunCase records.
+    const cases: TestRunCase[] = [
+      baseCase({ id: 'rc1', testCaseId: 'c1', suiteId: 's1', status: 'PASSED' }),
+      baseCase({ id: 'rc2', testCaseId: 'c2', suiteId: 's1', status: 'FAILED' }),
+      baseCase({ id: 'rc3', testCaseId: 'c3', suiteId: 's1', status: 'PASSED' }),
+      baseCase({ id: 'rc4', testCaseId: 'c4', suiteId: 's1', status: 'PASSED' }),
+    ];
+    const run = baseRun({
+      caseIds: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10'],
+    });
+    const suites: Suite[] = [
+      baseSuite({ id: 's1', name: 'Suite 1', sortOrder: 1 }),
+      baseSuite({ id: 's2', name: 'Suite 2', sortOrder: 2 }),
+      baseSuite({ id: 's3', name: 'Suite 3', sortOrder: 3 }),
+      baseSuite({ id: 's4', name: 'Suite 4', sortOrder: 4 }),
+    ];
+    const caseToSuiteMap = new Map([
+      ['c1', 's1'], ['c2', 's1'], ['c3', 's1'], ['c4', 's1'],
+      ['c5', 's2'], ['c6', 's2'],
+      ['c7', 's3'], ['c8', 's3'],
+      ['c9', 's4'], ['c10', 's4'],
+    ]);
+    const result = computeSnapshotData(cases, [run], suites, [], caseToSuiteMap);
+    expect(result.suiteData).toHaveLength(4);
+    const s1 = result.suiteData.find(s => s.suite === 'Suite 1')!;
+    expect(s1.passed).toBe(3);
+    expect(s1.failed).toBe(1);
+    expect(s1.untested).toBe(0);
+    const s2 = result.suiteData.find(s => s.suite === 'Suite 2')!;
+    expect(s2.untested).toBe(2);
+    const s3 = result.suiteData.find(s => s.suite === 'Suite 3')!;
+    expect(s3.untested).toBe(2);
+    const s4 = result.suiteData.find(s => s.suite === 'Suite 4')!;
+    expect(s4.untested).toBe(2);
+  });
+
+  it('uses caseToSuiteMap as fallback suiteId when TestRunCase.suiteId is empty', () => {
+    const cases: TestRunCase[] = [
+      baseCase({ id: 'rc1', testCaseId: 'c1', suiteId: '', status: 'PASSED' }),
+      baseCase({ id: 'rc2', testCaseId: 'c2', suiteId: '', status: 'UNTESTED' }),
+    ];
+    const suites: Suite[] = [baseSuite({ id: 's1', name: 'Suite A' })];
+    const caseToSuiteMap = new Map([['c1', 's1'], ['c2', 's1']]);
+    const result = computeSnapshotData(cases, [baseRun()], suites, [], caseToSuiteMap);
+    expect(result.suiteData).toHaveLength(1);
+    expect(result.suiteData[0].passed).toBe(1);
+    expect(result.suiteData[0].untested).toBe(1);
+  });
+
+  it('does not double-count cases that have both a TestRunCase record and appear in run.caseIds', () => {
+    const cases: TestRunCase[] = [
+      baseCase({ id: 'rc1', testCaseId: 'c1', suiteId: 's1', status: 'PASSED' }),
+    ];
+    const run = baseRun({ caseIds: ['c1', 'c2'] });
+    const suites: Suite[] = [baseSuite({ id: 's1', name: 'Suite A' })];
+    const caseToSuiteMap = new Map([['c1', 's1'], ['c2', 's1']]);
+    const result = computeSnapshotData(cases, [run], suites, [], caseToSuiteMap);
+    expect(result.suiteData).toHaveLength(1);
+    // c1 counted once (PASSED from TestRunCase), c2 counted once (UNTESTED from caseIds)
+    expect(result.suiteData[0].passed).toBe(1);
+    expect(result.suiteData[0].untested).toBe(1);
+    expect(result.suiteData[0].passed + result.suiteData[0].untested).toBe(2);
+  });
+});
+
 describe('computeSnapshotData — defects', () => {
   const baseDefect = (overrides: Partial<Defect> = {}): Defect => ({
     id: 'd1', projectId: 'p1', title: 'Bug 1', description: '',

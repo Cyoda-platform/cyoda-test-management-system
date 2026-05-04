@@ -165,13 +165,40 @@ const ReportDetail = () => {
     const sort = (data: ReturnType<typeof groupBySuite>) =>
       data.sort((a, b) => (suiteOrderMap.get(a.suite) ?? Infinity) - (suiteOrderMap.get(b.suite) ?? Infinity));
 
-    // Primary: TestRunCase records have suiteId — most accurate.
-    if (deduped.length > 0) return sort(groupBySuite(deduped, suiteNameMap));
+    // Enrich deduped records: use caseToSuiteMap as fallback when suiteId is empty.
+    const enriched: RunCaseWithMeta[] = deduped.map(rc => ({
+      ...rc,
+      suiteId: rc.suiteId || caseToSuiteMap.get(rc.testCaseId) || '',
+    }));
 
-    // Fallback: derive from run.caseIds + run.stepStatuses + repository case→suite map.
+    // Add UNTESTED entries for cases in run.caseIds that have no TestRunCase record.
+    const knownCaseIds = new Set(enriched.map(rc => rc.testCaseId));
+    const runCreatedAtMap = new Map(linkedRuns.map(r => [r.id, r.createdAt ?? '']));
+    const extraCases: RunCaseWithMeta[] = linkedRuns.flatMap(run => {
+      const stepMap = runStepStatusMap.get(run.id) ?? {};
+      return (run.caseIds ?? []).flatMap(caseId => {
+        if (knownCaseIds.has(caseId)) return [];
+        const suiteId = caseToSuiteMap.get(caseId) ?? '';
+        if (!suiteId) return [];
+        const caseSteps = Object.entries(stepMap)
+          .filter(([k]) => k.startsWith(`${caseId}::`))
+          .map(([, v]) => v.toLowerCase());
+        const status = caseSteps.length === 0 ? 'UNTESTED'
+          : caseSteps.some(s => s === 'failed') ? 'FAILED'
+          : caseSteps.every(s => s === 'passed') ? 'PASSED'
+          : caseSteps.some(s => s === 'skipped') && !caseSteps.some(s => s === 'untested') ? 'SKIPPED'
+          : 'UNTESTED';
+        return [{ testCaseId: caseId, suiteId, testRunId: run.id, status, runCreatedAt: runCreatedAtMap.get(run.id) ?? '' }];
+      });
+    });
+
+    const allCases = [...enriched, ...deduplicateRunCases(extraCases)];
+    if (allCases.length > 0) return sort(groupBySuite(allCases, suiteNameMap));
+
+    // Final fallback: derive from run.caseIds + run.stepStatuses + caseToSuiteMap.
     const liveSnapshot = computeSnapshotData([], linkedRuns, suites, [], caseToSuiteMap);
     return liveSnapshot.suiteData;
-  }, [parsedSnapshot, deduped, linkedRuns, suites, caseToSuiteMap]);
+  }, [parsedSnapshot, deduped, linkedRuns, suites, caseToSuiteMap, runStepStatusMap]);
 
   if (reportLoading) {
     return (
