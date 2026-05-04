@@ -1135,9 +1135,11 @@ const Repository = () => {
             <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => setExportOpen(true)}>
               <Upload className="h-3.5 w-3.5" strokeWidth={1.5} /> Export
             </Button>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => { setImportFile(null); setImportOpen(true); }}>
-              <Download className="h-3.5 w-3.5" strokeWidth={1.5} /> Import
-            </Button>
+            {isAdmin && (
+              <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => { setImportFile(null); setImportOpen(true); }}>
+                <Download className="h-3.5 w-3.5" strokeWidth={1.5} /> Import
+              </Button>
+            )}
             {isAdmin && (
               <Button
                 size="sm"
