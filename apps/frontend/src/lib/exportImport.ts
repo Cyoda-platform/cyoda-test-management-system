@@ -493,18 +493,21 @@ export async function performImport(
     // 1. Resolve the target suite for this case
     let resolvedSuite: Suite | undefined;
 
-    if (pc.sourceSuiteId) {
-      // Try by exact ID first
-      resolvedSuite = suiteById.get(pc.sourceSuiteId);
-    }
-    // Only search by name if targetSuiteId is NOT '__new__' (creating new suites)
-    // When '__new__', we should create new suite(s) instead of reusing existing ones
-    if (!resolvedSuite && pc.sourceSuiteName && targetSuiteId !== '__new__') {
-      resolvedSuite = suiteByName.get(pc.sourceSuiteName.toLowerCase().trim());
-    }
-    // Fallback to user-selected target suite (only if not creating new)
-    if (!resolvedSuite && targetSuiteId !== '__new__') {
+    // PRIORITY 1: User-selected target suite (if not '__new__')
+    // When user explicitly selects a suite, ALL cases go there regardless of source
+    if (targetSuiteId !== '__new__') {
       resolvedSuite = suiteById.get(targetSuiteId);
+    } else {
+      // PRIORITY 2: Source suite info (only when creating new suites)
+      // Try by exact source ID first
+      if (pc.sourceSuiteId) {
+        resolvedSuite = suiteById.get(pc.sourceSuiteId);
+      }
+      // Then try by source suite name
+      if (!resolvedSuite && pc.sourceSuiteName) {
+        resolvedSuite = suiteByName.get(pc.sourceSuiteName.toLowerCase().trim());
+      }
+      // If no source suite found and targetSuiteId is '__new__', a new suite will be created below
     }
 
     // 2. Check for duplicate
