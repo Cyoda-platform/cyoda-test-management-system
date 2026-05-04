@@ -30,6 +30,7 @@ import {
 import { suitesApi, testCasesApi, attachmentsApi } from '@/lib/api';
 import { AuthenticatedImage, AuthenticatedPdf, attachmentContentUrl, downloadWithAuth, isImageType, isPdfType, isPreviewableType } from '@/components/AttachmentPreview';
 import type { LocalCase as TestCase, LocalStep, LocalSuite as Suite } from '@/lib/localTypes';
+import { useAuth } from '@/contexts/AuthContext';
 // TestRun type only needed for legacy Create Run handler shape — removed, using API directly
 
 // Display IDs are always assigned server-side as "TC-{n}".
@@ -42,6 +43,8 @@ const Repository = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
 
   // ── API data ──────────────────────────────────────────────────────────────
   const { data: project } = useProject(projectId!);
@@ -1135,13 +1138,15 @@ const Repository = () => {
             <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => { setImportFile(null); setImportOpen(true); }}>
               <Download className="h-3.5 w-3.5" strokeWidth={1.5} /> Import
             </Button>
-            <Button
-              size="sm"
-              className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground gap-1.5 border-0"
-              onClick={() => openCreateCase()}
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={1.5} /> Case
-            </Button>
+            {isAdmin && (
+              <Button
+                size="sm"
+                className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground gap-1.5 border-0"
+                onClick={() => openCreateCase()}
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={1.5} /> Case
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -1234,9 +1239,11 @@ const Repository = () => {
                   </div>
                   <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Suites</span>
                 </div>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={openCreateSuite}>
-                  <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
-                </Button>
+                {isAdmin && (
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={openCreateSuite}>
+                    <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </Button>
+                )}
               </div>
               <div className="px-2 pb-2">
                 {!isLoadingRepo && localSuites.length === 0 && (
@@ -1311,10 +1318,12 @@ const Repository = () => {
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     Create your first suite to get started, then add test cases to it.
                   </p>
-                  <Button variant="outline" size="sm" onClick={openCreateSuite} className="mt-1">
-                    <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
-                    Create your first suite
-                  </Button>
+                  {isAdmin && (
+                    <Button variant="outline" size="sm" onClick={openCreateSuite} className="mt-1">
+                      <Plus className="h-3.5 w-3.5 mr-1.5" strokeWidth={1.5} />
+                      Create your first suite
+                    </Button>
+                  )}
                 </div>
               )}
               <div style={{ height: caseTotalSize, position: 'relative' }}>
@@ -1361,18 +1370,24 @@ const Repository = () => {
                             )}
                           </div>
                           <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openCreateCase(suite.id)}>
-                              <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openEditSuite(suite)}>
-                              <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            </Button>
+                            {isAdmin && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openCreateCase(suite.id)}>
+                                <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              </Button>
+                            )}
+                            {isAdmin && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => openEditSuite(suite)}>
+                                <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => copySuite(suite)}>
                               <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => confirmDeleteSuite(suite)}>
-                              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            </Button>
+                            {isAdmin && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => confirmDeleteSuite(suite)}>
+                                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1441,15 +1456,19 @@ const Repository = () => {
 
                           {/* ── Actions (col 6) ── */}
                           <div className="flex items-center gap-0.5 justify-self-end shrink-0">
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => { e.stopPropagation(); openEditCase(tc); }}>
-                              <Pencil className="h-3 w-3" strokeWidth={1.5} />
-                            </Button>
+                            {isAdmin && (
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => { e.stopPropagation(); openEditCase(tc); }}>
+                                <Pencil className="h-3 w-3" strokeWidth={1.5} />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => { e.stopPropagation(); copyCase(tc); }}>
                               <Copy className="h-3 w-3" strokeWidth={1.5} />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); confirmDeleteCase(tc); }}>
-                              <Trash2 className="h-3 w-3" strokeWidth={1.5} />
-                            </Button>
+                            {isAdmin && (
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); confirmDeleteCase(tc); }}>
+                                <Trash2 className="h-3 w-3" strokeWidth={1.5} />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1462,14 +1481,16 @@ const Repository = () => {
                     return (
                       <div key={vi.key} style={{ position: 'absolute', top: vi.start, width: '100%', height: vi.size }}>
                         <div className={['px-5 py-2 flex items-center h-full', !isLastSuite ? 'border-b border-border/40' : ''].join(' ')}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs text-muted-foreground gap-1"
-                            onClick={() => { setQuickCreateSuiteId(suite.id); setQuickCreateTitle(''); setQuickCreateOpen(true); }}
-                          >
-                            <Plus className="h-3 w-3" strokeWidth={1.5} /> Create quick test
-                          </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs text-muted-foreground gap-1"
+                              onClick={() => { setQuickCreateSuiteId(suite.id); setQuickCreateTitle(''); setQuickCreateOpen(true); }}
+                            >
+                              <Plus className="h-3 w-3" strokeWidth={1.5} /> Create quick test
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );
@@ -1503,9 +1524,11 @@ const Repository = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEditCase(selectedCase)}>
-                          <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
-                        </Button>
+                        {isAdmin && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEditCase(selectedCase)}>
+                            <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setSelectedCase(null)}>
                           <X className="h-4 w-4" strokeWidth={1.5} />
                         </Button>
