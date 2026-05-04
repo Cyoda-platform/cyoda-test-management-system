@@ -460,7 +460,7 @@ const ReportDetail = () => {
 
           {/* Defect Table */}
           {report.sectionDefectTable && (
-            <div className="bg-card rounded-xl border border-border/40 shadow-sm overflow-hidden">
+            <div className="bg-card rounded-xl border border-border/40 shadow-sm overflow-hidden mb-6">
               <div className="px-5 py-3.5 border-b border-border/40">
                 <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Defect Log</h2>
               </div>
