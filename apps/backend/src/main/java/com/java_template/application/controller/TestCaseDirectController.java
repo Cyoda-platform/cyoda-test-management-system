@@ -3,6 +3,8 @@ package com.java_template.application.controller;
 import com.java_template.application.service.TestCaseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,7 +29,12 @@ public class TestCaseDirectController {
     @Operation(summary = "Soft-delete a test case by ID (no suiteId required)")
     public ResponseEntity<Void> deleteTestCase(
             @PathVariable UUID projectId,
-            @PathVariable UUID caseId) {
+            @PathVariable UUID caseId,
+            HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (testCaseService.deleteTestCase(caseId)) {
             return ResponseEntity.noContent().build();
         }

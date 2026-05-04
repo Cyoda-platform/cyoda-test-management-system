@@ -2,6 +2,7 @@ package com.java_template.application.controller;
 
 import com.java_template.application.dto.TestCaseDTO;
 import com.java_template.application.service.TestCaseService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
@@ -17,7 +18,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,6 +49,7 @@ public class TestCaseControllerTest {
         when(testCaseService.createTestCase(any(TestCaseDTO.class))).thenReturn(created);
 
         mockMvc.perform(post("/projects/{projectId}/suites/{suiteId}/cases", projectId, suiteId)
+                        .requestAttr("role", "ADMIN")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"Test1","priority":"MEDIUM","description":"","preconditions":""}
@@ -60,5 +64,61 @@ public class TestCaseControllerTest {
                 projectId.equals(testCase.getProjectId())
                         && suiteId.equals(testCase.getSuiteId())
                         && "Test1".equals(testCase.getTitle())));
+    }
+
+    @Test
+    @DisplayName("POST /cases — TESTER role — returns 403")
+    public void testCreateTestCaseRequiresAdminRole() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID suiteId = UUID.randomUUID();
+
+        mockMvc.perform(post("/projects/{projectId}/suites/{suiteId}/cases", projectId, suiteId)
+                        .requestAttr("role", "TESTER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Blocked","priority":"MEDIUM","description":"","preconditions":""}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PUT /cases/{id} — TESTER role — returns 403")
+    public void testUpdateTestCaseRequiresAdminRole() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID suiteId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+
+        mockMvc.perform(put("/projects/{projectId}/suites/{suiteId}/cases/{id}", projectId, suiteId, caseId)
+                        .requestAttr("role", "TESTER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Blocked","priority":"MEDIUM","description":"","preconditions":""}
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("DELETE /cases/{id} — TESTER role — returns 403")
+    public void testDeleteTestCaseRequiresAdminRole() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID suiteId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+
+        mockMvc.perform(delete("/projects/{projectId}/suites/{suiteId}/cases/{id}", projectId, suiteId, caseId)
+                        .requestAttr("role", "TESTER"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("POST /cases/batch — TESTER role — returns 403")
+    public void testBatchCreateTestCasesRequiresAdminRole() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID suiteId = UUID.randomUUID();
+
+        mockMvc.perform(post("/projects/{projectId}/suites/{suiteId}/cases/batch", projectId, suiteId)
+                        .requestAttr("role", "TESTER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[]"))
+                .andExpect(status().isForbidden());
     }
 }

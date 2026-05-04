@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import com.java_template.common.dto.PageResult;
@@ -30,7 +31,11 @@ public class TestCaseController {
 
     @PostMapping
     @Operation(summary = "Create a new test case")
-    public ResponseEntity<TestCaseDTO> createTestCase(@PathVariable UUID projectId, @PathVariable UUID suiteId, @Valid @RequestBody TestCaseDTO testCase) {
+    public ResponseEntity<TestCaseDTO> createTestCase(@PathVariable UUID projectId, @PathVariable UUID suiteId, @Valid @RequestBody TestCaseDTO testCase, HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         testCase.setProjectId(projectId);
         testCase.setSuiteId(suiteId);
         TestCaseDTO created = testCaseService.createTestCase(testCase);
@@ -58,7 +63,11 @@ public class TestCaseController {
 
     @PutMapping("/{id}")
     @Operation(summary = "Update a test case")
-    public ResponseEntity<TestCaseDTO> updateTestCase(@PathVariable UUID projectId, @PathVariable UUID suiteId, @PathVariable UUID id, @Valid @RequestBody TestCaseDTO testCase) {
+    public ResponseEntity<TestCaseDTO> updateTestCase(@PathVariable UUID projectId, @PathVariable UUID suiteId, @PathVariable UUID id, @Valid @RequestBody TestCaseDTO testCase, HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (!testCaseService.testCaseExists(id)) {
             return ResponseEntity.notFound().build();
         }
@@ -70,7 +79,11 @@ public class TestCaseController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Soft delete a test case")
-    public ResponseEntity<Void> deleteTestCase(@PathVariable UUID projectId, @PathVariable UUID suiteId, @PathVariable UUID id) {
+    public ResponseEntity<Void> deleteTestCase(@PathVariable UUID projectId, @PathVariable UUID suiteId, @PathVariable UUID id, HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (testCaseService.softDeleteTestCase(id)) {
             return ResponseEntity.noContent().build();
         }
@@ -94,7 +107,12 @@ public class TestCaseController {
     public ResponseEntity<List<TestCaseDTO>> batchCreateTestCases(
             @PathVariable UUID projectId,
             @PathVariable UUID suiteId,
-            @RequestBody List<BatchImportCaseDTO> items) {
+            @RequestBody List<BatchImportCaseDTO> items,
+            HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         List<TestCaseDTO> created = testCaseService.batchCreateTestCases(projectId, suiteId, items);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
