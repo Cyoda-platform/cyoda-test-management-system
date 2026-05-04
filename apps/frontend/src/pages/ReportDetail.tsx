@@ -275,8 +275,8 @@ const ReportDetail = () => {
       </div>
 
       {/* Content — centered canvas */}
-      <div className="flex-1 overflow-auto p-6 bg-background flex justify-center print:block print:overflow-visible print:p-4">
-        <div className="w-full max-w-[1200px] space-y-6 pb-20">
+      <div className="flex-1 overflow-auto p-6 bg-background print:block print:overflow-visible print:p-4">
+        <div className="w-full max-w-[1200px] mx-auto space-y-6 pb-8">
 
           {/* Executive Summary */}
           {report.sectionExecutiveSummary && (
