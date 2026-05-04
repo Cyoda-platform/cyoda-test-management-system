@@ -494,20 +494,25 @@ export async function performImport(
     let resolvedSuite: Suite | undefined;
 
     if (pc.sourceSuiteId) {
-      // Try by exact ID first, then by name
-      resolvedSuite = suiteById.get(pc.sourceSuiteId)
-        ?? suiteByName.get((pc.sourceSuiteName ?? pc.sourceSuiteId).toLowerCase().trim());
+      // Try by exact ID first
+      resolvedSuite = suiteById.get(pc.sourceSuiteId);
     }
-    if (!resolvedSuite && pc.sourceSuiteName) {
+    // Only search by name if targetSuiteId is NOT '__new__' (creating new suites)
+    // When '__new__', we should create new suite(s) instead of reusing existing ones
+    if (!resolvedSuite && pc.sourceSuiteName && targetSuiteId !== '__new__') {
       resolvedSuite = suiteByName.get(pc.sourceSuiteName.toLowerCase().trim());
     }
-    // Fallback to user-selected target suite
+    // Fallback to user-selected target suite (only if not creating new)
     if (!resolvedSuite && targetSuiteId !== '__new__') {
       resolvedSuite = suiteById.get(targetSuiteId);
     }
 
     // 2. Check for duplicate
-    const existing = pc.id ? caseByIdOrDisplayId.get(pc.id) : undefined;
+    // Try to find by ID first, then by displayId as fallback
+    let existing = pc.id ? caseByIdOrDisplayId.get(pc.id) : undefined;
+    if (!existing && pc.displayId) {
+      existing = caseByIdOrDisplayId.get(pc.displayId);
+    }
 
     if (existing && conflict === 'skip') {
       result.skipped++;
