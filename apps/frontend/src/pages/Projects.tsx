@@ -171,7 +171,7 @@ const Projects = () => {
                           </button>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5 text-muted-foreground max-w-xs truncate">
+                      <td className="px-5 py-3.5 text-muted-foreground max-w-md">
                         {project.description}
                       </td>
                       <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap font-mono text-xs">
