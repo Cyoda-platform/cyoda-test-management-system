@@ -56,6 +56,19 @@ cp .env.example .env
 
 Then use `start-dev.sh` as usual — it will load credentials from `.env`.
 
+## 🔧 Scripts
+
+All developer scripts live in the project root:
+
+| Script | Purpose |
+|--------|---------|
+| `start-dev.sh` | Start backend + frontend together (recommended for development) |
+| `run-with-env.sh` | Start backend only, loads credentials from `.env` |
+| `get-tokens.sh` | Get JWT tokens for `admin` and `tester` users (manual API testing) |
+| `import-schemas.sh` | Import all entity schemas and workflows to Cyoda (see `apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md`) |
+| `seed-demo.sh` | Seed demo data into a running instance |
+| `e2e-snapshot-test.sh` | Run E2E snapshot tests |
+
 ## 📖 Per-App Documentation
 
 For detailed information:
