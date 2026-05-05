@@ -12,41 +12,56 @@ A test management platform providing a complete lifecycle for projects, test sui
 
 This is an [Nx](https://nx.dev) mono-repo. Run tasks via `pnpm nx <target> <project>`.
 
-## Prerequisites & getting started
+## Prerequisites
 
-- **Java 21**
-- **Node.js 18+** and **pnpm**
-- **Cyoda platform credentials** — log in to [ai.cyoda.net](https://ai.cyoda.net/) and prompt: *"Create a technical user for my environment \<env-name\>"*
+- **Java 21** – [Install Java 21](https://adoptium.net/)
+- **Node.js 18+** and **npm** (or **pnpm**)
+- **Cyoda platform credentials** (optional for local dev — hardcoded credentials are used by default)
+  - Get M2M credentials by logging into [ai.cyoda.net](https://ai.cyoda.net/) and prompting: *"Create a technical user for my environment \<env-name\>"*
+  - Store in `.env` file (copy from `.env.example`)
+
+## 🚀 Quick Start
+
+### 1. Install Dependencies (First Time Only)
 
 ```bash
-# 1. Install JS dependencies
-pnpm install
-
-# 2. Set Cyoda credentials (required before starting the backend)
-export APP_CONFIG_CYODA_HOST=your-env.cyoda.net
-export APP_CONFIG_CYODA_CLIENT_ID=your-client-id
-export APP_CONFIG_CYODA_CLIENT_SECRET=your-client-secret
-
-# 3. Import workflows into Cyoda (first-time setup)
-./gradlew :apps:backend:runApp -PmainClass=com.java_template.common.tool.WorkflowImportTool
-
-# 4. Start the backend (port 8080, context path /api)
-./gradlew :apps:backend:runApp
-
-# 5. Start the frontend (port 5173)
-pnpm nx serve frontend
+npm install
 ```
 
-Swagger UI is available at [localhost:8080/api/swagger-ui/index.html](http://localhost:8080/api/swagger-ui/index.html) once the backend is running.
+### 2. Start Backend + Frontend Together
 
-**Default login credentials** (hardcoded for local dev):
+```bash
+./gradlew :apps:backend:build -x test -q && bash start-dev.sh
+```
 
-| Username | Password | Role |
-|----------|----------|------|
-| `admin` | `admin123` | ADMIN |
-| `tester` | `tester123` | TESTER |
+This script:
+- Starts the **backend** on `http://localhost:8080/api`
+- Starts the **frontend** on `http://localhost:5173`
+- Uses hardcoded Cyoda credentials (or loads from `.env` if it exists)
+- Waits for backend to be ready before starting frontend
 
-See per-app CLAUDE.md files for the full build and test command reference.
+Access the app:
+- **Frontend**: [http://localhost:5173](http://localhost:5173)
+- **Backend API Docs**: [http://localhost:8080/api/swagger-ui/index.html](http://localhost:8080/api/swagger-ui/index.html)
+- **Default credentials**: `admin` / `admin123` (ADMIN role)
+
+### 3. For Production: Set Cyoda Credentials
+
+Copy `.env.example` to `.env` and fill in your Cyoda credentials:
+
+```bash
+cp .env.example .env
+# Edit .env with your actual credentials
+```
+
+Then use `start-dev.sh` as usual — it will load credentials from `.env`.
+
+## 📖 Per-App Documentation
+
+For detailed information:
+- **Frontend**: See [`apps/frontend/README.md`](apps/frontend/README.md)
+- **Backend**: See [`apps/backend/README.md`](apps/backend/README.md)
+- **Build & Test Commands**: See [`CLAUDE.md`](CLAUDE.md)
 
 ## Working with AI agents
 

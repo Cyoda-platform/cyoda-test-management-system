@@ -1,64 +1,53 @@
-# Java Client Template
+# Backend - Cyoda Test Management System
 
-A **Gradle project** using **Spring Boot** with **Cyoda integration** for building scalable web clients with workflow-driven backend interactions.
+A **Gradle project** using **Spring Boot 3.5** with **Cyoda integration** for building scalable test management with FSM-driven workflows.
 
+## 🛠️ Prerequisites
 
-## 🛠️ Getting Started
+- **Java 21** – [Install Java 21](https://adoptium.net/)
+- **Cyoda platform** – Live instance with credentials in `.env` (optional for local dev)
 
-> ☕ **Java 21 Required**
-> Make sure Java 21 is installed and set as the active version.
+## 🚀 Quick Start
 
-### 1. Clone the Project
-
-```bash
-git clone https://github.com/Cyoda-platform/java-client-template.git
-cd java-client-template
-```
-
-### 2. ⚙️ Configure the Application
-
-Configuration is managed via Spring Boot YAML files. For local development:
+**For local development**, use the root project's `start-dev.sh` script:
 
 ```bash
-# Option 1: Create a local profile
-# For example, create src/main/resources/application-local.yml with your settings
-./gradlew runApp --args='--spring.profiles.active=local'
-
-# Option 2: Use environment variables
-export APP_CONFIG_CYODA_HOST=your-cyoda-host:8443
-export APP_CONFIG_CYODA_CLIENT_ID=your-client-id
-export APP_CONFIG_CYODA_CLIENT_SECRET=your-client-secret
+# From project root
+./gradlew :apps:backend:build -x test -q && bash start-dev.sh
 ```
 
-### 3. 🧰 Run Workflow Import Tool
+This starts the backend on `http://localhost:8080/api` with hardcoded Cyoda credentials (or loads from `.env` if present).
 
-#### Option 1: Run via Gradle (recommended for local development)
+**For production**, set Cyoda credentials in `.env` before starting.
+
+## 📚 Backend-Specific Documentation
+
+### Running Backend Commands
+
 ```bash
-./gradlew runApp -PmainClass=com.java_template.common.tool.WorkflowImportTool --args='--spring.profiles.active=local'
+# Build (skip tests for speed)
+./gradlew :apps:backend:build -x test -q
+
+# Run tests only
+./gradlew :apps:backend:test
+
+# Run E2E/Cucumber tests (requires live Cyoda instance)
+./gradlew :apps:backend:cucumberTest
+
+# Run the backend directly (for development)
+./gradlew :apps:backend:runApp
+
+# Generate API documentation
+./gradlew :apps:backend:build
 ```
 
-#### Option 2: Build and Run JAR (recommended for CI or scripting)
-```bash
-./gradlew bootJarWorkflowImport
-java -jar build/libs/java-client-template-1.0-SNAPSHOT-workflow-import.jar --spring.profiles.active=local
-```
+### Workflow & Schema Import
 
-### 4. ▶️ Run the Application
+See **[SCHEMA_AND_WORKFLOW_IMPORT.md](./SCHEMA_AND_WORKFLOW_IMPORT.md)** for detailed instructions on importing workflows and schemas into Cyoda.
 
-#### Option 1: Run via Gradle
-```bash
-./gradlew runApp --args='--spring.profiles.active=local'
-```
+### Cyoda Integration
 
-#### Option 2: Run Manually After Build
-```bash
-./gradlew build
-java -jar build/libs/java-client-template-1.0-SNAPSHOT.jar --spring.profiles.active=local
-```
-
-> Access the app: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
->
-> **Note**: The default port is 8080 as configured in `src/main/resources/application.yml`. You can change this by setting the `server.port` property.
+See **[CYODA_INTEGRATION.md](./CYODA_INTEGRATION.md)** for details on Cyoda platform integration, EntityService, and workflow configuration.
 
 ---
 
