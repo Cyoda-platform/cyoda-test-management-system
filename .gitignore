@@ -41,6 +41,11 @@ pnpm-debug.log*
 
 # Frontend build output
 apps/frontend/dist/
+frontend/dist/
+
+# Temporary / generated artifacts
+performance-audit.html
+translate_russian_to_english.py
 
 apps/frontend/.vite/
 
