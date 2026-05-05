@@ -125,17 +125,11 @@ This schema defines the structure for workflow definitions, including states, tr
   - `entity/` - Entity class implementations
   - `processor/` - Workflow processor examples  
   - `criterion/` - Workflow criteria examples
-  - `patterns/` - Comprehensive patterns and anti-patterns guide
-
-### Configuration Examples  
-- **`llm_example/config/`** - Configuration templates and examples
-  - `workflow/` - Workflow JSON configuration templates
 
 ### Documentation Files
 - **`README.md`** - Complete project documentation (this file)
 - **`CONTRIBUTING.md`** - Contributors guide and validation workflow
 - **`usage-rules.md`** - Developer and AI agent guidelines
-- **`.augment-guidelines`** - Project overview and development workflow
 - **`llms.txt`** / **`llms-full.txt`** - AI-friendly documentation references
 
 ## 🔍 Unified Search
@@ -163,19 +157,9 @@ SearchService searches across 8 entity types:
 GET /api/v1/search?query=login&pageNumber=0&pageSize=10
 ```
 
-**Project-Scoped Full Search** (pagination):
+**Project-Scoped Search** (autocomplete, max 5 results):
 ```
-POST /api/v1/projects/{projectId}/search
-{
-  "query": "login button",
-  "pageNumber": 0,
-  "pageSize": 20
-}
-```
-
-**Project-Scoped Quick Search** (header autocomplete, max 5 results):
-```
-GET /api/v1/projects/{projectId}/search/quick?query=login
+GET /api/projects/{projectId}/search/quick?query=login
 ```
 
 ### Response Format
@@ -218,26 +202,10 @@ GET /api/v1/projects/{projectId}/search/quick?query=login
 - **Pagination**: Supports configurable page size and number
 - **Performance**: ~150ms response time typical for 100+ entity search
 
-### Testing
-
-**Unit Tests**: `SearchServiceTest.java` covers scoring, pagination, error handling
-
-**E2E Tests**: `search.feature` validates end-to-end scenarios
-
-Run tests:
-```bash
-# Unit tests only
-./gradlew :apps:backend:test -k SearchService
-
-# E2E tests (requires live Cyoda instance)
-./gradlew :apps:backend:cucumberTest --tests "*search*"
-```
-
 ### Implementation Details
 
 - `SearchService` uses `CompletableFuture` for parallel searches (8-thread pool)
 - Timeout: 30 seconds for all searches combined
-- Page size limited: max 100 per request
 - Results cached in memory only (no persistence)
 - Supports empty queries (returns all entities)
 
@@ -258,7 +226,7 @@ Run tests:
 - ✅ Criteria implement `CyodaCriterion` with `check()` and `supports()`
 - ✅ Use `@Component` annotation for Spring discovery
 - ✅ Place workflow JSON files in `src/main/resources/workflow/$entity_name/version_$version/`
-- ✅ Always reference `llm_example/` for implementation patterns
+- ✅ Reference `src/test/java/com/example/application/` for implementation patterns
 
 ### Critical Limitations
 - ❌ Never modify anything in `common/` directory
@@ -266,11 +234,9 @@ Run tests:
 - ❌ Criteria must be pure functions without side effects
 - ❌ No Java reflection usage allowed
 
-> 📚 **See `llm_example/` directory for complete implementation examples, patterns, and configuration templates**
-
 ## 🚀 Getting Started
 
-1. **Review Examples**: Start by exploring `llm_example/code/` for implementation patterns
+1. **Review Examples**: Start by exploring `src/test/java/com/example/application/` for implementation patterns
 2. **Create Entities**: Implement `CyodaEntity` in `application/entity/`
 3. **Add Processors**: Implement `CyodaProcessor` in `application/processor/`
 4. **Add Criteria**: Implement `CyodaCriterion` in `application/criterion/`
@@ -279,7 +245,7 @@ Run tests:
 
 ## 🔧 Development Workflow
 
-1. Review `llm_example/` directory for patterns before implementing new features
+1. Review `src/test/java/com/example/application/` for patterns before implementing new features
 2. Follow established architectural patterns for processors, criteria, and serializers
 3. Use `usage-rules.md` for detailed implementation guidelines
 4. Run `./gradlew build` to generate required classes before development

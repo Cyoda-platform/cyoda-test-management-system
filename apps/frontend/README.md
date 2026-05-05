@@ -141,7 +141,7 @@ For production builds, use full backend URL if on different host.
 
 ## 📚 Documentation
 
-- **Architecture & Patterns** – See `src/test/` for implementation examples
+- **Test Utilities** – See `src/test/` for test helpers and mocks
 - **Backend API** – Swagger UI at `http://localhost:8080/api/swagger-ui/`
 - **Project Guidelines** – See root `CLAUDE.md` and `CONTRIBUTING.md`
 

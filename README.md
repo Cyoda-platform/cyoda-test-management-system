@@ -70,14 +70,8 @@ This project uses **Claude Code** for agent-assisted development. Agent behavior
 | File | Scope |
 |------|-------|
 | [`CLAUDE.md`](CLAUDE.md) | Root — architecture, key references, general guidelines |
-| [`apps/backend/CLAUDE.md`](apps/backend/CLAUDE.md) | Backend build commands, patterns, conventions |
-| [`.claude/rules/`](.claude/rules/) | Coding standards and per-layer rules |
 
 Human contributors should read CLAUDE.md before opening a PR.
-
-## CI/CD
-
-GitHub Actions workflows live in [`.github/workflows/`](.github/workflows/). The primary pipeline is `build.yml`, which runs on pull requests.
 
 ## Contributing
 
