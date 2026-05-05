@@ -70,3 +70,7 @@ apps/frontend/playwright-report/
 
 # npm lock file (project uses pnpm — only pnpm-lock.yaml is canonical)
 package-lock.json
+
+# Legacy root-level build artifacts from pre-monorepo structure
+/backend/
+/frontend/
