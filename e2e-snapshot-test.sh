@@ -64,11 +64,18 @@ SUITE_ID=$(echo "$SUITE" | python3 -c "import sys,json; print(json.load(sys.stdi
 assert_not_empty "Suite created, id present" "$SUITE_ID"
 info "  suite_id=$SUITE_ID"
 
-# ── 3. Create TestCase ────────────────────────────────────────────────────────
-info "Step 3: Create TestCase"
+# ── 3. Create TestCase (steps embedded) ──────────────────────────────────────
+info "Step 3: Create TestCase with embedded step"
 TC_BODY=$(python3 -c "
 import json
-print(json.dumps({'title':'Snapshot Test Case','description':'E2E description','preconditions':'User is logged in','priority':'HIGH','suiteId':'$SUITE_ID'}))
+print(json.dumps({
+  'title': 'Snapshot Test Case',
+  'description': 'E2E description',
+  'preconditions': 'User is logged in',
+  'priority': 'HIGH',
+  'suiteId': '$SUITE_ID',
+  'steps': [{'stepNumber': 1, 'action': 'Open login page', 'expectedResult': 'Login page displayed'}]
+}))
 ")
 TC=$(call "-X POST $BASE/projects/$PROJECT_ID/suites/$SUITE_ID/cases -d '$TC_BODY'") || fatal "Create test case failed"
 TC_ID=$(echo "$TC" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
@@ -76,16 +83,8 @@ TC_DISPLAY=$(echo "$TC" | python3 -c "import sys,json; print(json.load(sys.stdin
 assert_not_empty "TestCase created, id present" "$TC_ID"
 info "  test_case_id=$TC_ID display=$TC_DISPLAY"
 
-# ── 4. Create TestStep ────────────────────────────────────────────────────────
-info "Step 4: Create TestStep"
-STEP_BODY='{"action":"Open login page","expectedResult":"Login page displayed","stepNumber":1}'
-STEP=$(call "-X POST $BASE/projects/$PROJECT_ID/suites/$SUITE_ID/cases/$TC_ID/steps -d '$STEP_BODY'") || fatal "Create step failed"
-STEP_ID=$(echo "$STEP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-assert_not_empty "TestStep created, id present" "$STEP_ID"
-info "  step_id=$STEP_ID"
-
-# ── 5. Create TestRun with the case ──────────────────────────────────────────
-info "Step 5: Create TestRun"
+# ── 4. Create TestRun with the case ──────────────────────────────────────────
+info "Step 4: Create TestRun"
 RUN_BODY=$(python3 -c "import json; print(json.dumps({'name':'E2E Snapshot Run','projectId':'$PROJECT_ID','caseIds':['$TC_ID'],'stepStatuses':'{}'}))")
 RUN=$(call "-X POST $BASE/projects/$PROJECT_ID/runs -d '$RUN_BODY'") || fatal "Create test run failed"
 RUN_ID=$(echo "$RUN" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
@@ -94,15 +93,15 @@ assert_not_empty "TestRun created, id present" "$RUN_ID"
 assert_eq "TestRun initial status is 'initial'" "initial" "$RUN_STATUS"
 info "  run_id=$RUN_ID"
 
-# ── 6. Update run → triggers initialize_run + SnapshotProcessor ──────────────
-info "Step 6: Update run status to 'active' (triggers initialize_run)"
+# ── 5. Update run → triggers initialize_run + SnapshotProcessor ──────────────
+info "Step 5: Update run status to 'active' (triggers initialize_run)"
 UPDATE_BODY=$(python3 -c "import json; print(json.dumps({'name':'E2E Snapshot Run','projectId':'$PROJECT_ID','status':'active','caseIds':['$TC_ID'],'stepStatuses':'{}'}))")
 UPDATE_RESP=$(call "-X PUT $BASE/projects/$PROJECT_ID/runs/$RUN_ID -d '$UPDATE_BODY'") || fatal "Update run failed"
 UPDATE_STATUS=$(echo "$UPDATE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))")
 assert_eq "TestRun status changed to 'active'" "active" "$UPDATE_STATUS"
 
-# ── 7. Wait for ASYNC_NEW_TX SnapshotProcessor to create TestRunCase ─────────
-info "Step 7: Waiting for SnapshotProcessor (ASYNC_NEW_TX, up to 30s)"
+# ── 6. Wait for ASYNC_NEW_TX SnapshotProcessor to create TestRunCase ─────────
+info "Step 6: Waiting for SnapshotProcessor (ASYNC_NEW_TX, up to 30s)"
 SNAPSHOT_FOUND=false
 for i in $(seq 1 15); do
   sleep 2
@@ -124,9 +123,9 @@ else
   FAIL=$((FAIL+1))
 fi
 
-# ── 8. Verify TestRunCase snapshot fields ────────────────────────────────────
+# ── 7. Verify TestRunCase snapshot fields ────────────────────────────────────
 if $SNAPSHOT_FOUND; then
-  info "Step 8: Verify TestRunCase snapshot fields"
+  info "Step 7: Verify TestRunCase snapshot fields"
   RC_LIST=$(call "$BASE/projects/$PROJECT_ID/runs/$RUN_ID/cases")
   RC=$(echo "$RC_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); arr=d.get('data',d) if isinstance(d,dict) else d; print(json.dumps(arr[0] if arr else {}))")
   RC_ID=$(echo "$RC" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
@@ -145,8 +144,8 @@ if $SNAPSHOT_FOUND; then
   assert_not_empty "TestRunCase.displayId present" "$RC_DISP"
   assert_eq "TestRunCase.suiteId = suite id" "$SUITE_ID" "$RC_SUITE"
 
-  # ── 9. Verify TestRunStep snapshot fields ──────────────────────────────────
-  info "Step 9: Verify TestRunStep snapshot fields"
+  # ── 8. Verify TestRunStep snapshot fields ──────────────────────────────────
+  info "Step 8: Verify TestRunStep snapshot fields"
   RS_LIST=$(call "$BASE/projects/$PROJECT_ID/runs/$RUN_ID/cases/$RC_ID/steps" 2>/dev/null || echo '{"data":[]}')
   RS=$(echo "$RS_LIST" | python3 -c "import sys,json; d=json.load(sys.stdin); arr=d.get('data',d) if isinstance(d,dict) else d; print(json.dumps(arr[0] if arr else {}))")
   RS_ACTION=$(echo "$RS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('action',''))")
@@ -157,8 +156,8 @@ if $SNAPSHOT_FOUND; then
   assert_eq "TestRunStep.expectedResult = 'Login page displayed'" "Login page displayed" "$RS_EXPECTED"
   assert_eq "TestRunStep.stepNumber = 1" "1" "$RS_NUM"
 
-  # ── 10. Update TestRunCase status ──────────────────────────────────────────
-  info "Step 10: Update TestRunCase status to PASSED"
+  # ── 9. Update TestRunCase status ──────────────────────────────────────────
+  info "Step 9: Update TestRunCase status to PASSED"
   STATUS_UPDATE=$(call "-X PUT '$BASE/projects/$PROJECT_ID/runs/$RUN_ID/cases/$RC_ID/status?status=PASSED'" 2>/dev/null || echo '{}')
   RC_NEW_STATUS=$(echo "$STATUS_UPDATE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
   # Status might be 'passed' or 'PASSED' depending on the workflow state
@@ -172,8 +171,8 @@ if $SNAPSHOT_FOUND; then
   fi
 fi
 
-# ── 11. Complete the run ──────────────────────────────────────────────────────
-info "Step 11: Complete the run"
+# ── 10. Complete the run ──────────────────────────────────────────────────────
+info "Step 10: Complete the run"
 COMPLETE_RESP=$(call "-X POST $BASE/projects/$PROJECT_ID/runs/$RUN_ID/complete" 2>/dev/null || echo '{}')
 COMPLETE_STATUS=$(echo "$COMPLETE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
 assert_eq "TestRun status is 'completed'" "completed" "$COMPLETE_STATUS"
