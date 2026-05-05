@@ -1,16 +1,18 @@
 # 🔗 Cyoda Integration Guide
 
-## ✅ Real Cyoda Credentials Added
+## ✅ Connecting to a Real Cyoda Instance
 
-Application is now configured to connect to a real Cyoda EU instance.
+Application connects to a Cyoda EU instance using M2M credentials from `.env`.
 
 ### 📋 Configuration
 
-**Cyoda Host:** `client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net`
+Set the following in your `.env` file (copy from `.env.example`):
 
-**Client ID:** `kLXY45`
+**Cyoda Host:** `CYODA_HOST=<your-cyoda-host>`
 
-**Client Secret:** `OAIsUzQMP4LoW19JTwoi`
+**Client ID:** `CYODA_CLIENT_ID=<your-client-id>`
+
+**Client Secret:** `CYODA_CLIENT_SECRET=<your-client-secret>`
 
 **Grant Type:** `client_credentials`
 
@@ -35,39 +37,40 @@ Script automatically:
 export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
 
 ./gradlew bootRun \
-  --args='--app.config.cyoda-host=client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net \
-          --app.config.cyoda-client-id=kLXY45 \
-          --app.config.cyoda-client-secret=OAIsUzQMP4LoW19JTwoi'
+  --args='--app.config.cyoda-host=$CYODA_HOST \
+          --app.config.cyoda-client-id=$CYODA_CLIENT_ID \
+          --app.config.cyoda-client-secret=$CYODA_CLIENT_SECRET'
 ```
 
 ### Option 3: Via Environment Variables
 
 ```bash
-export CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
-export CYODA_CLIENT_ID="kLXY45"
-export CYODA_CLIENT_SECRET="OAIsUzQMP4LoW19JTwoi"
+export CYODA_HOST="<your-cyoda-host>"
+export CYODA_CLIENT_ID="<your-client-id>"
+export CYODA_CLIENT_SECRET="<your-client-secret>"
 
 ./gradlew bootRun
 ```
 
 ---
 
-## 📊 What changed
+## 📊 Configuration Reference
 
 ### application.yml
+
+Credentials are loaded from environment variables — never hardcode them here:
+
 ```yaml
 app:
   config:
-    cyoda-host: client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net
-    cyoda-client-id: kLXY45
-    cyoda-client-secret: OAIsUzQMP4LoW19JTwoi
+    cyoda-host: ${CYODA_HOST}
+    cyoda-client-id: ${CYODA_CLIENT_ID}
+    cyoda-client-secret: ${CYODA_CLIENT_SECRET}
 ```
 
 ### gRPC Configuration
-```
-gRPC Address: grpc-client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net
-gRPC Port: 443
-```
+
+gRPC address is derived from `CYODA_HOST` by adding the `grpc-` prefix. Port: `443`.
 
 ---
 
@@ -121,11 +124,10 @@ Credentials are already added to `application.yml` for development convenience.
 ### Using environment variables (secure)
 
 ```bash
-# Clean application.yml
-# Set environment variables
-export APP_CONFIG_CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
-export APP_CONFIG_CYODA_CLIENT_ID="kLXY45"
-export APP_CONFIG_CYODA_CLIENT_SECRET="OAIsUzQMP4LoW19JTwoi"
+# Set environment variables from .env or manually
+export APP_CONFIG_CYODA_HOST="<your-cyoda-host>"
+export APP_CONFIG_CYODA_CLIENT_ID="<your-client-id>"
+export APP_CONFIG_CYODA_CLIENT_SECRET="<your-client-secret>"
 
 # Start
 ./gradlew bootRun
@@ -172,13 +174,13 @@ curl -X POST "http://localhost:8080/api/admin/grpc/reconnect?force=true" \
 ### Problem: "Unable to resolve host"
 ```
 Failed to resolve name. status=Status{code=UNAVAILABLE,
-description=Unable to resolve host grpc-client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net
+description=Unable to resolve host grpc-<your-cyoda-host>
 ```
 
 **Solution:**
 - Check internet connection
 - Check that Cyoda server is available
-- Check DNS resolution: `nslookup client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net`
+- Check DNS resolution: `nslookup $CYODA_HOST`
 
 ### Problem: "Failed to get access token"
 ```
