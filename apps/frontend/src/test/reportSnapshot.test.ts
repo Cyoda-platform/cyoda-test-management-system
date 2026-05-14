@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSnapshotData } from '@/lib/reportSnapshot';
+import { computeSnapshotData, resolveReportDefects, type SnapshotDefect } from '@/lib/reportSnapshot';
 import type { TestRunCase, TestRun, Suite, Defect } from '@/lib/api';
 
 const baseRun = (overrides: Partial<TestRun> = {}): TestRun => ({
@@ -359,5 +359,26 @@ describe('computeSnapshotData — defects', () => {
   it('returns empty defects array for no defects', () => {
     const result = computeSnapshotData([], [], [], []);
     expect(result.defects).toHaveLength(0);
+  });
+
+  it('enriches legacy snapshot defects with live id/displayId/createdAt', () => {
+    const legacySnapshot: SnapshotDefect[] = [{
+      id: '',
+      title: 'Bug 1',
+      severity: 'Major',
+      status: 'Open',
+      link: 'https://jira/1',
+      source: 'Step 1',
+      createdAt: '',
+    }];
+
+    const resolved = resolveReportDefects(legacySnapshot, [
+      baseDefect({ id: 'live-1', displayId: 'DEF-1', createdAt: '2026-01-02' }),
+    ]);
+
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].id).toBe('live-1');
+    expect(resolved[0].displayId).toBe('DEF-1');
+    expect(resolved[0].createdAt).toBe('2026-01-02');
   });
 });

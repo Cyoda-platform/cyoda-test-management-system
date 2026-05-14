@@ -249,7 +249,7 @@ public class DemoSeederService {
         sleep(PHASE_DELAY_MS);
 
         // STEP 10 – Defects (parallel — independent of each other)
-        ConcurrentHashMap<String, UUID> defectRefToId = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, DefectDTO> defectRefToId = new ConcurrentHashMap<>();
         List<CompletableFuture<Void>> defectFutures = data.defects.stream()
                 .map(dd -> CompletableFuture.runAsync(() -> {
                     UUID caseId    = caseRefToId.get(dd.caseRef);
@@ -265,7 +265,7 @@ public class DemoSeederService {
                     defect.setSeverity(dd.severity);
                     defect.setSource("Step " + dd.stepNumber);
                     DefectDTO created = defectService.createDefect(defect);
-                    defectRefToId.put(dd.caseRef + "::" + dd.stepNumber, created.getId());
+                    defectRefToId.put(dd.caseRef + "::" + dd.stepNumber, created);
                     log.info("[DemoSeeder] Created defect '{}': {}", dd.title, created.getId());
                 }, exec))
                 .toList();
@@ -353,7 +353,7 @@ public class DemoSeederService {
 
     private String buildSnapshotData(DemoData data, int passed, int failed, int skipped,
                                      String env, String build, String runName,
-                                     Map<String, UUID> defectRefToId, List<DemoDefect> defects) {
+                                     Map<String, DefectDTO> defectRefToId, List<DemoDefect> defects) {
         try {
             int total = passed + failed + skipped;
             double passRate = total > 0 ? Math.round((passed * 1000.0 / total)) / 10.0 : 0.0;
@@ -373,12 +373,31 @@ public class DemoSeederService {
 
             List<Map<String, Object>> defectList = new ArrayList<>();
             for (DemoDefect dd : defects) {
-                defectList.add(Map.of(
-                        "title",    dd.title,
-                        "severity", dd.severity,
-                        "status",   "Open",
-                        "source",   "Step " + dd.stepNumber
-                ));
+                String defectRef = dd.caseRef + "::" + dd.stepNumber;
+                DefectDTO createdDefect = defectRefToId.get(defectRef);
+
+                Map<String, Object> defectSnapshot = new LinkedHashMap<>();
+                if (createdDefect != null && createdDefect.getId() != null) {
+                    defectSnapshot.put("id", createdDefect.getId().toString());
+                }
+                if (createdDefect != null && createdDefect.getDisplayId() != null) {
+                    defectSnapshot.put("displayId", createdDefect.getDisplayId());
+                }
+                defectSnapshot.put("title", dd.title);
+                defectSnapshot.put("severity", dd.severity);
+                defectSnapshot.put("status", createdDefect != null && createdDefect.getStatus() != null
+                        ? createdDefect.getStatus()
+                        : "Open");
+                defectSnapshot.put("source", createdDefect != null && createdDefect.getSource() != null
+                        ? createdDefect.getSource()
+                        : "Step " + dd.stepNumber);
+                if (createdDefect != null && createdDefect.getLink() != null) {
+                    defectSnapshot.put("link", createdDefect.getLink());
+                }
+                if (createdDefect != null && createdDefect.getCreatedAt() != null) {
+                    defectSnapshot.put("createdAt", createdDefect.getCreatedAt());
+                }
+                defectList.add(defectSnapshot);
             }
 
             Map<String, Object> snapshot = new LinkedHashMap<>();

@@ -5,7 +5,7 @@ import { ArrowLeft, Download, ExternalLink } from 'lucide-react';
 import { useProject, useTestRuns, useDefects, useSuites, useReport, useTestRunCasesForRuns, useRepository, useTestRunsForIds } from '@/hooks/useApi';
 import type { Defect } from '@/lib/api';
 import type { ReportSnapshotData, SnapshotDefect, CaseToSuiteMap } from '@/lib/reportSnapshot';
-import { computeSnapshotData } from '@/lib/reportSnapshot';
+import { computeSnapshotData, resolveReportDefects } from '@/lib/reportSnapshot';
 import { formatDate } from '@/lib/utils';
 import { useMemo } from 'react';
 import { deduplicateRunCases, groupBySuite } from '@/lib/reportAggregation';
@@ -235,7 +235,12 @@ const ReportDetail = () => {
   const passRate      = totalExecuted > 0 ? ((totalPassed / totalExecuted) * 100).toFixed(1) : '0.0';
   const executionProgress = totalCases > 0 ? (((totalCases - totalUntested) / totalCases) * 100) : 0;
   const remainingScope    = totalCases > 0 ? ((totalUntested / totalCases) * 100) : 0;
-  const totalDefects      = (parsedSnapshot?.defects ?? defects).length;
+  const defectRows = useMemo(
+    () => resolveReportDefects(parsedSnapshot?.defects, defects),
+    [parsedSnapshot?.defects, defects],
+  );
+
+  const totalDefects      = defectRows.length;
 
   const pieData = [
     { name: 'Passed',   value: totalPassed,   color: COLORS.passed   },
@@ -243,8 +248,6 @@ const ReportDetail = () => {
     { name: 'Skipped',  value: totalSkipped,  color: COLORS.skipped  },
     { name: 'Untested', value: totalUntested, color: COLORS.untested },
   ].filter((d) => d.value > 0);
-
-  const sortedDefects = [...defects].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 
   return (
     <div className="h-full flex flex-col">
@@ -478,8 +481,7 @@ const ReportDetail = () => {
                 </thead>
                 <tbody>
                   {(() => {
-                    const rows: Array<Defect | SnapshotDefect> =
-                      parsedSnapshot?.defects ?? sortedDefects;
+                    const rows: Array<Defect | SnapshotDefect> = defectRows;
 
                     if (rows.length === 0) {
                       return (
@@ -491,30 +493,30 @@ const ReportDetail = () => {
                       );
                     }
 
-                    return rows.map((d) => (
+                    return rows.map((d, index) => (
                       <tr
-                        key={d.id}
+                        key={d.id || `defect-${index}`}
                         className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-700/50 bg-card"
                       >
-                        <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={d.id}>
-                          {d.displayId ?? '-'}
+                        <td className="px-5 py-3.5 font-mono text-[10px] text-accent tracking-wider" title={String(d.id)}>
+                          {d.displayId || '—'}
                         </td>
-                        <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
+                        <td className="px-5 py-3.5 font-medium text-foreground">{d.title || '—'}</td>
                         <td className="px-5 py-3.5">
                           <span className={`text-[10px] font-mono uppercase tracking-widest ${defectSeverityStyles[d.severity] || ''}`}>
-                            {d.severity}
+                            {d.severity || '—'}
                           </span>
                         </td>
                         <td className="px-5 py-3.5">
                           <span className={`text-[10px] font-mono uppercase tracking-widest ${defectStatusStyles[d.status] || ''}`}>
-                            {d.status}
+                            {d.status || '—'}
                           </span>
                         </td>
                         <td className="px-5 py-3.5 font-mono text-[10px] text-muted-foreground tracking-wider">
-                          {'source' in d ? (d.source || '—') : '—'}
+                          {d.source || '—'}
                         </td>
                         <td className="px-5 py-3.5 text-muted-foreground font-mono text-[10px] tracking-wider">
-                          {formatDate(d.createdAt)}
+                          {d.createdAt ? formatDate(d.createdAt) : '—'}
                         </td>
                         <td className="px-5 py-3.5 w-px whitespace-nowrap">
                           {d.link && (

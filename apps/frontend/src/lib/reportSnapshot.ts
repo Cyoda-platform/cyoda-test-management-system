@@ -22,6 +22,68 @@ export interface ReportSnapshotData {
   defects: SnapshotDefect[];
 }
 
+function toSnapshotDefect(defect: Defect): SnapshotDefect {
+  return {
+    id:        defect.id,
+    displayId: defect.displayId,
+    title:     defect.title,
+    severity:  defect.severity,
+    status:    defect.status,
+    link:      defect.link ?? '',
+    source:    defect.source ?? '',
+    createdAt: defect.createdAt ?? '',
+  };
+}
+
+/**
+ * Enriches snapshot defects with live defect data when legacy snapshots are missing
+ * fields like id/displayId/createdAt.
+ *
+ * Matching order:
+ * 1. By id when present in the snapshot
+ * 2. By unique business signature (title + severity + status + source)
+ *
+ * Keeps snapshot ordering so the report remains a point-in-time view.
+ */
+export function resolveReportDefects(
+  snapshotDefects: SnapshotDefect[] | undefined,
+  liveDefects: Defect[],
+): SnapshotDefect[] {
+  const sortedLive = [...liveDefects].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+  if (!snapshotDefects?.length) return sortedLive.map(toSnapshotDefect);
+
+  const liveById = new Map(sortedLive.map(defect => [defect.id, defect]));
+  const usedLiveIds = new Set<string>();
+
+  return snapshotDefects.map((snapshotDefect, index) => {
+    let liveMatch = snapshotDefect.id ? liveById.get(snapshotDefect.id) : undefined;
+
+    if (!liveMatch) {
+      const candidates = sortedLive.filter(defect =>
+        !usedLiveIds.has(defect.id)
+        && defect.title === snapshotDefect.title
+        && defect.severity === snapshotDefect.severity
+        && defect.status === snapshotDefect.status
+        && (defect.source ?? '') === (snapshotDefect.source ?? ''),
+      );
+      if (candidates.length === 1) liveMatch = candidates[0];
+    }
+
+    if (liveMatch) usedLiveIds.add(liveMatch.id);
+
+    return {
+      id:        snapshotDefect.id || liveMatch?.id || `snapshot-defect-${index}`,
+      displayId: snapshotDefect.displayId || liveMatch?.displayId,
+      title:     snapshotDefect.title || liveMatch?.title || '',
+      severity:  snapshotDefect.severity || liveMatch?.severity || '',
+      status:    snapshotDefect.status || liveMatch?.status || '',
+      link:      snapshotDefect.link || liveMatch?.link || '',
+      source:    snapshotDefect.source || liveMatch?.source || '',
+      createdAt: snapshotDefect.createdAt || liveMatch?.createdAt || '',
+    };
+  });
+}
+
 function computeCaseStatusFromSteps(steps: string[]): string {
   if (steps.length === 0)                                                       return 'UNTESTED';
   if (steps.some(s => s === 'failed'))                                          return 'FAILED';
@@ -179,16 +241,7 @@ export function computeSnapshotData(
   for (const d of rawDefects) {
     if (seen.has(d.id)) continue;
     seen.add(d.id);
-    defects.push({
-      id:        d.id,
-      displayId: d.displayId,
-      title:     d.title,
-      severity:  d.severity,
-      status:    d.status,
-      link:      d.link      ?? '',
-      source:    d.source    ?? '',
-      createdAt: d.createdAt ?? '',
-    });
+    defects.push(toSnapshotDefect(d));
   }
 
   return { totalPassed, totalFailed, totalSkipped, totalUntested, suiteData, defects };
