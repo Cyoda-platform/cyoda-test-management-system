@@ -142,7 +142,8 @@ public class TestCaseService {
     }
 
     /**
-     * Retrieves all non-deleted test cases for an entire project in one Cyoda call.
+     * Retrieves all non-deleted test cases for an entire project.
+     * Fetches in a single call with a large page size to handle projects with >100 cases.
      * Used by the repository aggregate endpoint to avoid per-suite fetches.
      */
     public List<TestCaseDTO> getCasesByProjectId(UUID projectId) {
@@ -160,7 +161,14 @@ public class TestCaseService {
                 .operator(GroupOperatorDto.AND)
                 .conditions(List.of(projectCondition, deletedCondition));
         condition.setType(QueryConditionTypeDto.GROUP);
-        return entityService.search(MODEL_SPEC, condition, TestCaseDTO.class).data()
+
+        // Fetch all cases in one request with large page size (covers projects up to 1000 cases)
+        return entityService.search(
+                MODEL_SPEC,
+                condition,
+                TestCaseDTO.class,
+                SearchAndRetrievalParams.builder().pageSize(1000).pageNumber(0).build()
+        ).data()
                 .stream()
                 .map(this::withId)
                 .toList();
@@ -295,6 +303,30 @@ public class TestCaseService {
     }
 
     /**
+     * Sanitizes string fields to ensure valid UTF-8 encoding.
+     * Removes control characters, private use characters, and unassigned characters
+     * that cause MalformedInputException during Cyoda indexing.
+     */
+    private String sanitizeString(String input) {
+        if (input == null || input.isEmpty()) return "";
+        // Remove control characters, private use characters, and unassigned characters
+        String cleaned = input.replaceAll("[\\p{Co}\\p{Cc}\\p{Cn}]", " ")
+                              .replaceAll("\\s+", " ")
+                              .trim();
+        // Verify the result is valid UTF-8 by attempting to encode/decode
+        try {
+            cleaned.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                    .decode(java.nio.ByteBuffer.wrap(cleaned.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            return cleaned;
+        } catch (Exception e) {
+            log.warn("Failed to validate UTF-8 for string: {}", input, e);
+            // Fall back to ASCII-only version
+            return cleaned.replaceAll("[^\\x00-\\x7F]", "?");
+        }
+    }
+
+    /**
      * Batch-creates multiple test cases (with optional steps) in a single suite.
      *
      * Performance: all display IDs are reserved with ONE counter round-trip via
@@ -316,75 +348,98 @@ public class TestCaseService {
         log.info("[BatchImport] counter reserved {} IDs in {}ms", items.size(), System.currentTimeMillis() - t0);
 
         TestCaseDTO[] results = new TestCaseDTO[items.size()];
+
+        // Limited parallelism: 3 workers with small delays to balance speed and safety
+        // This is much faster than sequential but still respects Cyoda's 300-request limit
+        final int CONCURRENCY = 3;
+        final int INTER_CASE_DELAY_MS = 50; // Small delay between cases (safety margin)
+        final Object delayLock = new Object();
+
         List<CompletableFuture<Void>> futures = new java.util.ArrayList<>(items.size());
-
-        for (int i = 0; i < items.size(); i++) {
-            final int idx = i;
-            final BatchImportCaseDTO item = items.get(i);
-            final String displayId = displayIds.get(i);
-
-            futures.add(CompletableFuture.runAsync(() -> {
-                long tCase = System.currentTimeMillis();
-                TestCaseDTO tc = new TestCaseDTO();
-                tc.setProjectId(projectId);
-                tc.setSuiteId(suiteId);
-                tc.setTitle(item.getTitle());
-                tc.setDescription(item.getDescription() != null ? item.getDescription() : "");
-                tc.setPreconditions(item.getPreconditions() != null ? item.getPreconditions() : "");
-                tc.setPriority(item.getPriority() != null ? item.getPriority()
-                        : com.java_template.application.dto.Priority.MEDIUM);
-                tc.setDeleted(false);
-                tc.setDisplayId(displayId);
-
-                if (item.getSteps() != null && !item.getSteps().isEmpty()) {
-                    int stepNum = 1;
-                    List<TestCaseDTO.StepDTO> embeddedSteps = new java.util.ArrayList<>();
-                    for (BatchImportCaseDTO.StepDTO s : item.getSteps()) {
-                        TestCaseDTO.StepDTO step = new TestCaseDTO.StepDTO(
-                                s.getStepNumber() != null ? s.getStepNumber() : stepNum,
-                                s.getAction() != null ? s.getAction() : "",
-                                s.getExpectedResult() != null ? s.getExpectedResult() : "");
-                        embeddedSteps.add(step);
-                        stepNum++;
-                    }
-                    tc.setSteps(embeddedSteps);
-                }
-
-                long tCreate = System.currentTimeMillis();
-                TestCaseDTO saved = withId(entityService.create(tc));
-                long createMs = System.currentTimeMillis() - tCreate;
-
-                // Cyoda may strip displayId/steps from the create-reload response —
-                // restore them explicitly then persist with a single update.
-                boolean needsUpdate = saved.getDisplayId() == null || !displayId.equals(saved.getDisplayId());
-
-                // Always restore steps if they were provided (Cyoda may strip them during create)
-                boolean hasSteps = tc.getSteps() != null && !tc.getSteps().isEmpty();
-                if (hasSteps) {
-                    saved.setSteps(tc.getSteps());
-                    needsUpdate = true; // Force update to persist steps
-                }
-
-                if (needsUpdate) {
-                    saved.setDisplayId(displayId);
-                    long tUpdate = System.currentTimeMillis();
-                    entityService.update(saved.getId(), saved, null);
-                    log.info("[BatchImport] {} create={}ms update={}ms (displayId/steps restored)",
-                            displayId, createMs, System.currentTimeMillis() - tUpdate);
-                } else {
-                    log.info("[BatchImport] {} create={}ms (displayId preserved, skipped update)",
-                            displayId, createMs);
-                }
-                results[idx] = saved;
-                log.debug("[BatchImport] {} total case time={}ms", displayId, System.currentTimeMillis() - tCase);
-            }));
-        }
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(CONCURRENCY);
 
         try {
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-        } catch (java.util.concurrent.CompletionException e) {
-            Throwable cause = e.getCause();
-            throw new RuntimeException("Batch import failed: " + cause.getMessage(), cause);
+            for (int i = 0; i < items.size(); i++) {
+                final int idx = i;
+                final BatchImportCaseDTO item = items.get(i);
+                final String displayId = displayIds.get(i);
+
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        long tCase = System.currentTimeMillis();
+                        TestCaseDTO tc = new TestCaseDTO();
+                        tc.setProjectId(projectId);
+                        tc.setSuiteId(suiteId);
+                        tc.setTitle(sanitizeString(item.getTitle()));
+                        tc.setDescription(sanitizeString(item.getDescription() != null ? item.getDescription() : ""));
+                        tc.setPreconditions(sanitizeString(item.getPreconditions() != null ? item.getPreconditions() : ""));
+                        tc.setPriority(item.getPriority() != null ? item.getPriority()
+                                : com.java_template.application.dto.Priority.MEDIUM);
+                        tc.setDeleted(false);
+                        tc.setDisplayId(displayId);
+
+                        if (item.getSteps() != null && !item.getSteps().isEmpty()) {
+                            int stepNum = 1;
+                            List<TestCaseDTO.StepDTO> embeddedSteps = new java.util.ArrayList<>();
+                            for (BatchImportCaseDTO.StepDTO s : item.getSteps()) {
+                                TestCaseDTO.StepDTO step = new TestCaseDTO.StepDTO(
+                                        s.getStepNumber() != null ? s.getStepNumber() : stepNum,
+                                        sanitizeString(s.getAction() != null ? s.getAction() : ""),
+                                        sanitizeString(s.getExpectedResult() != null ? s.getExpectedResult() : ""));
+                                embeddedSteps.add(step);
+                                stepNum++;
+                            }
+                            tc.setSteps(embeddedSteps);
+                        }
+
+                        long tCreate = System.currentTimeMillis();
+                        TestCaseDTO saved = withId(entityService.create(tc));
+                        long createMs = System.currentTimeMillis() - tCreate;
+
+                        // Cyoda may strip displayId/steps from the create-reload response —
+                        // restore them explicitly then persist with a single update.
+                        boolean needsUpdate = saved.getDisplayId() == null || !displayId.equals(saved.getDisplayId());
+
+                        // Always restore steps if they were provided (Cyoda may strip them during create)
+                        boolean hasSteps = tc.getSteps() != null && !tc.getSteps().isEmpty();
+                        if (hasSteps) {
+                            saved.setSteps(tc.getSteps());
+                            needsUpdate = true; // Force update to persist steps
+                        }
+
+                        if (needsUpdate) {
+                            saved.setDisplayId(displayId);
+                            long tUpdate = System.currentTimeMillis();
+                            entityService.update(saved.getId(), saved, null);
+                            log.info("[BatchImport] {} create={}ms update={}ms (displayId/steps restored)",
+                                    displayId, createMs, System.currentTimeMillis() - tUpdate);
+                        } else {
+                            log.info("[BatchImport] {} create={}ms (displayId preserved, skipped update)",
+                                    displayId, createMs);
+                        }
+                        results[idx] = saved;
+                        log.debug("[BatchImport] {} total case time={}ms", displayId, System.currentTimeMillis() - tCase);
+
+                        // Small throttle between requests to spread load
+                        if (idx < items.size() - 1) {
+                            synchronized (delayLock) {
+                                Thread.sleep(INTER_CASE_DELAY_MS);
+                            }
+                        }
+                    } catch (Exception e) {
+                        throw new RuntimeException("Batch import failed at " + displayId + ": " + e.getMessage(), e);
+                    }
+                }, executor));
+            }
+
+            try {
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            } catch (java.util.concurrent.CompletionException e) {
+                Throwable cause = e.getCause();
+                throw new RuntimeException("Batch import failed: " + cause.getMessage(), cause);
+            }
+        } finally {
+            executor.shutdown();
         }
 
         log.info("[BatchImport] {} cases total={}ms", items.size(), System.currentTimeMillis() - t0);

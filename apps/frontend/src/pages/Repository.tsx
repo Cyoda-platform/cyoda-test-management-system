@@ -747,8 +747,10 @@ const Repository = () => {
       const tick = (n = 1) => { doneWork += n; setImportProgress({ done: doneWork, total: totalWork }); };
       if (totalWork > 0) setImportProgress({ done: 0, total: totalWork });
 
-      // ── Helper: run up to CONCURRENCY promises at a time ──
-      const CONCURRENCY = 6;
+      // ── Helper: run up to CONCURRENCY promises at a time with delay between batches ──
+      // Conservative: 1 at a time, but with reduced delay since we're being careful on backend
+      const CONCURRENCY = 1;
+      const BATCH_DELAY_MS = 1000; // 1s delay between batch operations (optimized for speed)
       async function pooledRun<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
         const results: T[] = [];
         let idx = 0;
@@ -756,6 +758,10 @@ const Repository = () => {
           while (idx < tasks.length) {
             const i = idx++;
             results[i] = await tasks[i]();
+            // Add delay after each task to avoid rate limit exhaustion
+            if (i < tasks.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+            }
           }
         }
         const workers = Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker);
