@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, LayoutGrid } from 'lucide-react';
+import { Eye, EyeOff, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,14 +66,24 @@ const Login = () => {
               </Label>
               <div className="relative">
                 <Input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(''); }}
                   className="bg-secondary border-0 h-11 pr-10 focus-visible:ring-1 focus-visible:ring-accent/40"
                   disabled={isLoading}
                 />
-                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword
+                    ? <EyeOff className="h-4 w-4" strokeWidth={1.5} />
+                    : <Eye className="h-4 w-4" strokeWidth={1.5} />}
+                </button>
               </div>
             </div>
 
