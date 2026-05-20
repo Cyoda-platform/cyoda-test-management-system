@@ -1,69 +1,6 @@
-# Backend — Cyoda Test Management System
+# Backend — Technical Reference
 
-A **Spring Boot 3.5 / Java 21** backend for managing test projects, suites, test cases, runs, defects, and reports — built on the Cyoda workflow engine.
-
----
-
-## Prerequisites
-
-- **Java 21** — [Install Java 21](https://adoptium.net/)
-- **Cyoda instance** — get M2M credentials from [Cyoda AI Studio](https://studio.cyoda.io)
-
----
-
-## First Deploy Setup
-
-Before starting the app, create a `.env` file from the template:
-
-```bash
-cp .env.example .env
-```
-
-Then fill in the required values in `.env`:
-
-1. **Cyoda credentials** — `CYODA_HOST`, `CYODA_CLIENT_ID`, `CYODA_CLIENT_SECRET`
-2. **User accounts** — at least one user with a password (see [User Configuration](#-user-configuration) below)
-
-The app will refuse to start if user passwords are blank.
-
----
-
-## Quick Start
-
-```bash
-# From the project root
-./gradlew :apps:backend:build -x test -q && bash start-dev.sh
-```
-
-This starts the backend on `http://localhost:8080/api`. The `.env` file is loaded automatically.
-
----
-
-## 👤 User Configuration
-
-Users are defined via environment variables — there are no built-in accounts. Add one block per user, incrementing the index (`0`, `1`, `2`, ...):
-
-```bash
-APP_USERS_0_USERNAME=admin
-APP_USERS_0_PASSWORD=your-strong-password
-APP_USERS_0_ROLE=ADMIN
-
-APP_USERS_1_USERNAME=tester
-APP_USERS_1_PASSWORD=another-password
-APP_USERS_1_ROLE=TESTER
-
-# Add more users by incrementing the index
-APP_USERS_2_USERNAME=tester2
-APP_USERS_2_PASSWORD=...
-APP_USERS_2_ROLE=TESTER
-```
-
-- `ROLE` must be exactly `ADMIN` or `TESTER`
-- `ADMIN` — full access (create/edit/delete projects, suites, test cases)
-- `TESTER` — can execute test runs and log defects; cannot modify projects or test cases
-- Any number of users is supported; multiple admins and multiple testers are allowed
-
----
+> For first-time setup, user configuration, and running the app see the [root README](../../README.md).
 
 ## Commands
 
@@ -77,8 +14,11 @@ APP_USERS_2_ROLE=TESTER
 # E2E / Cucumber tests (requires live Cyoda instance)
 ./gradlew :apps:backend:cucumberTest
 
-# Run the backend directly
+# Run the backend
 ./gradlew :apps:backend:runApp
+
+# Coverage report (Jacoco)
+./gradlew :apps:backend:jacocoTestReport
 ```
 
 ---
@@ -96,21 +36,23 @@ src/main/java/com/java_template/
     └── service/
 ```
 
-**`common/`** — Cyoda framework: auth, gRPC client, EntityService, serializers. Never modify.
+**`common/`** — Cyoda framework: auth, gRPC client, EntityService, serializers. Never modify — changes break upgrades.
 
-**`application/`** — your business logic. All new features go here.
+**`application/`** — all business logic goes here. Controllers, entities, processors, criteria, services.
 
 ---
 
 ## Core Concepts
 
-**`CyodaEntity`** — domain objects (implement in `application/entity/`).
+**`CyodaEntity`** — domain objects. Implement in `application/entity/`. Must implement `getModelKey()` and `isValid()`.
 
-**`CyodaProcessor`** — workflow components that handle business logic during transitions. Cannot call EntityService to update the entity currently being processed.
+**`CyodaProcessor`** — handle business logic during workflow transitions. Implement in `application/processor/`. Cannot call EntityService to update the entity currently being processed.
 
-**`CyodaCriterion`** — pure functions that evaluate transition conditions. No side effects, no entity mutations.
+**`CyodaCriterion`** — evaluate transition conditions. Implement in `application/criterion/`. Must be pure functions — no side effects, no entity mutations.
 
-**`EntityWithMetadata<T>`** — unified wrapper used across controllers, processors, and criteria. Entity technical ID comes from `entityWithMetadata.metadata().getId()`.
+**`EntityWithMetadata<T>`** — unified wrapper used across controllers, processors, and criteria. Technical entity ID comes from `entityWithMetadata.metadata().getId()`.
+
+**`EntityService`** — single interface for all Cyoda data operations. Injected via constructor.
 
 ---
 
@@ -126,15 +68,13 @@ Import schemas and workflows with:
 ./import-schemas.sh
 ```
 
-See **[SCHEMA_AND_WORKFLOW_IMPORT.md](./SCHEMA_AND_WORKFLOW_IMPORT.md)** for the full import procedure including the required deletion order before re-importing.
+**Before re-importing**, delete all tenant entities and unlock/delete all models first — see [SCHEMA_AND_WORKFLOW_IMPORT.md](./SCHEMA_AND_WORKFLOW_IMPORT.md) for the exact deletion order. Skipping this causes orphaned entities and broken imports.
 
 ---
 
 ## Search API
 
-The backend includes a unified search engine across all entity types.
-
-**Global search** (header search bar):
+**Global search** (across all projects):
 ```
 GET /api/v1/search?query=login&pageNumber=0&pageSize=10
 ```
@@ -144,13 +84,13 @@ GET /api/v1/search?query=login&pageNumber=0&pageSize=10
 GET /api/projects/{projectId}/search/quick?query=login
 ```
 
-Searches across projects, suites, test cases, test runs, defects, and reports in parallel. Results are ranked by relevance score.
+Searches across projects, suites, test cases, test runs, defects, and reports in parallel. Results ranked by relevance score.
 
 ---
 
 ## Further Reading
 
-- **[SCHEMA_AND_WORKFLOW_IMPORT.md](./SCHEMA_AND_WORKFLOW_IMPORT.md)** — importing workflows and schemas into Cyoda
-- **[CYODA_INTEGRATION.md](./CYODA_INTEGRATION.md)** — EntityService, gRPC, and workflow configuration details
-- **[CONTRIBUTING.md](./CONTRIBUTING.md)** — development guidelines
-- **[usage-rules.md](./usage-rules.md)** — implementation rules for processors, criteria, and controllers
+- [SCHEMA_AND_WORKFLOW_IMPORT.md](./SCHEMA_AND_WORKFLOW_IMPORT.md) — full import procedure
+- [CYODA_INTEGRATION.md](./CYODA_INTEGRATION.md) — EntityService, gRPC, workflow configuration
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — development guidelines
+- [usage-rules.md](./usage-rules.md) — implementation rules for processors, criteria, controllers
