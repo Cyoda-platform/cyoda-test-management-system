@@ -32,6 +32,13 @@ springdoc:
 # Environment-specific settings for Cross-Origin Resource Sharing
 # Override via environment variables or profile-specific YAML files for different environments (dev/staging/prod)
 app:
+  users:
+    - username: ${APP_USERS_0_USERNAME:admin}
+      password: ${APP_USERS_0_PASSWORD:}
+      role: ${APP_USERS_0_ROLE:ADMIN}
+    - username: ${APP_USERS_1_USERNAME:tester}
+      password: ${APP_USERS_1_PASSWORD:}
+      role: ${APP_USERS_1_ROLE:TESTER}
   demo:
     # Set to true to auto-seed the demo project on startup.
     # Normally keep false and run seed-demo.sh once after deploy instead.

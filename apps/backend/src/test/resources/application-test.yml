@@ -18,6 +18,13 @@ spring:
       resolve-lazily: false
 
 app:
+  users:
+    - username: admin
+      password: admin123
+      role: ADMIN
+    - username: tester
+      password: tester123
+      role: TESTER
   auth:
     filter:
       enabled: false

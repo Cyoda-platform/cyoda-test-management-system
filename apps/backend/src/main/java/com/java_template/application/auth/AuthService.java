@@ -4,20 +4,16 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Authentication service with hardcoded users
- * Supports ADMIN and TESTER roles
- */
 @Service
 public class AuthService {
     private final JwtTokenProvider tokenProvider;
     private final Map<String, User> users = new HashMap<>();
 
-    public AuthService(JwtTokenProvider tokenProvider) {
+    public AuthService(JwtTokenProvider tokenProvider, AuthUsersProperties props) {
         this.tokenProvider = tokenProvider;
-        // Initialize hardcoded users
-        users.put("admin", new User("admin", "admin123", "ADMIN"));
-        users.put("tester", new User("tester", "tester123", "TESTER"));
+        for (AuthUsersProperties.UserConfig config : props.getUsers()) {
+            users.put(config.getUsername(), new User(config.getUsername(), config.getPassword(), config.getRole()));
+        }
     }
 
     /**
