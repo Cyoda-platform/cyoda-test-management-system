@@ -5,6 +5,7 @@ import com.java_template.application.service.DefectService;
 import com.java_template.common.dto.PageResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,7 +31,12 @@ public class DefectController {
     @Operation(summary = "Create a new defect for a project")
     public ResponseEntity<DefectDTO> createDefect(
             @PathVariable UUID projectId,
-            @Valid @RequestBody DefectDTO defect) {
+            @Valid @RequestBody DefectDTO defect,
+            HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role) && !"TESTER".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         defect.setProjectId(projectId);
         DefectDTO created = defectService.createDefect(defect);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -68,7 +74,12 @@ public class DefectController {
     public ResponseEntity<DefectDTO> updateDefect(
             @PathVariable UUID projectId,
             @PathVariable UUID id,
-            @Valid @RequestBody DefectDTO defect) {
+            @Valid @RequestBody DefectDTO defect,
+            HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role) && !"TESTER".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (!defectService.defectExists(id)) {
             return ResponseEntity.notFound().build();
         }
@@ -81,7 +92,12 @@ public class DefectController {
     @Operation(summary = "Delete a defect")
     public ResponseEntity<Void> deleteDefect(
             @PathVariable UUID projectId,
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (!"ADMIN".equals(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (!defectService.defectExists(id)) {
             return ResponseEntity.notFound().build();
         }

@@ -22,12 +22,12 @@ import org.slf4j.LoggerFactory;
 @Component("MetricsAggregatorProcessor")
 public class MetricsAggregatorProcessor implements CyodaProcessor {
     private static final Logger logger = LoggerFactory.getLogger(MetricsAggregatorProcessor.class);
-    private final String processorName = "MetricsAggregatorProcessor";
+    private static final String PROCESSOR_NAME = "MetricsAggregatorProcessor";
 
     @Override
     public EntityProcessorCalculationResponse process(CyodaEventContext<EntityProcessorCalculationRequest> context) {
         EntityProcessorCalculationRequest request = context.getEvent();
-        logger.debug("{}: Processing metrics aggregation for request: {}", processorName, request.getId());
+        logger.debug("{}: Processing metrics aggregation for request: {}", PROCESSOR_NAME, request.getId());
 
         // Stub implementation - returns entity unchanged
         // In future, this would calculate: pass/fail ratios, duration, execution time, etc.
@@ -35,13 +35,13 @@ public class MetricsAggregatorProcessor implements CyodaProcessor {
         response.setId(request.getId());
         response.setSuccess(true);
 
-        logger.debug("{}: Metrics aggregation completed", processorName);
+        logger.debug("{}: Metrics aggregation completed", PROCESSOR_NAME);
         return response;
     }
 
     @Override
     public boolean supports(OperationSpecification opSpec) {
-        return processorName.equals(opSpec.operationName());
+        return PROCESSOR_NAME.equals(opSpec.operationName());
     }
 
     /**
@@ -49,6 +49,6 @@ public class MetricsAggregatorProcessor implements CyodaProcessor {
      * @return the processor name
      */
     public String getName() {
-        return processorName;
+        return PROCESSOR_NAME;
     }
 }

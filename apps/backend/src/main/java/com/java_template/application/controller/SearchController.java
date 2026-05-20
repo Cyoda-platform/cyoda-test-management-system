@@ -1,9 +1,7 @@
 package com.java_template.application.controller;
 
-import com.java_template.application.dto.ProjectDTO;
 import com.java_template.application.dto.SearchRequestDTO;
 import com.java_template.application.dto.SearchResponseDTO;
-import com.java_template.application.dto.SearchResultDTO;
 import com.java_template.application.service.ProjectService;
 import com.java_template.application.service.SearchService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,8 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.UUID;
 
 /**
  * REST controller for unified search operations across all TMS entities
@@ -34,7 +31,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/projects/{projectId}/search")
+@RequestMapping("/v1/projects/{projectId}/search")
 @Tag(name = "Search", description = "Unified search across all TMS entities")
 public class SearchController {
 
@@ -99,7 +96,7 @@ public class SearchController {
 
         } catch (Exception e) {
             log.error("[SearchController] Search failed for project {}: {}", projectId, e.getMessage(), e);
-            throw new RuntimeException("Search operation failed: " + e.getMessage(), e);
+            throw new RuntimeException("Search operation failed", e);
         }
     }
 
@@ -127,104 +124,10 @@ public class SearchController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("[SearchController] Quick search failed: {}", e.getMessage(), e);
-            throw new RuntimeException("Quick search failed: " + e.getMessage(), e);
+            throw new RuntimeException("Quick search failed", e);
         }
     }
 
-    /**
-     * Global search endpoint for header (without requiring projectId)
-     *
-     * Returns mixed results from all projects the user has access to.
-     * Used in header autocomplete to search across everything.
-     *
-     * @param query Search query
-     * @return Top 10 results across all entity types and projects
-     */
-    @GetMapping
-    @Operation(summary = "Global header search",
-            description = "Search across all projects and entity types (projects, test cases, defects, reports, etc.)")
-    public ResponseEntity<Map<String, Object>> globalSearch(
-            @RequestParam(defaultValue = "")
-            @Parameter(description = "Search query", required = false)
-            String query,
-
-            @RequestParam(defaultValue = "0")
-            @Parameter(description = "Page number", required = false)
-            int pageNumber,
-
-            @RequestParam(defaultValue = "10")
-            @Parameter(description = "Page size (max 50)", required = false)
-            int pageSize) {
-
-        log.info("[SearchController] Global search request: query='{}'", query);
-
-        // Validate pagination
-        if (pageNumber < 0) pageNumber = 0;
-        if (pageSize < 1 || pageSize > 50) pageSize = 10;
-
-        try {
-            // Get all projects first
-            var allProjects = projectService.getAllProjects(0, 1000).data();
-
-            if (allProjects.isEmpty()) {
-                log.info("[SearchController] No projects found for global search");
-                return ResponseEntity.ok(Map.of(
-                        "query", query,
-                        "results", List.of(),
-                        "totalResults", 0,
-                        "executionTimeMs", 0
-                ));
-            }
-
-            // Search within each project and aggregate
-            long startTime = System.currentTimeMillis();
-            List<SearchResultDTO> allResults = new ArrayList<>();
-
-            for (ProjectDTO project : allProjects) {
-                try {
-                    SearchResponseDTO projectResults = searchService.search(query, project.getId(), 0, 100);
-                    allResults.addAll(projectResults.getResults());
-                } catch (Exception e) {
-                    log.warn("[SearchController] Search failed for project {}: {}", project.getId(), e.getMessage());
-                    // Continue searching other projects
-                }
-            }
-
-            // Sort by relevance and apply pagination
-            allResults.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
-
-            int startIdx = pageNumber * pageSize;
-            int endIdx = Math.min(startIdx + pageSize, allResults.size());
-            List<SearchResultDTO> pagedResults = allResults.subList(
-                    Math.min(startIdx, allResults.size()),
-                    endIdx
-            );
-
-            long executionTime = System.currentTimeMillis() - startTime;
-
-            log.info("[SearchController] Global search completed: {} total results in {}ms",
-                    allResults.size(), executionTime);
-
-            // Group results by type for better UX
-            Map<String, List<SearchResultDTO>> byType = pagedResults.stream()
-                    .collect(Collectors.groupingBy(SearchResultDTO::getType));
-
-            return ResponseEntity.ok(Map.of(
-                    "query", query,
-                    "results", pagedResults,
-                    "resultsByType", byType,
-                    "totalResults", allResults.size(),
-                    "pageNumber", pageNumber,
-                    "pageSize", pageSize,
-                    "executionTimeMs", executionTime
-            ));
-
-        } catch (Exception e) {
-            log.error("[SearchController] Global search failed: {}", e.getMessage(), e);
-            return ResponseEntity.status(500).body(Map.of(
-                    "error", "Search failed: " + e.getMessage()
-            ));
-        }
-    }
 }
+
 

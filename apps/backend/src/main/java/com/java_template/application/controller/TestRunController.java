@@ -89,12 +89,10 @@ public class TestRunController {
     @PutMapping("/{id}")
     @Operation(summary = "Update a test run")
     public ResponseEntity<TestRunDTO> updateTestRun(@PathVariable UUID projectId, @PathVariable UUID id, @Valid @RequestBody TestRunDTO testRun) {
-        if (!testRunService.testRunExists(id)) {
-            return ResponseEntity.notFound().build();
-        }
         testRun.setProjectId(projectId);
-        TestRunDTO updated = testRunService.updateTestRun(id, testRun);
-        return ResponseEntity.ok(updated);
+        return testRunService.updateTestRun(id, testRun)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/{id}/complete")
@@ -115,7 +113,7 @@ public class TestRunController {
             HttpServletRequest request) {
         String role = (String) request.getAttribute("role");
         if (role == null || (!"TESTER".equals(role) && !"ADMIN".equals(role))) {
-            log.warn("===== UNLOCK_RUN FORBIDDEN ===== role={} is not TESTER or ADMIN", role);
+            log.warn("Unlock test run rejected — role '{}' is not TESTER or ADMIN", role);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         return testRunService.getTestRunById(id)

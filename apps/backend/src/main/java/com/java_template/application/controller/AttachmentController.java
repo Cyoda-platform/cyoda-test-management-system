@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import com.java_template.common.dto.PageResult;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -29,6 +30,18 @@ import java.util.UUID;
 public class AttachmentController {
 
     private static final Logger logger = LoggerFactory.getLogger(AttachmentController.class);
+
+    private static final Set<String> ALLOWED_MIME_TYPES = Set.of(
+            "image/jpeg", "image/png", "image/gif", "image/webp",
+            "application/pdf",
+            "text/plain", "text/csv",
+            "application/zip",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/msword"
+    );
+
     private final AttachmentService attachmentService;
 
     public AttachmentController(AttachmentService attachmentService) {
@@ -45,13 +58,20 @@ public class AttachmentController {
             @RequestParam(value = "attachmentType",   required = false) String attachmentType,
             @RequestParam(value = "runId",            required = false) UUID runId,
             @RequestParam(value = "stepKey",          required = false) String stepKey) {
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_MIME_TYPES.contains(contentType)) {
+            logger.warn("Rejected upload with disallowed content type '{}' for project {}", contentType, projectId);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(java.util.Map.of("error", "File type not allowed. Permitted types: images, PDF, plain text, CSV, ZIP, Office documents."));
+        }
         try {
             AttachmentDTO uploaded = attachmentService.uploadAttachment(
                     projectId, caseId, defectId, file, attachmentType, runId, stepKey);
             return ResponseEntity.status(HttpStatus.CREATED).body(AttachmentMetadataDTO.from(uploaded));
         } catch (Exception e) {
+            logger.error("Failed to upload attachment for project {}: {}", projectId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(java.util.Map.of("error", e.getMessage() != null ? e.getMessage() : "Upload failed"));
+                    .body(java.util.Map.of("error", "File upload failed. Please try again."));
         }
     }
 
@@ -244,7 +264,7 @@ public class AttachmentController {
         } catch (Exception e) {
             logger.error("Failed to copy attachment {}: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(java.util.Map.of("error", e.getMessage() != null ? e.getMessage() : "Copy failed"));
+                    .body(java.util.Map.of("error", "File copy failed. Please try again."));
         }
     }
 

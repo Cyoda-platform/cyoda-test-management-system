@@ -22,25 +22,25 @@ import org.slf4j.LoggerFactory;
 @Component("BugLinkProcessor")
 public class BugLinkProcessor implements CyodaProcessor {
     private static final Logger logger = LoggerFactory.getLogger(BugLinkProcessor.class);
-    private final String processorName = "BugLinkProcessor";
+    private static final String PROCESSOR_NAME = "BugLinkProcessor";
 
     @Override
     public EntityProcessorCalculationResponse process(CyodaEventContext<EntityProcessorCalculationRequest> context) {
         EntityProcessorCalculationRequest request = context.getEvent();
-        logger.debug("{}: Processing bug linking for request: {}", processorName, request.getId());
+        logger.debug("{}: Processing bug linking for request: {}", PROCESSOR_NAME, request.getId());
 
         // Stub implementation - returns entity unchanged
         EntityProcessorCalculationResponse response = new EntityProcessorCalculationResponse();
         response.setId(request.getId());
         response.setSuccess(true);
         
-        logger.debug("{}: Bug linking processing completed", processorName);
+        logger.debug("{}: Bug linking processing completed", PROCESSOR_NAME);
         return response;
     }
 
     @Override
     public boolean supports(OperationSpecification opSpec) {
-        return processorName.equals(opSpec.operationName());
+        return PROCESSOR_NAME.equals(opSpec.operationName());
     }
 
     /**
@@ -48,7 +48,7 @@ public class BugLinkProcessor implements CyodaProcessor {
      * @return the processor name
      */
     public String getName() {
-        return processorName;
+        return PROCESSOR_NAME;
     }
 }
 

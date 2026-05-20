@@ -23,25 +23,25 @@ import org.slf4j.LoggerFactory;
 @Component("EdgeMessageProcessor")
 public class EdgeMessageProcessor implements CyodaProcessor {
     private static final Logger logger = LoggerFactory.getLogger(EdgeMessageProcessor.class);
-    private final String processorName = "EdgeMessageProcessor";
+    private static final String PROCESSOR_NAME = "EdgeMessageProcessor";
 
     @Override
     public EntityProcessorCalculationResponse process(CyodaEventContext<EntityProcessorCalculationRequest> context) {
         EntityProcessorCalculationRequest request = context.getEvent();
-        logger.debug("{}: Processing edge message operations for request: {}", processorName, request.getId());
+        logger.debug("{}: Processing edge message operations for request: {}", PROCESSOR_NAME, request.getId());
 
         // Stub implementation - returns entity unchanged
         EntityProcessorCalculationResponse response = new EntityProcessorCalculationResponse();
         response.setId(request.getId());
         response.setSuccess(true);
 
-        logger.debug("{}: Edge message processing completed", processorName);
+        logger.debug("{}: Edge message processing completed", PROCESSOR_NAME);
         return response;
     }
 
     @Override
     public boolean supports(OperationSpecification opSpec) {
-        return processorName.equals(opSpec.operationName());
+        return PROCESSOR_NAME.equals(opSpec.operationName());
     }
 
     /**
@@ -49,7 +49,7 @@ public class EdgeMessageProcessor implements CyodaProcessor {
      * @return the processor name
      */
     public String getName() {
-        return processorName;
+        return PROCESSOR_NAME;
     }
 }
 

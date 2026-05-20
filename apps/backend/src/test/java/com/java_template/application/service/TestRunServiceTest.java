@@ -102,12 +102,36 @@ public class TestRunServiceTest {
 
     @Test
     public void testDeleteTestRun() {
+        when(entityService.getById(eq(runId), any(), eq(TestRunDTO.class)))
+                .thenReturn(entityWithMetadata(testRun, runId));
         when(entityService.deleteById(runId)).thenReturn(runId);
 
         boolean deleted = testRunService.deleteTestRun(runId);
 
         assertTrue(deleted);
         verify(entityService).deleteById(runId);
+    }
+
+    @Test
+    void updateTestRun_notFound_returnsEmpty() {
+        when(entityService.getById(eq(runId), any(), eq(TestRunDTO.class)))
+                .thenThrow(new RuntimeException("Entity not found"));
+
+        Optional<TestRunDTO> result = testRunService.updateTestRun(runId, testRun);
+
+        assertFalse(result.isPresent());
+        verify(entityService, never()).update(any(), any(), any());
+    }
+
+    @Test
+    void deleteTestRun_notFound_returnsFalse() {
+        when(entityService.getById(eq(runId), any(), eq(TestRunDTO.class)))
+                .thenThrow(new RuntimeException("Entity not found"));
+
+        boolean deleted = testRunService.deleteTestRun(runId);
+
+        assertFalse(deleted);
+        verify(entityService, never()).deleteById(any());
     }
 }
 

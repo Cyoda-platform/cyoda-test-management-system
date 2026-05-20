@@ -118,6 +118,18 @@ public class ProjectServiceTest {
     }
 
     @Test
+    void getProjectById_notFound_makesExactlyOneAttempt() {
+        // IM-13: Thread.sleep retry loop blocks Tomcat threads. After the fix,
+        // a single failed getById must not be retried — return Optional.empty() immediately.
+        when(entityService.getById(any(), any(), eq(ProjectDTO.class)))
+                .thenThrow(new RuntimeException("Entity not found"));
+
+        projectService.getProjectById(projectId);
+
+        verify(entityService, times(1)).getById(any(), any(), eq(ProjectDTO.class));
+    }
+
+    @Test
     public void testGetAllProjects() {
         PageResult<EntityWithMetadata<ProjectDTO>> page =
                 PageResult.of(null, List.of(entityWithMetadata(testProject, projectId)), 0, 20, 1);

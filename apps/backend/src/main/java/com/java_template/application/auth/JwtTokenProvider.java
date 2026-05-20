@@ -1,113 +1,66 @@
 package com.java_template.application.auth;
 
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
 
 /**
- * Simple JWT-like token provider using Base64 encoding
- * Hardcoded secret key and 24-hour expiration
+ * JWT token provider using HMAC-SHA256 signatures.
+ * Tokens are stateless — no server-side store is required.
+ * The signing secret is read from app.auth.secret (APP_AUTH_SECRET env var).
  */
 @Component
 public class JwtTokenProvider {
-    private static final String SECRET = "java-template-secret-key-12345";
-    private static final long EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours
-    private final Map<String, TokenData> tokenStore = new HashMap<>();
 
-    /**
-     * Generate a token for the given username and role
-     */
-    public String generateToken(String username, String role) {
-        long issuedAt = System.currentTimeMillis();
-        long expiresAt = issuedAt + EXPIRATION_TIME;
+    private static final long EXPIRATION_MS = 24 * 60 * 60 * 1_000L;
 
-        String payload = username + "|" + role + "|" + issuedAt + "|" + expiresAt;
-        String token = Base64.getEncoder().encodeToString(payload.getBytes());
+    private final SecretKey key;
 
-        tokenStore.put(token, new TokenData(username, role, issuedAt, expiresAt));
-        return token;
+    public JwtTokenProvider(@Value("${app.auth.secret}") String secret) {
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * Validate token
-     */
+    public String generateToken(String username, String role) {
+        Date now = new Date();
+        return Jwts.builder()
+                .subject(username)
+                .claim("role", role)
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + EXPIRATION_MS))
+                .signWith(key)
+                .compact();
+    }
+
     public boolean validateToken(String token) {
-        TokenData data = tokenStore.get(token);
-        if (data == null) {
+        try {
+            Jwts.parser().verifyWith(key).build().parseSignedClaims(token);
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
-        return data.expiresAt > System.currentTimeMillis();
     }
 
-    /**
-     * Get username from token
-     * Falls back to decoding from token if not in store (e.g., after server restart)
-     */
     public String getUsernameFromToken(String token) {
-        // Try to get from store first
-        TokenData data = tokenStore.get(token);
-        if (data != null && data.expiresAt > System.currentTimeMillis()) {
-            return data.username;
-        }
-
-        // Fallback: decode from token (Base64 format: username|role|issuedAt|expiresAt)
         try {
-            String payload = new String(Base64.getDecoder().decode(token));
-            String[] parts = payload.split("\\|");
-            if (parts.length >= 2) {
-                long expiresAt = Long.parseLong(parts[3]);
-                if (expiresAt > System.currentTimeMillis()) {
-                    return parts[0]; // Return username
-                }
-            }
-        } catch (Exception e) {
-            // Token is not valid Base64 or wrong format
+            return Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(token).getPayload().getSubject();
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
         }
-
-        return null;
     }
 
-    /**
-     * Get role from token
-     * Falls back to decoding from token if not in store (e.g., after server restart)
-     */
     public String getRoleFromToken(String token) {
-        // Try to get from store first
-        TokenData data = tokenStore.get(token);
-        if (data != null && data.expiresAt > System.currentTimeMillis()) {
-            return data.role;
-        }
-
-        // Fallback: decode from token (Base64 format: username|role|issuedAt|expiresAt)
         try {
-            String payload = new String(Base64.getDecoder().decode(token));
-            String[] parts = payload.split("\\|");
-            if (parts.length >= 2) {
-                long expiresAt = Long.parseLong(parts[3]);
-                if (expiresAt > System.currentTimeMillis()) {
-                    return parts[1]; // Return role
-                }
-            }
-        } catch (Exception e) {
-            // Token is not valid Base64 or wrong format
-        }
-
-        return null;
-    }
-
-    private static class TokenData {
-        String username;
-        String role;
-        long issuedAt;
-        long expiresAt;
-
-        TokenData(String username, String role, long issuedAt, long expiresAt) {
-            this.username = username;
-            this.role = role;
-            this.issuedAt = issuedAt;
-            this.expiresAt = expiresAt;
+            return Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(token).getPayload().get("role", String.class);
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
         }
     }
 }
-

@@ -22,25 +22,25 @@ import org.slf4j.LoggerFactory;
 @Component("TestRunCompleteProcessor")
 public class TestRunCompleteProcessor implements CyodaProcessor {
     private static final Logger logger = LoggerFactory.getLogger(TestRunCompleteProcessor.class);
-    private final String processorName = "TestRunCompleteProcessor";
+    private static final String PROCESSOR_NAME = "TestRunCompleteProcessor";
 
     @Override
     public EntityProcessorCalculationResponse process(CyodaEventContext<EntityProcessorCalculationRequest> context) {
         EntityProcessorCalculationRequest request = context.getEvent();
-        logger.debug("{}: Processing test run completion for request: {}", processorName, request.getId());
+        logger.debug("{}: Processing test run completion for request: {}", PROCESSOR_NAME, request.getId());
 
         // Stub implementation - returns entity unchanged
         EntityProcessorCalculationResponse response = new EntityProcessorCalculationResponse();
         response.setId(request.getId());
         response.setSuccess(true);
         
-        logger.debug("{}: Test run completion processing completed", processorName);
+        logger.debug("{}: Test run completion processing completed", PROCESSOR_NAME);
         return response;
     }
 
     @Override
     public boolean supports(OperationSpecification opSpec) {
-        return processorName.equals(opSpec.operationName());
+        return PROCESSOR_NAME.equals(opSpec.operationName());
     }
 
     /**
@@ -48,7 +48,7 @@ public class TestRunCompleteProcessor implements CyodaProcessor {
      * @return the processor name
      */
     public String getName() {
-        return processorName;
+        return PROCESSOR_NAME;
     }
 }
 

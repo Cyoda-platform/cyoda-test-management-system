@@ -22,25 +22,25 @@ import org.slf4j.LoggerFactory;
 @Component("AtomicFailureProcessor")
 public class AtomicFailureProcessor implements CyodaProcessor {
     private static final Logger logger = LoggerFactory.getLogger(AtomicFailureProcessor.class);
-    private final String processorName = "AtomicFailureProcessor";
+    private static final String PROCESSOR_NAME = "AtomicFailureProcessor";
 
     @Override
     public EntityProcessorCalculationResponse process(CyodaEventContext<EntityProcessorCalculationRequest> context) {
         EntityProcessorCalculationRequest request = context.getEvent();
-        logger.debug("{}: Processing atomic failure detection for request: {}", processorName, request.getId());
+        logger.debug("{}: Processing atomic failure detection for request: {}", PROCESSOR_NAME, request.getId());
 
         // Stub implementation - returns entity unchanged
         EntityProcessorCalculationResponse response = new EntityProcessorCalculationResponse();
         response.setId(request.getId());
         response.setSuccess(true);
 
-        logger.debug("{}: Atomic failure detection completed", processorName);
+        logger.debug("{}: Atomic failure detection completed", PROCESSOR_NAME);
         return response;
     }
 
     @Override
     public boolean supports(OperationSpecification opSpec) {
-        return processorName.equals(opSpec.operationName());
+        return PROCESSOR_NAME.equals(opSpec.operationName());
     }
 
     /**
@@ -48,7 +48,7 @@ public class AtomicFailureProcessor implements CyodaProcessor {
      * @return the processor name
      */
     public String getName() {
-        return processorName;
+        return PROCESSOR_NAME;
     }
 }
 

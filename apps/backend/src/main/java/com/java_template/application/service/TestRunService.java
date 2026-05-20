@@ -18,7 +18,9 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,6 +44,28 @@ public class TestRunService {
         this.entityService = entityService;
         this.projectCounterService = projectCounterService;
         this.objectMapper = objectMapper;
+    }
+
+    private Map<String, String> parseStepStatuses(String json) {
+        if (json == null || json.isEmpty() || "{}".equals(json)) {
+            return new HashMap<>();
+        }
+        try {
+            return objectMapper.readValue(json,
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
+        } catch (Exception e) {
+            log.warn("Failed to parse stepStatuses JSON: {}", json, e);
+            return new HashMap<>();
+        }
+    }
+
+    private String serializeStepStatuses(Map<String, String> map) {
+        try {
+            return objectMapper.writeValueAsString(map != null ? map : new HashMap<>());
+        } catch (Exception e) {
+            log.warn("Failed to serialize stepStatuses map", e);
+            return "{}";
+        }
     }
 
     private GroupConditionDto conditionByField(String fieldName, Object value) {
@@ -81,11 +105,6 @@ public class TestRunService {
         String displayId = projectCounterService.nextRunDisplayId(testRun.getProjectId());
         testRun.setDisplayId(displayId);
 
-        log.warn("===== CREATETESTRUN ENTRY ===== projectId={}, incomingCaseIdsCount={}, incomingStepStatusesEmpty={}",
-                testRun.getProjectId(),
-                (testRun.getCaseIds() != null ? testRun.getCaseIds().size() : 0),
-                (testRun.getStepStatuses() == null || testRun.getStepStatuses().isEmpty() || testRun.getStepStatuses().equals("{}")));
-
         // Save caseIds and stepStatuses temporarily
         // Cyoda cannot handle complex types during create, so we'll add them in a follow-up update
         java.util.List<String> savedCaseIds = testRun.getCaseIds();
@@ -104,7 +123,6 @@ public class TestRunService {
             (savedStepStatuses != null && !savedStepStatuses.isEmpty() && !savedStepStatuses.equals("{}"))) {
             created.setCaseIds(savedCaseIds);
             created.setStepStatuses(savedStepStatuses);
-            log.warn("===== CREATETESTRUN UPDATING WITH CASE IDS AND STEP STATUSES =====");
         }
 
         // Mark as 'initial' so updateTestRun can detect it and send initialize_run
@@ -182,14 +200,11 @@ public class TestRunService {
         @CacheEvict(value = "testRunsByProject",    allEntries = true),
         @CacheEvict(value = "allTestRunsByProject", allEntries = true)
     })
-    public TestRunDTO updateTestRun(UUID id, TestRunDTO testRun) {
+    public Optional<TestRunDTO> updateTestRun(UUID id, TestRunDTO testRun) {
         boolean needsCaseIdsMerge = testRun.getCaseIds() == null || testRun.getCaseIds().isEmpty();
         boolean needsStatusMerge  = testRun.getStepStatuses() == null
                 || testRun.getStepStatuses().isEmpty()
                 || testRun.getStepStatuses().equals("{}");
-
-        log.warn("===== UPDATETESTRUN ENTRY ===== id={}, incomingStatus={}, incomingStepStatusesEmpty={}",
-                id, testRun.getStatus(), needsStatusMerge);
 
         final String[] operationName = new String[]{null};
 
@@ -198,22 +213,18 @@ public class TestRunService {
         // each see status=initial and each send initialize_run, flooding Cyoda with
         // conflicting transactions that timed out after 60 s.
         Optional<TestRunDTO> existingOpt = getTestRunById(id);
+        if (existingOpt.isEmpty()) {
+            return Optional.empty();
+        }
 
         existingOpt.ifPresent(existing -> {
             if ("initial".equals(existing.getStatus())) {
                 operationName[0] = "initialize_run";
-                log.warn("===== UPDATETESTRUN DETECTED INITIAL STATE - transitioning to active =====");
             }
         });
 
         if (needsCaseIdsMerge || needsStatusMerge) {
             existingOpt.ifPresent(existing -> {
-                log.warn("===== UPDATETESTRUN MERGE ===== existingStatus={}, existingStepStatusesEmpty={}",
-                        existing.getStatus(),
-                        (existing.getStepStatuses() == null
-                                || existing.getStepStatuses().isEmpty()
-                                || existing.getStepStatuses().equals("{}")));
-
                 if (needsCaseIdsMerge
                         && existing.getCaseIds() != null
                         && !existing.getCaseIds().isEmpty()) {
@@ -226,24 +237,16 @@ public class TestRunService {
                 } else if (!needsStatusMerge
                         && existing.getStepStatuses() != null
                         && !existing.getStepStatuses().equals("{}")) {
-                    java.util.Map<String, String> existingMap = existing.getStepStatusesAsMap();
-                    java.util.Map<String, String> incomingMap = testRun.getStepStatusesAsMap();
+                    Map<String, String> existingMap = parseStepStatuses(existing.getStepStatuses());
+                    Map<String, String> incomingMap = parseStepStatuses(testRun.getStepStatuses());
                     existingMap.putAll(incomingMap);
-                    testRun.setStepStatusesFromMap(existingMap);
-                    log.warn("===== UPDATETESTRUN MERGED ===== finalStepStatusesCount={}", existingMap.size());
+                    testRun.setStepStatuses(serializeStepStatuses(existingMap));
                 }
             });
         }
 
-        log.warn("===== UPDATETESTRUN CALLING entityService.update() with status={}, stepStatusesEmpty={}, operationName={}",
-                testRun.getStatus(),
-                (testRun.getStepStatuses() == null
-                        || testRun.getStepStatuses().isEmpty()
-                        || testRun.getStepStatuses().equals("{}")),
-                operationName[0]);
-
         try {
-            return withId(entityService.update(id, testRun, operationName[0]));
+            return Optional.of(withId(entityService.update(id, testRun, operationName[0])));
         } catch (Exception e) {
             // If initialize_run fails because another concurrent request already sent it,
             // Cyoda returns "State machine failed". Retry as a plain update so the
@@ -251,8 +254,8 @@ public class TestRunService {
             if ("initialize_run".equals(operationName[0])
                     && e.getMessage() != null
                     && e.getMessage().contains("State machine failed")) {
-                log.warn("===== UPDATETESTRUN concurrent initialize_run detected for {}, retrying as plain update =====", id);
-                return withId(entityService.update(id, testRun, null));
+                log.info("Concurrent initialize_run detected for {}, retrying as plain update", id);
+                return Optional.of(withId(entityService.update(id, testRun, null)));
             }
             throw e;
         }
@@ -287,6 +290,9 @@ public class TestRunService {
         @CacheEvict(value = "allTestRunsByProject", allEntries = true)
     })
     public boolean deleteTestRun(UUID id) {
+        if (getTestRunById(id).isEmpty()) {
+            return false;
+        }
         entityService.deleteById(id);
         return true;
     }

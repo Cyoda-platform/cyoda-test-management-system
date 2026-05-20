@@ -237,7 +237,12 @@ public class DemoSeederService {
             return runHolder[0];
         });
         TestRunDTO latestRun = runHolder[0];
-        latestRun.setStepStatusesFromMap(new HashMap<>(stepStatusMap));
+        try {
+            latestRun.setStepStatuses(objectMapper.writeValueAsString(new HashMap<>(stepStatusMap)));
+        } catch (Exception e) {
+            log.warn("Failed to serialize stepStatuses in demo seeder", e);
+            latestRun.setStepStatuses("{}");
+        }
         latestRun.setPassed(totalPassed.get());
         latestRun.setFailed(totalFailed.get());
         latestRun.setSkipped(totalSkipped.get());

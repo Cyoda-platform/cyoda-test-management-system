@@ -120,7 +120,7 @@ public class GlobalSearchController {
         } catch (Exception e) {
             log.error("[GlobalSearch] Failed: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of(
-                    "error", "Search failed: " + e.getMessage()
+                    "error", "Search failed. Please try again."
             ));
         }
     }

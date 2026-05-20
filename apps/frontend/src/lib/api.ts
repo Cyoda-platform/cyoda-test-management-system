@@ -16,14 +16,18 @@ let storedToken: string | null = null;
 export function setAuthToken(token: string | null) {
   storedToken = token;
   if (token) {
-    localStorage.setItem('auth_token', token);
+    // Only persist to localStorage in dev mode — in production the httpOnly cookie
+    // is the auth transport and localStorage is XSS-readable.
+    if (import.meta.env.DEV) {
+      localStorage.setItem('auth_token', token);
+    }
   } else {
     localStorage.removeItem('auth_token');
   }
 }
 
 export function getAuthToken(): string | null {
-  if (!storedToken) {
+  if (!storedToken && import.meta.env.DEV) {
     storedToken = localStorage.getItem('auth_token');
   }
   return storedToken;
@@ -454,6 +458,19 @@ export const attachmentsApi = {
     runId?: string,
     stepKey?: string,
   ) => {
+    const ALLOWED_TYPES = new Set([
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'application/pdf',
+      'text/plain', 'text/csv',
+      'application/zip',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/msword',
+    ]);
+    if (file.type && !ALLOWED_TYPES.has(file.type)) {
+      return Promise.reject(new Error(`File type "${file.type}" is not allowed.`));
+    }
     const form = new FormData();
     form.append('file', file);
     if (caseId)          form.append('caseId', caseId);

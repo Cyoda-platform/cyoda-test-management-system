@@ -9,6 +9,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,9 +29,12 @@ public class AuthController {
     static final int COOKIE_MAX_AGE = 24 * 60 * 60; // 24 hours
 
     private final AuthService authService;
+    private final boolean secureCookie;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService,
+                          @Value("${app.auth.secure-cookie:true}") boolean secureCookie) {
         this.authService = authService;
+        this.secureCookie = secureCookie;
     }
 
     @PostMapping("/login")
@@ -51,6 +55,7 @@ public class AuthController {
         // Set httpOnly cookie — JS cannot read the token
         Cookie cookie = new Cookie(COOKIE_NAME, authResponse.token);
         cookie.setHttpOnly(true);
+        cookie.setSecure(secureCookie);
         cookie.setPath("/");
         cookie.setMaxAge(COOKIE_MAX_AGE);
         cookie.setAttribute("SameSite", "Lax");  // Allow cookie in cross-site requests (for Vite proxy)
@@ -72,6 +77,7 @@ public class AuthController {
     public ResponseEntity<Void> logout(HttpServletResponse httpResponse) {
         Cookie cookie = new Cookie(COOKIE_NAME, "");
         cookie.setHttpOnly(true);
+        cookie.setSecure(secureCookie);
         cookie.setPath("/");
         cookie.setMaxAge(0); // delete immediately
         cookie.setAttribute("SameSite", "Lax");  // Match login cookie settings

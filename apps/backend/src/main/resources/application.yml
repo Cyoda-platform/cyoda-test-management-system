@@ -48,6 +48,9 @@ app:
     # MIGRATION: Delete this entire block when switching to a real IdP and add:
     #   spring.security.oauth2.resourceserver.jwt.issuer-uri: https://your-tenant.example.com/
     secret: ${APP_AUTH_SECRET:change-me-dev-secret-32-chars-min}
+    # Set APP_AUTH_SECURE_COOKIE=false only for local HTTP development (no TLS).
+    # Must be true in any environment served over HTTPS.
+    secure-cookie: ${APP_AUTH_SECURE_COOKIE:true}
     issuer: cyoda-tms-local
     token-ttl-seconds: 3600
   cors:

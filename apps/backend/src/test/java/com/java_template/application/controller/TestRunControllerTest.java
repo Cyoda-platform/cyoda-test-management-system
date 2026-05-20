@@ -158,8 +158,8 @@ class TestRunControllerTest {
     @DisplayName("PUT /{id} — run exists — returns 200")
     void updateTestRun_exists_returns200() throws Exception {
         TestRunDTO dto = buildRun("Updated Run");
-        when(testRunService.testRunExists(eq(runId))).thenReturn(true);
-        when(testRunService.updateTestRun(eq(runId), any(TestRunDTO.class))).thenReturn(dto);
+        when(testRunService.updateTestRun(eq(runId), any(TestRunDTO.class)))
+                .thenReturn(Optional.of(dto));
 
         mockMvc.perform(put("/projects/{pid}/runs/{id}", projectId, runId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -171,7 +171,8 @@ class TestRunControllerTest {
     @Test
     @DisplayName("PUT /{id} — run not found — returns 404")
     void updateTestRun_notFound_returns404() throws Exception {
-        when(testRunService.testRunExists(eq(runId))).thenReturn(false);
+        when(testRunService.updateTestRun(eq(runId), any(TestRunDTO.class)))
+                .thenReturn(Optional.empty());
 
         mockMvc.perform(put("/projects/{pid}/runs/{id}", projectId, runId)
                         .contentType(MediaType.APPLICATION_JSON)

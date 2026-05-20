@@ -17,12 +17,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * Unit tests for AuthController
  */
 @WebMvcTest(controllers = AuthController.class,
         excludeAutoConfiguration = {SecurityAutoConfiguration.class, SecurityFilterAutoConfiguration.class})
+@TestPropertySource(properties = "app.auth.secure-cookie=true")
 public class AuthControllerTest {
 
     @Autowired
@@ -130,7 +132,7 @@ public class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("FR 1.1: Only 2 hardcoded users exist - admin")
+    @DisplayName("FR 1.1: Configured admin user can login")
     public void testOnlyHardcodedAdminExists() throws Exception {
         // Admin can login
         AuthService.LoginResponse response =
@@ -147,7 +149,7 @@ public class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("FR 1.1: Only 2 hardcoded users exist - tester")
+    @DisplayName("FR 1.1: Configured tester user can login")
     public void testOnlyHardcodedTesterExists() throws Exception {
         // Tester can login
         AuthService.LoginResponse response =
@@ -161,6 +163,20 @@ public class AuthControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void loginCookieHasSecureFlag() throws Exception {
+        AuthService.LoginResponse response =
+                new AuthService.LoginResponse("mock-jwt-token", "admin", "ADMIN",
+                        System.currentTimeMillis() + 86400000);
+        when(authService.authenticate("admin", "admin123")).thenReturn(response);
+
+        mockMvc.perform(post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(new LoginRequest("admin", "admin123"))))
+                .andExpect(status().isOk())
+                .andExpect(cookie().secure(AuthController.COOKIE_NAME, true));
     }
 
     @Test

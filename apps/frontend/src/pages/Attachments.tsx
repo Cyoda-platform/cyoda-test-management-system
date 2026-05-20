@@ -112,9 +112,7 @@ const Attachments = () => {
     `${BASE_URL}/projects/${projectId}/attachments/${att.id}/content`;
 
   const viewUrl = (att: Attachment) => {
-    const url = `${BASE_URL}/projects/${projectId}/attachments/${att.id}/view`;
-    console.log('📸 View URL generated:', { url, projectId, attId: att.id, fileType: att.fileType });
-    return url;
+    return `${BASE_URL}/projects/${projectId}/attachments/${att.id}/view`;
   };
 
   // ── render ────────────────────────────────────────────────────────────────────
