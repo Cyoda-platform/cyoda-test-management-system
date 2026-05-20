@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # TMS API - Get Authentication Tokens
-# This script obtains JWT tokens for admin and tester users
+# Reads user credentials from .env (APP_USERS_0_* and APP_USERS_1_*)
 
 BASE_URL="http://localhost:8080/api"
 
@@ -10,81 +10,79 @@ echo "║              TMS API - Getting Authentication Tokens           ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Check if curl is available
 if ! command -v curl &> /dev/null; then
     echo "❌ Error: curl is not installed"
     exit 1
 fi
 
-# Check if jq is available
 if ! command -v jq &> /dev/null; then
     echo "⚠️  Warning: jq is not installed, showing raw JSON"
     echo ""
 fi
 
-echo "🔐 Logging in as Admin..."
-ADMIN_RESPONSE=$(curl -s -X POST "$BASE_URL/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}')
-
-if command -v jq &> /dev/null; then
-    ADMIN_TOKEN=$(echo $ADMIN_RESPONSE | jq -r '.token')
-    ADMIN_ROLE=$(echo $ADMIN_RESPONSE | jq -r '.role')
-    ADMIN_EXPIRES=$(echo $ADMIN_RESPONSE | jq -r '.expiresAt')
+# Load credentials from .env
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
 else
-    ADMIN_TOKEN=$(echo $ADMIN_RESPONSE | grep -o '"token":"[^"]*' | cut -d'"' -f4)
-    ADMIN_ROLE="ADMIN"
-    ADMIN_EXPIRES="24 hours"
+  echo "❌ .env file not found. Copy .env.example to .env and fill in your credentials."
+  exit 1
 fi
 
-echo "✅ Admin login successful"
-echo "   Role: $ADMIN_ROLE"
-echo "   Expires: $ADMIN_EXPIRES"
-echo ""
+USER0_NAME="${APP_USERS_0_USERNAME:-}"
+USER0_PASS="${APP_USERS_0_PASSWORD:-}"
+USER1_NAME="${APP_USERS_1_USERNAME:-}"
+USER1_PASS="${APP_USERS_1_PASSWORD:-}"
 
-echo "🔐 Logging in as Tester..."
-TESTER_RESPONSE=$(curl -s -X POST "$BASE_URL/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"tester","password":"tester123"}')
-
-if command -v jq &> /dev/null; then
-    TESTER_TOKEN=$(echo $TESTER_RESPONSE | jq -r '.token')
-    TESTER_ROLE=$(echo $TESTER_RESPONSE | jq -r '.role')
-    TESTER_EXPIRES=$(echo $TESTER_RESPONSE | jq -r '.expiresAt')
-else
-    TESTER_TOKEN=$(echo $TESTER_RESPONSE | grep -o '"token":"[^"]*' | cut -d'"' -f4)
-    TESTER_ROLE="TESTER"
-    TESTER_EXPIRES="24 hours"
+if [ -z "$USER0_NAME" ] || [ -z "$USER0_PASS" ]; then
+  echo "❌ APP_USERS_0_USERNAME / APP_USERS_0_PASSWORD not set in .env"
+  exit 1
 fi
 
-echo "✅ Tester login successful"
-echo "   Role: $TESTER_ROLE"
-echo "   Expires: $TESTER_EXPIRES"
+login() {
+  local username="$1"
+  local password="$2"
+  curl -s -X POST "$BASE_URL/auth/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"username\":\"$username\",\"password\":\"$password\"}"
+}
+
+get_field() {
+  local json="$1"
+  local field="$2"
+  if command -v jq &> /dev/null; then
+    echo "$json" | jq -r ".$field"
+  else
+    echo "$json" | grep -o "\"$field\":\"[^\"]*" | cut -d'"' -f4
+  fi
+}
+
+echo "🔐 Logging in as $USER0_NAME..."
+USER0_RESPONSE=$(login "$USER0_NAME" "$USER0_PASS")
+USER0_TOKEN=$(get_field "$USER0_RESPONSE" "token")
+USER0_ROLE=$(get_field "$USER0_RESPONSE" "role")
+echo "✅ OK — role: $USER0_ROLE"
 echo ""
+
+USER1_TOKEN=""
+if [ -n "$USER1_NAME" ] && [ -n "$USER1_PASS" ]; then
+  echo "🔐 Logging in as $USER1_NAME..."
+  USER1_RESPONSE=$(login "$USER1_NAME" "$USER1_PASS")
+  USER1_TOKEN=$(get_field "$USER1_RESPONSE" "token")
+  USER1_ROLE=$(get_field "$USER1_RESPONSE" "role")
+  echo "✅ OK — role: $USER1_ROLE"
+  echo ""
+fi
 
 echo "╔════════════════════════════════════════════════════════════════╗"
 echo "║                      TOKENS OBTAINED                          ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
-
-echo "📋 ADMIN TOKEN:"
-echo "export ADMIN_TOKEN=\"$ADMIN_TOKEN\""
+echo "export ${USER0_NAME^^}_TOKEN=\"$USER0_TOKEN\""
+if [ -n "$USER1_TOKEN" ]; then
+  echo "export ${USER1_NAME^^}_TOKEN=\"$USER1_TOKEN\""
+fi
 echo ""
-
-echo "📋 TESTER TOKEN:"
-echo "export TESTER_TOKEN=\"$TESTER_TOKEN\""
-echo ""
-
+echo "To load into your current shell, run the export commands above."
 echo "═══════════════════════════════════════════════════════════════════"
-echo ""
-echo "✅ Tokens are ready to use!"
-echo ""
-echo "To use these tokens in your current shell, run:"
-echo ""
-echo "export ADMIN_TOKEN=\"$ADMIN_TOKEN\""
-echo "export TESTER_TOKEN=\"$TESTER_TOKEN\""
-echo ""
-echo "Or copy-paste the commands above into your terminal."
-echo ""
-echo "═══════════════════════════════════════════════════════════════════"
-

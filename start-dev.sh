@@ -13,16 +13,14 @@ echo ""
 # Set Java path
 export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
 
-# Cyoda Configuration
-# Load from .env file if it exists, otherwise use defaults
+# Cyoda Configuration — loaded from .env
 if [ -f .env ]; then
   set -a
   source .env
   set +a
 else
-  export CYODA_HOST="client-a680fca7878e4c73854cfce50b42a108-dev.eu.cyoda.net"
-  export CYODA_CLIENT_ID="nbeLy7"
-  export CYODA_CLIENT_SECRET="sFn0F3XSKG3rXdfaZJxa"
+  echo "❌ .env file not found. Copy .env.example to .env and fill in your credentials."
+  exit 1
 fi
 
 echo "📋 Configuration:"
@@ -76,7 +74,7 @@ echo "════════════════════════�
 echo "🎉 Both services are running!"
 echo "   Frontend: http://localhost:5173"
 echo "   Backend: http://localhost:8080/api"
-echo "   Login: admin / admin123"
+echo "   Login with credentials defined in your .env"
 echo ""
 echo "📋 Logs:"
 echo "   Backend: tail -f /tmp/tms-backend.log"

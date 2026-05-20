@@ -1,91 +1,106 @@
 # Cyoda Test Management System
 
-A test management platform providing a complete lifecycle for projects, test suites, test cases, test runs, defect linking, and attachments. Built on the Cyoda platform for FSM-driven workflow entity management.
+A test management platform for projects, test suites, test cases, test runs, defect tracking, and reports.
+
+Built on **[Cyoda](https://cyoda.io)** — a workflow engine that manages entity lifecycles through finite-state machines (FSM). Cyoda stores all data and drives state transitions; this app provides the API and UI on top of it.
 
 ## Mono-repo structure
 
 | Path | Description |
 |------|-------------|
-| `apps/backend/` | Java 21 / Spring Boot 3.x backend with Cyoda platform integration |
+| `apps/backend/` | Java 21 / Spring Boot 3.5 backend |
 | `apps/frontend/` | React 18 / TypeScript / Vite frontend |
-| `docs/` | Product specs, design docs, implementation plans |
-
-This is an [Nx](https://nx.dev) mono-repo. Run tasks via `pnpm nx <target> <project>`.
+| `docs/` | Product specs, design docs |
 
 ## Prerequisites
 
-- **Java 21** – [Install Java 21](https://adoptium.net/)
-- **Node.js 18+** and **npm** (or **pnpm**)
-- **Cyoda platform credentials** (optional for local dev — hardcoded credentials are used by default)
-  - Get M2M credentials by logging into [ai.cyoda.net](https://ai.cyoda.net/) and prompting: *"Create a technical user for my environment \<env-name\>"*
-  - Store in `.env` file (copy from `.env.example`)
+- **Java 21** — [Install Java 21](https://adoptium.net/)
+- **Node.js 18+** — [Install Node.js](https://nodejs.org/)
+- **Cyoda instance** — get M2M credentials from [Cyoda AI Studio](https://studio.cyoda.io)
+  - Prompt: *"Create a technical user for my environment \<env-name\>"*
 
-## 🚀 Quick Start
+> **Frontend package manager:** the workspace is configured for **pnpm**, but plain `npm` works too. Pick one and stick with it.
 
-### 1. Install Dependencies (First Time Only)
+## First-time setup
+
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Start Backend + Frontend Together
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in:
+- `CYODA_HOST`, `CYODA_CLIENT_ID`, `CYODA_CLIENT_SECRET` — from Cyoda AI Studio
+- `APP_USERS_0_*`, `APP_USERS_1_*` — your user accounts and passwords (see [User accounts](#user-accounts) below)
+
+The app **will not start** if user passwords are blank.
+
+### 3. Import schemas and workflows
+
+Required once after setting up a fresh Cyoda instance:
+
+```bash
+./import-schemas.sh
+```
+
+See [`apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md`](apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md) for details.
+
+### 4. Start the app
 
 ```bash
 ./gradlew :apps:backend:build -x test -q && bash start-dev.sh
 ```
 
-This script:
-- Starts the **backend** on `http://localhost:8080/api`
-- Starts the **frontend** on `http://localhost:5173`
-- Uses hardcoded Cyoda credentials (or loads from `.env` if it exists)
-- Waits for backend to be ready before starting frontend
-
-Access the app:
 - **Frontend**: [http://localhost:5173](http://localhost:5173)
-- **Backend API Docs**: [http://localhost:8080/api/swagger-ui/index.html](http://localhost:8080/api/swagger-ui/index.html)
-- **Default credentials**: `admin` / `admin123` (ADMIN role)
+- **Backend API docs**: [http://localhost:8080/api/swagger-ui/index.html](http://localhost:8080/api/swagger-ui/index.html)
 
-### 3. For Production: Set Cyoda Credentials
+---
 
-Copy `.env.example` to `.env` and fill in your Cyoda credentials:
+## User accounts
+
+Users are defined in `.env` — there are no built-in accounts. Add one block per user:
 
 ```bash
-cp .env.example .env
-# Edit .env with your actual credentials
+APP_USERS_0_USERNAME=admin
+APP_USERS_0_PASSWORD=your-strong-password
+APP_USERS_0_ROLE=ADMIN
+
+APP_USERS_1_USERNAME=tester
+APP_USERS_1_PASSWORD=another-password
+APP_USERS_1_ROLE=TESTER
 ```
 
-Then use `start-dev.sh` as usual — it will load credentials from `.env`.
+- `ADMIN` — full access (projects, suites, test cases, runs, reports)
+- `TESTER` — can execute runs and log defects; cannot create or modify projects/suites/cases
+- Any number of users; multiple testers and multiple admins are supported
 
-## 🔧 Scripts
+---
 
-All developer scripts live in the project root:
+## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `start-dev.sh` | Start backend + frontend together (recommended for development) |
-| `run-with-env.sh` | Start backend only, loads credentials from `.env` |
-| `get-tokens.sh` | Get JWT tokens for `admin` and `tester` users (manual API testing) |
-| `import-schemas.sh` | Import all entity schemas and workflows to Cyoda (see `apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md`) |
+| `start-dev.sh` | Start backend + frontend together |
+| `run-with-env.sh` | Start backend only |
+| `get-tokens.sh` | Get JWT tokens for API testing (reads credentials from `.env`) |
+| `import-schemas.sh` | Import entity schemas and workflows to Cyoda |
 | `seed-demo.sh` | Seed demo data into a running instance |
-| `e2e-snapshot-test.sh` | Run E2E snapshot tests |
 
-## 📖 Per-App Documentation
+---
 
-For detailed information:
-- **Frontend**: See [`apps/frontend/README.md`](apps/frontend/README.md)
-- **Backend**: See [`apps/backend/README.md`](apps/backend/README.md)
-- **Build & Test Commands**: See [`CLAUDE.md`](CLAUDE.md)
+## Documentation
+
+- **Backend**: [`apps/backend/README.md`](apps/backend/README.md) — commands, project structure, core concepts
+- **Frontend**: [`apps/frontend/README.md`](apps/frontend/README.md)
+- **Workflow import**: [`apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md`](apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md)
+- **Contributing**: [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Working with AI agents
 
-This project uses **Claude Code** for agent-assisted development. Agent behavior is configured in:
-
-| File | Scope |
-|------|-------|
-| [`CLAUDE.md`](CLAUDE.md) | Root — architecture, key references, general guidelines |
-
-Human contributors should read CLAUDE.md before opening a PR.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow guidelines, branch conventions, and PR expectations.
+Agent behavior is configured in [`CLAUDE.md`](CLAUDE.md). Read it before opening a PR.
