@@ -49,7 +49,7 @@ describe('computeSnapshotData — stepStatuses override', () => {
   it('uses stepStatuses over TestRunCase.status when all steps PASSED', () => {
     const stepStatuses = JSON.stringify({ 'c1::1': 'PASSED', 'c1::2': 'PASSED' });
     const cases: TestRunCase[] = [baseCase({ status: 'UNTESTED' })];
-    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses as any })];
+    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses })];
     const result = computeSnapshotData(cases, runs, [baseSuite()], []);
     expect(result.totalPassed).toBe(1);
     expect(result.totalUntested).toBe(0);
@@ -58,7 +58,7 @@ describe('computeSnapshotData — stepStatuses override', () => {
   it('uses stepStatuses: marks FAILED if any step failed', () => {
     const stepStatuses = JSON.stringify({ 'c1::1': 'PASSED', 'c1::2': 'FAILED' });
     const cases: TestRunCase[] = [baseCase({ status: 'UNTESTED' })];
-    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses as any })];
+    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses })];
     const result = computeSnapshotData(cases, runs, [baseSuite()], []);
     expect(result.totalFailed).toBe(1);
     expect(result.totalPassed).toBe(0);
@@ -67,7 +67,7 @@ describe('computeSnapshotData — stepStatuses override', () => {
   it('falls back to TestRunCase.status when no stepStatuses for that case', () => {
     const stepStatuses = JSON.stringify({ 'c2::1': 'PASSED' });
     const cases: TestRunCase[] = [baseCase({ testCaseId: 'c1', status: 'PASSED' })];
-    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses as any })];
+    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses })];
     const result = computeSnapshotData(cases, runs, [baseSuite()], []);
     expect(result.totalPassed).toBe(1);
   });
@@ -75,7 +75,7 @@ describe('computeSnapshotData — stepStatuses override', () => {
   it('uses stepStatuses: marks SKIPPED if all steps skipped and none untested', () => {
     const stepStatuses = JSON.stringify({ 'c1::1': 'SKIPPED', 'c1::2': 'SKIPPED' });
     const cases: TestRunCase[] = [baseCase({ status: 'UNTESTED' })];
-    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses as any })];
+    const runs: TestRun[] = [baseRun({ stepStatuses: stepStatuses })];
     const result = computeSnapshotData(cases, runs, [baseSuite()], []);
     expect(result.totalSkipped).toBe(1);
     expect(result.totalUntested).toBe(0);

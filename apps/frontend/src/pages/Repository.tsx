@@ -28,7 +28,8 @@ import {
   keys,
 } from '@/hooks/useApi';
 import { suitesApi, testCasesApi, attachmentsApi } from '@/lib/api';
-import { AuthenticatedImage, AuthenticatedPdf, attachmentContentUrl, downloadWithAuth, isImageType, isPdfType, isPreviewableType } from '@/components/AttachmentPreview';
+import { AuthenticatedImage, AuthenticatedPdf } from '@/components/AttachmentPreview';
+import { attachmentContentUrl, downloadWithAuth, isImageType, isPdfType, isPreviewableType } from '@/lib/attachmentUtils';
 import type { LocalCase as TestCase, LocalStep, LocalSuite as Suite } from '@/lib/localTypes';
 import { useAuth } from '@/contexts/AuthContext';
 // TestRun type only needed for legacy Create Run handler shape — removed, using API directly
@@ -305,7 +306,7 @@ const Repository = () => {
       isPersistingRef.current = false;
       isDraggingRef.current = false;
     }
-  }, [localSuites, dropTarget, projectId, queryClient]);
+  }, [localSuites, dropTarget, projectId, queryClient, clearDragState]);
 
   /**
    * Drop handler for case reordering and inter-suite movement (middle panel).
@@ -409,7 +410,7 @@ const Repository = () => {
       isPersistingRef.current = false;
       isDraggingRef.current = false;
     }
-  }, [localSuites, dropTarget, projectId, queryClient]);
+  }, [localSuites, dropTarget, projectId, queryClient, clearDragState]);
 
   const [panelSizes, setPanelSizes] = useLocalStorage(
     `tms.repository.panelSizes.${projectId}`,
@@ -513,7 +514,7 @@ const Repository = () => {
   const toggleCaseSelection = (caseId: string) => {
     setSelectedCases((prev) => {
       const next = new Set(prev);
-      next.has(caseId) ? next.delete(caseId) : next.add(caseId);
+      if (next.has(caseId)) { next.delete(caseId); } else { next.add(caseId); }
       return next;
     });
   };
@@ -523,7 +524,7 @@ const Repository = () => {
     setSelectedCases((prev) => {
       const next = new Set(prev);
       suite.cases.forEach((c) => {
-        allSelected ? next.delete(c.id) : next.add(c.id);
+        if (allSelected) { next.delete(c.id); } else { next.add(c.id); }
       });
       return next;
     });
@@ -652,7 +653,7 @@ const Repository = () => {
     const suite = localSuites.find(s => s.id === id);
     setExportSelectedSuites((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
     if (suite) {
@@ -668,13 +669,13 @@ const Repository = () => {
   const toggleExportCase = (caseId: string, suiteId: string) => {
     setExportSelectedCases((prev) => {
       const next = new Set(prev);
-      next.has(caseId) ? next.delete(caseId) : next.add(caseId);
+      if (next.has(caseId)) { next.delete(caseId); } else { next.add(caseId); }
       // Auto-check/uncheck suite
       const suite = localSuites.find(s => s.id === suiteId);
       if (suite) {
         const allSelected = suite.cases.every(c => (c.id === caseId ? !prev.has(caseId) : next.has(c.id)));
         const nextSuites = new Set(exportSelectedSuites);
-        allSelected ? nextSuites.add(suiteId) : nextSuites.delete(suiteId);
+        if (allSelected) { nextSuites.add(suiteId); } else { nextSuites.delete(suiteId); }
         setExportSelectedSuites(nextSuites);
       }
       return next;
@@ -684,7 +685,7 @@ const Repository = () => {
   const toggleExportSuiteExpand = (id: string) => {
     setExportExpandedSuites(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   };
@@ -855,7 +856,7 @@ const Repository = () => {
 
   const toggleSuite = (id: string) => {
     const next = new Set(expandedSuites);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) { next.delete(id); } else { next.add(id); }
     setExpandedSuites(next);
   };
 

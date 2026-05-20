@@ -12,12 +12,10 @@ interface RichTextProps {
 export const RichText = ({ text, className = '' }: RichTextProps) => {
   // Split text into parts: bold, code, and regular text
   const parts: (string | { type: 'bold' | 'code'; content: string })[] = [];
-  let remaining = text;
-  let match;
 
-  const boldRegex = /\*\*([^\*]+)\*\*/g;
+  const boldRegex = /\*\*([^*]+)\*\*/g;
   const codeRegex = /`([^`]+)`/g;
-  const combinedRegex = /(\*\*[^\*]+\*\*|`[^`]+`)/g;
+  const combinedRegex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
 
   let lastIndex = 0;
   const allMatches = Array.from(text.matchAll(combinedRegex));

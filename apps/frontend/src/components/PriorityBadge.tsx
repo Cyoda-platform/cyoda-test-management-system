@@ -20,6 +20,7 @@ const PriorityBadge = ({ priority, className }: PriorityBadgeProps) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const prioritySelectorStyles = (p: 'HIGH' | 'MEDIUM' | 'LOW', isActive: boolean) =>
   isActive
     ? `${priorityStyles[p]} ring-1 rounded-md ${p === 'HIGH' ? 'ring-destructive/30' : p === 'MEDIUM' ? 'ring-warning/30' : 'ring-muted-foreground/30'}`

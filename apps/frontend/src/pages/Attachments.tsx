@@ -13,7 +13,8 @@ import {
 } from '@/components/ui/dialog';
 import { formatDate } from '@/lib/utils';
 import { useAuthenticatedImageUrl } from '@/hooks/useAuthenticatedImageUrl';
-import { AuthenticatedPdf, isPdfType } from '@/components/AttachmentPreview';
+import { AuthenticatedPdf } from '@/components/AttachmentPreview';
+import { isPdfType } from '@/lib/attachmentUtils';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 

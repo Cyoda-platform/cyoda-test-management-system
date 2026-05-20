@@ -200,6 +200,12 @@ const ReportDetail = () => {
     return liveSnapshot.suiteData;
   }, [parsedSnapshot, deduped, linkedRuns, suites, caseToSuiteMap, runStepStatusMap]);
 
+  // Must be called before any early returns — Rules of Hooks
+  const defectRows = useMemo(
+    () => resolveReportDefects(parsedSnapshot?.defects, defects),
+    [parsedSnapshot?.defects, defects],
+  );
+
   if (reportLoading) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground">
@@ -235,11 +241,6 @@ const ReportDetail = () => {
   const passRate      = totalExecuted > 0 ? ((totalPassed / totalExecuted) * 100).toFixed(1) : '0.0';
   const executionProgress = totalCases > 0 ? (((totalCases - totalUntested) / totalCases) * 100) : 0;
   const remainingScope    = totalCases > 0 ? ((totalUntested / totalCases) * 100) : 0;
-  const defectRows = useMemo(
-    () => resolveReportDefects(parsedSnapshot?.defects, defects),
-    [parsedSnapshot?.defects, defects],
-  );
-
   const totalDefects      = defectRows.length;
 
   const pieData = [

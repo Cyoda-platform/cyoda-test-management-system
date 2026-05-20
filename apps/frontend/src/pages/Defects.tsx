@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useProject, useDefects, useCreateDefect, useUpdateDefect, useDeleteDefect, useTestRuns } from '@/hooks/useApi';
-import type { Defect } from '@/lib/api';
+import type { Defect, Attachment } from '@/lib/api';
 import { attachmentsApi } from '@/lib/api';
 import { Loader2 } from 'lucide-react';
 import { listDisplayId, formatDate, isUuid } from '@/lib/utils';
@@ -49,7 +49,7 @@ interface DefectAttachmentsListProps {
 }
 
 const DefectAttachmentsList = React.memo(({ projectId, defectId }: DefectAttachmentsListProps) => {
-  const [attachments, setAttachments] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -113,13 +113,13 @@ const Defects = () => {
   // Edit modal
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Defect | null>(null);
-  const [editAttachments, setEditAttachments] = useState<any[]>([]);
+  const [editAttachments, setEditAttachments] = useState<Attachment[]>([]);
   const [isLoadingEditAttachments, setIsLoadingEditAttachments] = useState(false);
 
   // View modal
   const [viewOpen, setViewOpen] = useState(false);
   const [viewTarget, setViewTarget] = useState<Defect | null>(null);
-  const [viewAttachments, setViewAttachments] = useState<any[]>([]);
+  const [viewAttachments, setViewAttachments] = useState<Attachment[]>([]);
   const [isLoadingViewAttachments, setIsLoadingViewAttachments] = useState(false);
 
   // Delete modal
@@ -242,7 +242,7 @@ const Defects = () => {
       // Use async mutation to wait for success before uploading files
       await new Promise<void>((resolve, reject) => {
         createDefect.mutate(defectPayload, {
-          onSuccess: async (createdDefect: any) => {
+          onSuccess: async (createdDefect: Defect) => {
             try {
               // Upload files after defect is created
               if (formFiles && formFiles.length > 0) {
@@ -335,8 +335,8 @@ const Defects = () => {
       setEditOpen(false);
       setEditTarget(null);
       setEditAttachments([]);
-    } catch (error: any) {
-      toast.error(error?.message || 'Failed to update defect');
+    } catch (error) {
+      toast.error((error as Error)?.message || 'Failed to update defect');
     }
   };
 

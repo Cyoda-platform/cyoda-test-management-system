@@ -2,16 +2,15 @@ import { useState, useRef } from 'react';
 import { Upload, FileText, Image, File, X, Download, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { AuthenticatedImage, AuthenticatedPdf } from '@/components/AttachmentPreview';
 import {
-  AuthenticatedImage,
-  AuthenticatedPdf,
   attachmentContentUrl,
   downloadWithAuth,
   isImageType,
   isPdfType,
   isPreviewableType,
   getFileIconComponent,
-} from '@/components/AttachmentPreview';
+} from '@/lib/attachmentUtils';
 
 interface AttachmentFile {
   id?: string;

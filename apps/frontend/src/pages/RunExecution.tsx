@@ -54,7 +54,9 @@ function downloadWithAuth(url: string, fileName: string) {
     .catch(() => {});
 }
 import { isUuid, formatDate } from '@/lib/utils';
-import { AuthenticatedImage, AuthenticatedPdf, isImageType, isPdfType, isPreviewableType } from '@/components/AttachmentPreview';
+import { AuthenticatedImage, AuthenticatedPdf } from '@/components/AttachmentPreview';
+import { isImageType, isPdfType, isPreviewableType } from '@/lib/attachmentUtils';
+import type { DefectData } from '@/components/CreateDefectModal';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -136,7 +138,7 @@ function getFileIcon(type: string) {
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
 const DefectAttachmentsList = React.memo(({ projectId, defectId }: { projectId: string; defectId: string }) => {
-  const [attachments, setAttachments] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -180,7 +182,9 @@ const RunExecution = () => {
   } = useTestRunDetails(projectId!, runId!);
 
   const run      = runDetails?.run;
-  const runCases = runDetails?.runCases ?? [];
+  // Memoized to produce a stable reference — runDetails?.runCases ?? [] would create
+  // a new array on every render, making hooks that depend on it thrash unnecessarily.
+  const runCases = useMemo(() => runDetails?.runCases ?? [], [runDetails]);
 
   // Aliased loading flags for backward-compat with the loading guard below.
   const runLoading      = runDetailsLoading;
@@ -221,8 +225,6 @@ const RunExecution = () => {
    * Using `runCases` as the primary fallback prevents the "all project cases appear"
    * regression that occurred when a run was created without caseIds being stored.
    */
-  const caseIdsKey = run?.caseIds?.join(',') ?? '';
-
   const filteredSuitesWithCases = useMemo(() => {
     // Build the authoritative set of case UUIDs for this run.
     let runCaseIdSet: Set<string> | null = null;
@@ -248,7 +250,7 @@ const RunExecution = () => {
 
     // Last resort: show everything (backward compatibility / data not yet loaded).
     return suitesWithCases;
-  }, [getRunCaseTestCaseId, suitesWithCases, caseIdsKey, runCases.length]);
+  }, [getRunCaseTestCaseId, suitesWithCases, run, runCases]);
 
   // Flat list of cases in this run (for indexed access)
   const allCases = useMemo(() =>
@@ -374,11 +376,11 @@ const RunExecution = () => {
   const [createdDefects, setCreatedDefects] = useState<CreatedDefect[]>([]);
   const [viewDefectOpen, setViewDefectOpen] = useState(false);
   const [viewDefect, setViewDefect] = useState<CreatedDefect | null>(null);
-  const [viewDefectAttachments, setViewDefectAttachments] = useState<any[]>([]);
+  const [viewDefectAttachments, setViewDefectAttachments] = useState<Attachment[]>([]);
   const [isLoadingViewDefectAttachments, setIsLoadingViewDefectAttachments] = useState(false);
   const [editDefectOpen, setEditDefectOpen] = useState(false);
   const [editDefect, setEditDefect] = useState<CreatedDefect | null>(null);
-  const [editDefectAttachments, setEditDefectAttachments] = useState<any[]>([]);
+  const [editDefectAttachments, setEditDefectAttachments] = useState<Attachment[]>([]);
   const [isLoadingEditDefectAttachments, setIsLoadingEditDefectAttachments] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isReadOnly = run?.status === 'completed';
@@ -510,7 +512,7 @@ const RunExecution = () => {
   }, [projectId, qc, runId, testCaseToRunCaseId]);
 
   /** Run-step records for the currently visible case. */
-  const activeCaseRunSteps = activeCase?.steps || [];
+  const activeCaseRunSteps = useMemo(() => activeCase?.steps ?? [], [activeCase?.steps]);
 
   // Steps come from TestRunCase snapshot (includes stepNumber, action, expectedResult).
   const sortedSteps = useMemo(() =>
@@ -665,12 +667,7 @@ const RunExecution = () => {
 
       return [...optimisticOnly, ...hydrated];
     });
-  // runCases.length (not runCases itself) is included so the effect re-runs when
-  // runCases first loads after serverRunDefects — preventing the race where
-  // testRunCaseId→caseId resolution yields '' because runCases was still empty.
-  // Using .length avoids a new-array-reference loop (runDetails?.runCases ?? [] creates
-  // a new ref each render even when data is stable).
-  }, [serverRunDefects, runCases.length]);
+  }, [serverRunDefects, runCases, getRunCaseTestCaseId]);
 
   // ── On unmount: save progress to the run + invalidate list cache ─────────────
   useEffect(() => {
@@ -970,7 +967,7 @@ const RunExecution = () => {
     }
   };
 
-  const handleCreateDefect = async (defect: any) => {
+  const handleCreateDefect = async (defect: DefectData) => {
     if (!defectContext) return;
 
     // ── Resolve runCaseId without blocking the modal close ────────────────────
@@ -1132,8 +1129,8 @@ const RunExecution = () => {
       setEditDefectOpen(false);
       setEditDefect(null);
       setEditDefectAttachments([]);
-    } catch (error: any) {
-      toast.error(error?.message || 'Failed to update defect');
+    } catch (error) {
+      toast.error((error as Error)?.message || 'Failed to update defect');
     }
   };
 
@@ -1547,7 +1544,7 @@ const RunExecution = () => {
                       <td className="px-5 py-3.5 font-medium text-foreground">{d.title}</td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <Select value={d.severity} onValueChange={(val) => {
-                          const updated = createdDefects.map(x => x.id === d.id ? { ...x, severity: val as any } : x);
+                          const updated = createdDefects.map(x => x.id === d.id ? { ...x, severity: val as CreatedDefect['severity'] } : x);
                           setCreatedDefects(updated);
                         }}>
                           <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${severityBadge[d.severity] || ''}`}>
@@ -1562,7 +1559,7 @@ const RunExecution = () => {
                       </td>
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <Select value={d.status} onValueChange={(val) => {
-                          const updated = createdDefects.map(x => x.id === d.id ? { ...x, status: val as any } : x);
+                          const updated = createdDefects.map(x => x.id === d.id ? { ...x, status: val as CreatedDefect['status'] } : x);
                           setCreatedDefects(updated);
                         }}>
                           <SelectTrigger className={`h-7 w-auto text-[10px] font-mono uppercase tracking-widest rounded-md px-2.5 ${statusBadge[d.status] || ''}`}>
@@ -1802,7 +1799,7 @@ const RunExecution = () => {
       <ViewDefectModal
         open={viewDefectOpen}
         onOpenChange={setViewDefectOpen}
-        defect={viewDefect as any}
+        defect={viewDefect}
         displayId={viewDefect?.displayId}
         existingAttachments={viewDefectAttachments}
         formatDate={formatDate}
@@ -1813,7 +1810,7 @@ const RunExecution = () => {
       <EditDefectModal
         open={editDefectOpen}
         onOpenChange={setEditDefectOpen}
-        defect={editDefect as any}
+        defect={editDefect}
         displayId={editDefect?.displayId}
         existingAttachments={editDefectAttachments}
         onSave={handleEditDefectSave}

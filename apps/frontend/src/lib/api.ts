@@ -275,7 +275,7 @@ export interface TestRun {
    * Key: "caseId::stepId", Value: uppercase status ("UNTESTED"|"PASSED"|"FAILED"|"SKIPPED").
    * Updated on every case-switch and on page unmount.
    */
-  stepStatuses?: Record<string, string>;
+  stepStatuses?: string | Record<string, string>;
 }
 
 /**

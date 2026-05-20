@@ -31,7 +31,7 @@ const ProjectLayout = () => {
   if (isError || !project) {
     return (
       <div className="flex items-center justify-center min-h-screen text-muted-foreground">
-        Project not found {error && `(${(error as any).message})`}
+        Project not found {error && `(${(error as Error).message})`}
       </div>
     );
   }

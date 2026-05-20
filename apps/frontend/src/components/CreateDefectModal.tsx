@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
 
-interface DefectData {
+export interface DefectData {
   title: string;
   description: string;
   severity: 'Critical' | 'Major' | 'Minor';
