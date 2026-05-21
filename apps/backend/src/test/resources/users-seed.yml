@@ -1,0 +1,15 @@
+# Test seed file — overrides src/main/resources/users-seed.yml on the test classpath.
+# Passwords are bcrypt-hashed known test values (admin123 / tester123).
+# NEVER use these credentials in production.
+users:
+  - username: admin
+    email: admin@example.com
+    passwordHash: "$2y$12$8cWM1Z0rokPGvrlg2NRCieHActYs5YUI6m2q2UQ9sZ.Y6yqsiUQhK"
+    roles:
+      - ADMIN
+
+  - username: tester
+    email: tester@example.com
+    passwordHash: "$2y$12$4WbaSTCBjR3Hq7pNSjQ7kuFvS4z1q3Emdgd/IHvAyTnLLfyeLvWYC"
+    roles:
+      - TESTER

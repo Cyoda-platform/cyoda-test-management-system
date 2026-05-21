@@ -6,8 +6,8 @@ TOKEN=$(curl -s -u "$CYODA_CLIENT_ID:$CYODA_CLIENT_SECRET" -H 'Content-Type: app
   -d 'grant_type=client_credentials&scope=ROLE_M2M' \
   "https://$CYODA_HOST/api/oauth/token" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("access_token",""))')
 
-MODELS=("Project" "Suite" "TestCase" "Defect" "TestRun" "TestRunCase" "TestRunStep" "Attachment" "Report" "ProjectCounter")
-WORKFLOWS=("Project" "Suite" "TestCase" "Defect" "TestRun" "TestRunCase" "TestRunStep" "Attachment" "Report" "ProjectCounter")
+MODELS=("User" "Project" "Suite" "TestCase" "Defect" "TestRun" "TestRunCase" "TestRunStep" "Attachment" "Report" "ProjectCounter")
+WORKFLOWS=("User" "Project" "Suite" "TestCase" "Defect" "TestRun" "TestRunCase" "TestRunStep" "Attachment" "Report" "ProjectCounter")
 
 echo "═══════════════════════════════════════════════════════════════"
 echo "DIRECT HTTP IMPORT - Entity Schemas"

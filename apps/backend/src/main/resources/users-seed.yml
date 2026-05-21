@@ -1,0 +1,20 @@
+# TMS user seed file.
+# Loaded at startup by UserSeederRunner. Existing users are skipped.
+# NEVER store plaintext passwords here — only bcrypt hashes.
+# Generate a hash: scripts/hash-password.sh <your-password>
+#
+# Override file path at runtime: APP_USERS_SEED_FILE=/path/to/custom-seed.yml
+users:
+  - username: admin
+    email: admin@example.com
+    # Replace with: scripts/hash-password.sh <your-admin-password>
+    passwordHash: "REPLACE_ME"
+    roles:
+      - ADMIN
+
+  - username: tester
+    email: tester@example.com
+    # Replace with: scripts/hash-password.sh <your-tester-password>
+    passwordHash: "REPLACE_ME"
+    roles:
+      - TESTER

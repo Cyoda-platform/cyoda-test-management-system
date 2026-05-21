@@ -1,14 +1,23 @@
 package com.java_template.application.auth;
 
+import com.java_template.application.entity.UserEntity;
+import com.java_template.application.service.UserService;
+import com.java_template.common.dto.EntityWithMetadata;
+import org.cyoda.cloud.api.event.common.EntityMetadata;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -17,76 +26,119 @@ class AuthServiceTest {
     @Mock
     private JwtTokenProvider tokenProvider;
 
-    @Test
-    void authenticatesWithConfiguredAdminCredentials() {
-        when(tokenProvider.generateToken(any(), any())).thenReturn("jwt-token");
-        AuthService service = new AuthService(tokenProvider, propsWithTwoUsers("my-admin", "my-secret", "my-tester", "tester-secret"));
+    @Mock
+    private UserService userService;
 
-        AuthService.LoginResponse response = service.authenticate("my-admin", "my-secret");
+    private AuthService authService;
+
+    private static final BCryptPasswordEncoder ENCODER = new BCryptPasswordEncoder();
+
+    @BeforeEach
+    void setUp() {
+        authService = new AuthService(tokenProvider, userService);
+    }
+
+    // ── happy path ───────────────────────────────────────────────────────────
+
+    @Test
+    void authenticatesActiveUserWithCorrectPassword() {
+        String rawPassword = "correct-secret";
+        when(tokenProvider.generateToken(anyString(), anyString())).thenReturn("jwt-token");
+        when(userService.findByUsername("alice"))
+                .thenReturn(Optional.of(activeUser("alice", rawPassword, "ADMIN")));
+
+        AuthService.LoginResponse response = authService.authenticate("alice", rawPassword);
 
         assertThat(response).isNotNull();
-        assertThat(response.username).isEqualTo("my-admin");
+        assertThat(response.username).isEqualTo("alice");
         assertThat(response.role).isEqualTo("ADMIN");
     }
 
     @Test
-    void authenticatesWithConfiguredTesterCredentials() {
-        when(tokenProvider.generateToken(any(), any())).thenReturn("jwt-token");
-        AuthService service = new AuthService(tokenProvider, propsWithTwoUsers("my-admin", "my-secret", "my-tester", "tester-secret"));
+    void tokenSubIsTheCyodaUuidNotTheUsername() {
+        UUID userId = UUID.randomUUID();
+        String rawPassword = "secret";
+        when(tokenProvider.generateToken(anyString(), anyString())).thenReturn("jwt-token");
+        when(userService.findByUsername("alice"))
+                .thenReturn(Optional.of(activeUser("alice", rawPassword, "TESTER", userId)));
 
-        AuthService.LoginResponse response = service.authenticate("my-tester", "tester-secret");
+        authService.authenticate("alice", rawPassword);
 
-        assertThat(response).isNotNull();
-        assertThat(response.username).isEqualTo("my-tester");
-        assertThat(response.role).isEqualTo("TESTER");
+        // generateToken must be called with the UUID string, not the username
+        org.mockito.Mockito.verify(tokenProvider).generateToken(userId.toString(), "TESTER");
     }
 
-    @Test
-    void supportsMultipleTesters() {
-        when(tokenProvider.generateToken(any(), any())).thenReturn("jwt-token");
-        AuthUsersProperties props = new AuthUsersProperties();
-        props.setUsers(List.of(
-                userConfig("admin", "admin-pass", "ADMIN"),
-                userConfig("tester1", "pass1", "TESTER"),
-                userConfig("tester2", "pass2", "TESTER")
-        ));
-        AuthService service = new AuthService(tokenProvider, props);
-
-        assertThat(service.authenticate("tester1", "pass1")).isNotNull();
-        assertThat(service.authenticate("tester2", "pass2")).isNotNull();
-        assertThat(service.authenticate("tester1", "pass2")).isNull();
-    }
-
-    @Test
-    void rejectsOldHardcodedCredentialsWhenCustomOnesConfigured() {
-        AuthService service = new AuthService(tokenProvider, propsWithTwoUsers("my-admin", "my-secret", "my-tester", "tester-secret"));
-
-        assertThat(service.authenticate("admin", "admin123")).isNull();
-        assertThat(service.authenticate("tester", "tester123")).isNull();
-    }
+    // ── rejection cases ───────────────────────────────────────────────────────
 
     @Test
     void rejectsWrongPassword() {
-        AuthService service = new AuthService(tokenProvider, propsWithTwoUsers("my-admin", "my-secret", "my-tester", "tester-secret"));
+        when(userService.findByUsername("alice"))
+                .thenReturn(Optional.of(activeUser("alice", "real-password", "TESTER")));
 
-        assertThat(service.authenticate("my-admin", "wrong-password")).isNull();
+        assertThat(authService.authenticate("alice", "wrong-password")).isNull();
     }
 
-    private AuthUsersProperties propsWithTwoUsers(String adminUsername, String adminPassword,
-                                                   String testerUsername, String testerPassword) {
-        AuthUsersProperties props = new AuthUsersProperties();
-        props.setUsers(List.of(
-                userConfig(adminUsername, adminPassword, "ADMIN"),
-                userConfig(testerUsername, testerPassword, "TESTER")
-        ));
-        return props;
+    @Test
+    void rejectsUnknownUser() {
+        when(userService.findByUsername("ghost")).thenReturn(Optional.empty());
+
+        assertThat(authService.authenticate("ghost", "any-password")).isNull();
     }
 
-    private AuthUsersProperties.UserConfig userConfig(String username, String password, String role) {
-        AuthUsersProperties.UserConfig config = new AuthUsersProperties.UserConfig();
-        config.setUsername(username);
-        config.setPassword(password);
-        config.setRole(role);
-        return config;
+    @Test
+    void rejectsInactiveUser() {
+        when(userService.findByUsername("alice"))
+                .thenReturn(Optional.of(userWithState("alice", "correct", "TESTER", "INACTIVE")));
+
+        assertThat(authService.authenticate("alice", "correct")).isNull();
+    }
+
+    @Test
+    void rejectsLockedUser() {
+        when(userService.findByUsername("alice"))
+                .thenReturn(Optional.of(userWithState("alice", "correct", "TESTER", "LOCKED")));
+
+        assertThat(authService.authenticate("alice", "correct")).isNull();
+    }
+
+    @Test
+    void rejectsSubmittingTheHashItselfAsPassword() {
+        String hash = ENCODER.encode("real-secret");
+        when(userService.findByUsername("alice"))
+                .thenReturn(Optional.of(activeUser("alice", "real-secret", "ADMIN")));
+
+        // Submitting the stored hash directly must not authenticate
+        assertThat(authService.authenticate("alice", hash)).isNull();
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    private EntityWithMetadata<UserEntity> activeUser(String username, String rawPassword, String role) {
+        return activeUser(username, rawPassword, role, UUID.randomUUID());
+    }
+
+    private EntityWithMetadata<UserEntity> activeUser(String username, String rawPassword,
+                                                       String role, UUID id) {
+        return userWithState(username, rawPassword, role, id, "ACTIVE");
+    }
+
+    private EntityWithMetadata<UserEntity> userWithState(String username, String rawPassword,
+                                                          String role, String state) {
+        return userWithState(username, rawPassword, role, UUID.randomUUID(), state);
+    }
+
+    private EntityWithMetadata<UserEntity> userWithState(String username, String rawPassword,
+                                                          String role, UUID id, String state) {
+        UserEntity entity = new UserEntity();
+        entity.setUsername(username);
+        entity.setPasswordHash(ENCODER.encode(rawPassword));
+        entity.setRoles(List.of(role));
+        entity.setCreatedAt(Instant.now().toString());
+
+        EntityMetadata meta = new EntityMetadata();
+        meta.setId(id);
+        meta.setState(state);
+
+        return new EntityWithMetadata<>(entity, meta);
     }
 }

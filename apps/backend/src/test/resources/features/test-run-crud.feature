@@ -2,8 +2,8 @@ Feature: Test Run CRUD Operations and Lifecycle
 
   Background:
     Given I am logged in as admin
-    And a project with ID exists
     And I have valid bearer token
+    And a project with ID exists
 
   Scenario: Create a new test run
     Given I prepare a TestRunDTO with name "Test Run 001"

@@ -1,0 +1,156 @@
+{
+  "version": "1",
+  "name": "User",
+  "desc": "Workflow for TMS user lifecycle. Users are provisioned by UserSeederRunner or an admin endpoint, validated automatically on creation, and can be locked or deactivated by an admin.",
+  "initialState": "PENDING_ACTIVATION",
+  "active": true,
+  "states": {
+    "PENDING_ACTIVATION": {
+      "transitions": [
+        {
+          "name": "activate_user",
+          "next": "ACTIVE",
+          "manual": false,
+          "description": "Automatically activates a user whose required fields are present.",
+          "criterion": {
+            "type": "group",
+            "operator": "AND",
+            "conditions": [
+              {
+                "type": "simple",
+                "jsonPath": "$.username",
+                "operation": "NOT_NULL",
+                "value": null
+              },
+              {
+                "type": "simple",
+                "jsonPath": "$.passwordHash",
+                "operation": "NOT_NULL",
+                "value": null
+              }
+            ]
+          }
+        },
+        {
+          "name": "fail_activation",
+          "next": "ERRORED",
+          "manual": false,
+          "description": "Moves to ERRORED when required fields are missing.",
+          "criterion": {
+            "type": "group",
+            "operator": "OR",
+            "conditions": [
+              {
+                "type": "simple",
+                "jsonPath": "$.username",
+                "operation": "IS_NULL",
+                "value": null
+              },
+              {
+                "type": "simple",
+                "jsonPath": "$.passwordHash",
+                "operation": "IS_NULL",
+                "value": null
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "ACTIVE": {
+      "transitions": [
+        {
+          "name": "deactivate_user",
+          "next": "INACTIVE",
+          "manual": true,
+          "description": "Admin deactivates a user. Deactivated users cannot log in.",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        },
+        {
+          "name": "lock_user",
+          "next": "LOCKED",
+          "manual": true,
+          "description": "Admin locks a user account.",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        },
+        {
+          "name": "update_user",
+          "next": "ACTIVE",
+          "manual": true,
+          "description": "Admin updates user fields (email, roles, passwordHash).",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "INACTIVE": {
+      "transitions": [
+        {
+          "name": "reactivate_user",
+          "next": "ACTIVE",
+          "manual": true,
+          "description": "Admin reactivates an inactive user.",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "LOCKED": {
+      "transitions": [
+        {
+          "name": "unlock_user",
+          "next": "ACTIVE",
+          "manual": true,
+          "description": "Admin unlocks a locked user account.",
+          "criterion": {
+            "type": "function",
+            "function": {
+              "name": "RequireAdminRole",
+              "config": {
+                "calculationNodesTags": "cyoda_application",
+                "attachEntity": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ERRORED": {
+      "transitions": []
+    }
+  }
+}

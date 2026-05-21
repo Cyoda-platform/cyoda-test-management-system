@@ -1,8 +1,8 @@
 {
-  "id": "usr-001",
-  "username": "admin",
-  "passwordHash": "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36P4/KFm",
-  "role": "Admin",
-  "disabledRegistration": true
+  "username": "sample-user",
+  "email": "sample@example.com",
+  "passwordHash": "$2b$12$examplehashvalueforschemaonly",
+  "roles": ["TESTER"],
+  "createdAt": "2026-01-01T00:00:00Z",
+  "lastLoginAt": null
 }
-

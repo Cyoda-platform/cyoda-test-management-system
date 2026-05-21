@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.util.Base64;
 import java.util.Date;
 
@@ -106,5 +108,36 @@ class JwtTokenProviderTest {
         String tokenFromOther = otherProvider.generateToken("alice", "ADMIN");
 
         assertThat(provider.validateToken(tokenFromOther)).isFalse();
+    }
+
+    // ---- algorithm allow-list tests (S2) ----
+
+    @Test
+    void rejectsTokenSignedWithRsaAlgorithm() throws Exception {
+        // Algorithm-confusion attack: an RSA-signed token must be rejected by an HMAC verifier.
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+        gen.initialize(2048);
+        KeyPair pair = gen.generateKeyPair();
+
+        String rsaToken = Jwts.builder()
+                .subject("alice")
+                .claim("role", "ADMIN")
+                .expiration(new Date(System.currentTimeMillis() + 86_400_000))
+                .signWith(pair.getPrivate())
+                .compact();
+
+        assertThat(provider.validateToken(rsaToken)).isFalse();
+    }
+
+    @Test
+    void rejectsUnsignedAlgNoneToken() {
+        // Craft a token with alg=none in the header — must always be rejected.
+        String header = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("{\"alg\":\"none\",\"typ\":\"JWT\"}".getBytes());
+        String payload = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("{\"sub\":\"alice\",\"role\":\"ADMIN\",\"exp\":9999999999}".getBytes());
+        String algNoneToken = header + "." + payload + ".";
+
+        assertThat(provider.validateToken(algNoneToken)).isFalse();
     }
 }

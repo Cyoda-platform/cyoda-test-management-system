@@ -64,16 +64,6 @@ public class TestRunApiSteps {
 
     // ── Given ──────────────────────────────────────────────────────────────
 
-    @Given("I am logged in as admin")
-    public void i_am_logged_in_as_admin() {
-        String body = "{\"username\":\"admin\",\"password\":\"admin\"}";
-        http.postAnonymous(CONTEXT_PATH + "/auth/login", body);
-        String token = extractField(http.lastBody(), "token");
-        if (token != null) {
-            http.setBearerToken(token);
-        }
-    }
-
     @Given("a project with ID exists")
     public void a_project_with_id_exists() {
         String body = "{\"name\":\"Test Project\",\"description\":\"For E2E tests\"}";
@@ -142,69 +132,62 @@ public class TestRunApiSteps {
 
     @When("I POST to {string}")
     public void i_post_to(String path) {
-        String pathWithId = replacePlaceholders(path);
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
         String body = objectMapper.convertValue(testRunPayload, com.fasterxml.jackson.databind.node.ObjectNode.class).toString();
         http.post(pathWithId, body);
     }
 
     @When("I POST a test case to {string}")
     public void i_post_a_test_case_to(String path) {
-        String pathWithId = replacePlaceholders(path);
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
         String body = "{\"title\":\"New Test Case\",\"status\":\"UNTESTED\"}";
         http.post(pathWithId, body);
     }
 
     @When("I GET from {string}")
     public void i_get_from(String path) {
-        String pathWithId = replacePlaceholders(path);
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
         http.get(pathWithId);
     }
 
     @When("I PUT to {string}")
     public void i_put_to(String path) {
-        String pathWithId = replacePlaceholders(path);
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
         String body = objectMapper.convertValue(testRunPayload, com.fasterxml.jackson.databind.node.ObjectNode.class).toString();
         http.put(pathWithId, body);
     }
 
     @When("I POST to {string} with role {string}")
     public void i_post_to_with_role(String path, String role) {
-        String pathWithId = replacePlaceholders(path);
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
         http.post(pathWithId, "{}");
     }
 
     @When("I POST to {string} without role")
     public void i_post_to_without_role(String path) {
-        String pathWithId = replacePlaceholders(path);
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
         http.post(pathWithId, "{}");
     }
 
     @When("I DELETE from {string}")
     public void i_delete_from(String path) {
-        String pathWithId = replacePlaceholders(path);
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
         http.delete(pathWithId);
     }
 
     @When("I PUT to {string} with status {string}")
     public void i_put_to_with_status(String path, String status) {
-        String pathWithId = replacePlaceholders(path) + "?status=" + status;
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path) + "?status=" + status;
         http.put(pathWithId, "{}");
     }
 
     @When("I POST to {string} with bugUrl {string}")
     public void i_post_to_with_bug_url(String path, String bugUrl) {
-        String pathWithId = replacePlaceholders(path) + "?bugUrl=" + bugUrl;
+        String pathWithId = CONTEXT_PATH + replacePlaceholders(path) + "?bugUrl=" + bugUrl;
         http.post(pathWithId, "{}");
     }
 
     // ── Then ──────────────────────────────────────────────────────────────
-
-    @Then("the response HTTP status is {int}")
-    public void the_response_http_status_is(int expected) {
-        assertEquals(expected, http.lastStatus(),
-                "Expected HTTP " + expected + " but got " + http.lastStatus()
-                        + ". Body: " + http.lastBody());
-    }
 
     @Then("the response body contains {string}: {string}")
     public void the_response_body_contains(String field, String value) throws Exception {
@@ -236,9 +219,11 @@ public class TestRunApiSteps {
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private String replacePlaceholders(String path) {
-        return path.replace("{projectId}", projectId)
-                .replace("{runId}", testRunId)
-                .replace("{caseId}", testRunCaseId);
+        String result = path;
+        if (projectId     != null) result = result.replace("{projectId}", projectId);
+        if (testRunId     != null) result = result.replace("{runId}",     testRunId);
+        if (testRunCaseId != null) result = result.replace("{caseId}",    testRunCaseId);
+        return result;
     }
 
     private String extractField(String json, String field) {

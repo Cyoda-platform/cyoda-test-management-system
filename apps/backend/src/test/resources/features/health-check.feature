@@ -21,6 +21,6 @@ Feature: Application Health Check
     Then the health response body contains a "status" field
     And the health status value is "UP"
 
-  Scenario: Health endpoint is not reachable at an unknown path
+  Scenario: Unknown path without authentication returns 401
     When I call a non-existent path "/api/does-not-exist" without authentication
-    Then the response HTTP status is 404
+    Then the response HTTP status is 401
