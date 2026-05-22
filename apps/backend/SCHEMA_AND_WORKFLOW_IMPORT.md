@@ -44,6 +44,7 @@ Suite
 Report
 ProjectCounter
 Project        # ← root (top level)
+User           # ← auth entities
 ```
 
 ### Why is Order Important?
@@ -55,7 +56,7 @@ If you delete in the wrong order (for example, start with Project), Cyoda won't 
 ```bash
 set -a; source .env; set +a; TOKEN=$(curl -s -u "$CYODA_CLIENT_ID:$CYODA_CLIENT_SECRET" -H 'Content-Type: application/x-www-form-urlencoded' -d 'grant_type=client_credentials&scope=ROLE_M2M' "https://$CYODA_HOST/api/oauth/token" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("access_token",""))');
 
-MODELS_ORDER=("TestRunStep" "TestRunCase" "TestRun" "Attachment" "Defect" "TestCase" "Suite" "Report" "ProjectCounter" "Project")
+MODELS_ORDER=("TestRunStep" "TestRunCase" "TestRun" "Attachment" "Defect" "TestCase" "Suite" "Report" "ProjectCounter" "Project" "User")
 
 for model in "${MODELS_ORDER[@]}"; do
   curl -s -X DELETE -H "Authorization: Bearer $TOKEN" "https://$CYODA_HOST/api/entity/$model/1" > /dev/null 2>&1
@@ -66,16 +67,14 @@ done
 
 ## 📝 What Gets Imported
 
-**10 Entity Schemas:**
-- Project, Suite, TestCase
+**11 Entity Schemas:**
+- User, Project, Suite, TestCase
 - Defect, TestRun, TestRunCase, TestRunStep
 - Attachment, Report, ProjectCounter
 
-**10 Workflows:**
-- Project, Suite, TestCase, Defect
+**11 Workflows:**
+- User, Project, Suite, TestCase, Defect
 - TestRun, TestRunCase, TestRunStep, Attachment, Report, ProjectCounter
-
-> **Note:** TestStep was removed — steps are now embedded in `TestCase.steps[]`. Re-import required for the `steps` field to be recognized by Cyoda.
 
 ---
 
@@ -285,13 +284,11 @@ apps/backend/src/main/resources/workflow/
 1. **Delete all tenant entities** (cascading, see above)
 2. **Unlock all models:**
 ```bash
-MODELS=("TestStep" "Project" "Suite" "TestCase" "Defect" "TestRun" "TestRunCase" "TestRunStep" "Attachment" "Report" "ProjectCounter")
+MODELS=("User" "Project" "Suite" "TestCase" "Defect" "TestRun" "TestRunCase" "TestRunStep" "Attachment" "Report" "ProjectCounter")
 for model in "${MODELS[@]}"; do
   curl -s -X PUT -H "Authorization: Bearer $TOKEN" "https://$CYODA_HOST/api/model/$model/1/unlock"
 done
 ```
-
-> **Note:** `TestStep` is listed first in unlock/delete to clean up the old model that's no longer used.
 
 3. **Delete all models:**
 ```bash
