@@ -56,9 +56,20 @@ public class TestRunApiSteps {
         for (String runId : createdRunIds) {
             try {
                 http.delete(CONTEXT_PATH + "/projects/" + projectId + "/runs/" + runId);
+                log.info("[Cleanup] Deleted test run {}", runId);
             } catch (Exception e) {
-                log.warn("Failed to delete test run {}: {}", runId, e.getMessage());
+                log.warn("[Cleanup] Failed to delete test run {}: {}", runId, e.getMessage());
             }
+        }
+        createdRunIds.clear();
+        if (projectId != null) {
+            try {
+                http.delete(CONTEXT_PATH + "/projects/" + projectId);
+                log.info("[Cleanup] Deleted project {}", projectId);
+            } catch (Exception e) {
+                log.warn("[Cleanup] Failed to delete project {}: {}", projectId, e.getMessage());
+            }
+            projectId = null;
         }
     }
 
