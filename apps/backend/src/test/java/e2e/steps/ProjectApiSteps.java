@@ -99,12 +99,12 @@ public class ProjectApiSteps {
 
     @Given("I am logged in as admin")
     public void i_am_logged_in_as_admin() throws Exception {
-        loginAs("admin", "admin123");
+        loginAs("test_admin", "admin123");
     }
 
     @Given("I am logged in as tester")
     public void i_am_logged_in_as_tester() throws Exception {
-        loginAs("tester", "tester123");
+        loginAs("test_tester", "tester123");
     }
 
     @Given("I have created a project named {string} with description {string}")

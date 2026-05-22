@@ -26,22 +26,22 @@ Feature: User Authentication
 
   @smoke @requires-cyoda
   Scenario: Admin can log in with correct credentials
-    When I log in as "admin" with password "admin123"
+    When I log in as "test_admin" with password "admin123"
     Then the login response status is 200
     And the login response contains a "token" field
-    And the login response contains field "username" with value "admin"
+    And the login response contains field "username" with value "test_admin"
     And the login response contains field "role" with value "ADMIN"
     And an httpOnly cookie "auth-token" is set
 
   @smoke @requires-cyoda
   Scenario: Tester can log in with correct credentials
-    When I log in as "tester" with password "tester123"
+    When I log in as "test_tester" with password "tester123"
     Then the login response status is 200
     And the login response contains field "role" with value "TESTER"
 
   @smoke @requires-cyoda
   Scenario: JWT subject is a UUID, not the username
-    When I log in as "admin" with password "admin123"
+    When I log in as "test_admin" with password "admin123"
     Then the login response status is 200
     And the token subject claim is a valid UUID
 
@@ -49,7 +49,7 @@ Feature: User Authentication
 
   @smoke
   Scenario: Login with wrong password is rejected
-    When I log in as "admin" with password "wrong-password"
+    When I log in as "test_admin" with password "wrong-password"
     Then the login response status is 401
 
   @smoke
@@ -72,7 +72,7 @@ Feature: User Authentication
 
   @requires-cyoda
   Scenario: Cookie from login grants access to protected endpoints
-    Given I have logged in and stored the cookie for "admin" with password "admin123"
+    Given I have logged in and stored the cookie for "test_admin" with password "admin123"
     When I GET "/api/projects" using the auth cookie
     Then the response status is 200
 

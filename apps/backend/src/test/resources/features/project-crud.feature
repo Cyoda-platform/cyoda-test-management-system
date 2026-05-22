@@ -30,22 +30,22 @@ Feature: Project REST API — CRUD lifecycle
 
   @smoke
   Scenario: Admin can log in and receives a token in the response body
-    When I log in as "admin" with password "admin123"
+    When I log in as "test_admin" with password "admin123"
     Then the auth response HTTP status is 200
     And the auth response body contains field "token"
-    And the auth response body contains field "username" with value "admin"
+    And the auth response body contains field "username" with value "test_admin"
     And the auth response body contains field "role" with value "ADMIN"
     And the "auth-token" httpOnly cookie is set
 
   @smoke
   Scenario: Tester can log in and receives role TESTER
-    When I log in as "tester" with password "tester123"
+    When I log in as "test_tester" with password "tester123"
     Then the auth response HTTP status is 200
     And the auth response body contains field "role" with value "TESTER"
 
   @smoke
   Scenario: Invalid credentials are rejected with 401
-    When I log in as "admin" with password "wrong-password"
+    When I log in as "test_admin" with password "wrong-password"
     Then the auth response HTTP status is 401
 
   # ── Unauthenticated access ───────────────────────────────────────────────

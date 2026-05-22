@@ -1,15 +1,15 @@
-# Test seed file — overrides src/main/resources/users-seed.yml on the test classpath.
-# Passwords are bcrypt-hashed known test values (admin123 / tester123).
-# NEVER use these credentials in production.
+# E2E test seed file — dedicated test users, separate from production accounts.
+# Passwords are bcrypt hashes: test_admin/admin123, test_tester/tester123.
+# These usernames never conflict with production users.
 users:
-  - username: admin
-    email: admin@example.com
-    passwordHash: "$2y$12$8cWM1Z0rokPGvrlg2NRCieHActYs5YUI6m2q2UQ9sZ.Y6yqsiUQhK"
+  - username: test_admin
+    email: test_admin@example.com
+    passwordHash: "$2y$12$9btZ5XLLXTeeplz7T9D4kus91ajgg34Y3or.YXe2gGH3.mxJJeEsq"
     roles:
       - ADMIN
 
-  - username: tester
-    email: tester@example.com
-    passwordHash: "$2y$12$4WbaSTCBjR3Hq7pNSjQ7kuFvS4z1q3Emdgd/IHvAyTnLLfyeLvWYC"
+  - username: test_tester
+    email: test_tester@example.com
+    passwordHash: "$2y$12$p4gKvdpF3slFXFUOOospOu8qotOn8Ps77a8cq/gebbVZg1fNegqTC"
     roles:
       - TESTER
