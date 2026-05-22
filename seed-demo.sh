@@ -2,23 +2,24 @@
 # seed-demo.sh — seeds the "E-commerce Platform" demo project into a running TMS instance.
 #
 # Usage:
-#   ./seed-demo.sh                          # uses defaults (localhost:8080, admin/admin123)
+#   ./seed-demo.sh
 #   BACKEND_URL=http://host:8080/api ./seed-demo.sh
-#   TMS_USER=admin TMS_PASS=admin123 ./seed-demo.sh
+#
+# The script prompts for admin username and password interactively —
+# no plaintext credentials are stored in any file.
 #
 # The script:
 #   1. Waits until the backend health endpoint responds.
-#   2. Obtains a JWT token.
-#   3. Calls POST /api/demo/seed.
-#   4. Prints the result and exits 0 on success, 1 on failure.
+#   2. Prompts for admin credentials.
+#   3. Obtains a JWT token.
+#   4. Calls POST /api/demo/seed.
+#   5. Prints the result and exits 0 on success, 1 on failure.
 #
 # Idempotent: if the demo project already exists the seed is skipped without error.
 
 set -euo pipefail
 
 BACKEND_URL="${BACKEND_URL:-http://localhost:8080/api}"
-TMS_USER="${TMS_USER:-admin}"
-TMS_PASS="${TMS_PASS:-admin123}"
 MAX_WAIT_SECONDS="${MAX_WAIT_SECONDS:-120}"
 
 echo "╔════════════════════════════════════════════════════════════════╗"
@@ -42,21 +43,28 @@ done
 echo "✅ Backend is ready!"
 echo ""
 
-# ── 2. Obtain JWT ─────────────────────────────────────────────────────────────
+# ── 2. Prompt for credentials ─────────────────────────────────────────────────
+echo "🔑 Enter your admin credentials (used once to seed demo data — not stored):"
+read -r -p "   Username: " TMS_USER
+read -r -s -p "   Password: " TMS_PASS
+echo ""
+echo ""
+
+# ── 3. Obtain JWT ─────────────────────────────────────────────────────────────
 echo "🔑 Authenticating as '$TMS_USER'..."
 AUTH_RESPONSE=$(curl -sf -X POST "${BACKEND_URL}/auth/login" \
   -H "Content-Type: application/json" \
-  -d "{\"username\":\"${TMS_USER}\",\"password\":\"${TMS_PASS}\"}")
+  -d "{\"username\":\"${TMS_USER}\",\"password\":\"${TMS_PASS}\"}" 2>/dev/null || true)
 
 TOKEN=$(echo "$AUTH_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
 if [ -z "$TOKEN" ]; then
-  echo "❌ Authentication failed. Response: $AUTH_RESPONSE"
+  echo "❌ Authentication failed. Check your username and password."
   exit 1
 fi
 echo "✅ Authenticated."
 echo ""
 
-# ── 3. Trigger seed ───────────────────────────────────────────────────────────
+# ── 4. Trigger seed ───────────────────────────────────────────────────────────
 echo "🌱 Triggering demo seed (this may take a few minutes)..."
 HTTP_CODE=$(curl -s -o /tmp/tms-seed-response.json -w "%{http_code}" \
   -X POST "${BACKEND_URL}/demo/seed" \
