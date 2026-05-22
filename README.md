@@ -37,9 +37,10 @@ cp .env.example .env
 
 Edit `.env` and fill in:
 - `CYODA_HOST`, `CYODA_CLIENT_ID`, `CYODA_CLIENT_SECRET` — from Cyoda AI Studio
-- `APP_USERS_0_*`, `APP_USERS_1_*` — your user accounts and passwords (see [User accounts](#user-accounts) below)
+- `APP_AUTH_SECRET` — a random string (min 32 chars) used to sign JWT tokens
+- `APP_OBO_ENCRYPTION_KEY` — AES-256 key for OBO signing (generate: `openssl rand -base64 32`)
 
-The app **will not start** if user passwords are blank.
+User accounts are defined in `apps/backend/src/main/resources/users-seed.yml` (see [User accounts](#user-accounts) below).
 
 ### 3. Import schemas and workflows
 
@@ -64,21 +65,33 @@ See [`apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md`](apps/backend/SCHEMA_AND_WORKF
 
 ## User accounts
 
-Users are defined in `.env` — there are no built-in accounts. Add one block per user:
+Users are stored as entities in Cyoda and seeded at startup from `apps/backend/src/main/resources/users-seed.yml`.
+
+Passwords must be **bcrypt hashes** — never plaintext. Generate a hash:
 
 ```bash
-APP_USERS_0_USERNAME=admin
-APP_USERS_0_PASSWORD=your-strong-password
-APP_USERS_0_ROLE=ADMIN
+./scripts/hash-password.sh your-password
+```
 
-APP_USERS_1_USERNAME=tester
-APP_USERS_1_PASSWORD=another-password
-APP_USERS_1_ROLE=TESTER
+Then edit `users-seed.yml`:
+
+```yaml
+users:
+  - username: admin
+    email: admin@example.com
+    passwordHash: "$2b$12$..."   # output of hash-password.sh
+    roles: [ADMIN]
+
+  - username: tester
+    email: tester@example.com
+    passwordHash: "$2b$12$..."
+    roles: [TESTER]
 ```
 
 - `ADMIN` — full access (projects, suites, test cases, runs, reports)
 - `TESTER` — can execute runs and log defects; cannot create or modify projects/suites/cases
-- Any number of users; multiple testers and multiple admins are supported
+- Seeding is **idempotent** — existing users are skipped on restart, new entries are created
+- To use a custom file path: set `APP_USERS_SEED_FILE=/path/to/file` in `.env`
 
 ---
 
@@ -91,6 +104,7 @@ APP_USERS_1_ROLE=TESTER
 | `get-tokens.sh` | Get JWT tokens for API testing (reads credentials from `.env`) |
 | `import-schemas.sh` | Import entity schemas and workflows to Cyoda |
 | `seed-demo.sh` | Seed demo data into a running instance |
+| `scripts/hash-password.sh` | Generate a bcrypt hash for `users-seed.yml` |
 
 ---
 
