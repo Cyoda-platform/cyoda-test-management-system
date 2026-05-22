@@ -137,6 +137,17 @@ public class SnapshotProcessor implements CyodaProcessor {
     }
 
     private List<String> parseCaseIds(JsonNode data) {
+        // New format: caseIdsJson is a single JSON string field (avoids Cyoda 150-field limit)
+        JsonNode jsonStringNode = data.get("caseIdsJson");
+        if (jsonStringNode != null && jsonStringNode.isTextual() && !jsonStringNode.asText().isBlank()) {
+            try {
+                return objectMapper.readValue(jsonStringNode.asText(),
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            } catch (Exception e) {
+                log.warn("SnapshotProcessor: failed to parse caseIdsJson, falling back to array format", e);
+            }
+        }
+        // Legacy format: caseIds as a JSON array (used by entities created before caseIdsJson migration)
         JsonNode node = data.get("caseIds");
         if (node == null || !node.isArray() || node.isEmpty()) return List.of();
         return objectMapper.convertValue(node,

@@ -17,6 +17,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -132,6 +136,60 @@ public class TestRunServiceTest {
 
         assertFalse(deleted);
         verify(entityService, never()).deleteById(any());
+    }
+
+    @Test
+    void createTestRun_with150PlusCaseIds_storesViaCaseIdsJsonNotArray() {
+        List<String> caseIds = IntStream.range(0, 155)
+                .mapToObj(i -> UUID.randomUUID().toString())
+                .collect(Collectors.toList());
+        testRun.setCaseIds(caseIds);
+
+        when(projectCounterService.nextRunDisplayId(projectId)).thenReturn("TR-01");
+        when(entityService.create(any())).thenAnswer(inv -> entityWithMetadata(inv.getArgument(0), runId));
+
+        // Capture the DTO state AT THE MOMENT EntityService.update is called —
+        // ArgumentCaptor only holds a reference, so we must snapshot mutable fields immediately.
+        final String[] capturedCaseIdsJson = {null};
+        final boolean[] capturedCaseIdsNull = {false};
+        when(entityService.update(eq(runId), any(TestRunDTO.class), isNull()))
+                .thenAnswer(inv -> {
+                    TestRunDTO payload = inv.getArgument(1);
+                    capturedCaseIdsJson[0] = payload.getCaseIdsJson();
+                    capturedCaseIdsNull[0] = (payload.getCaseIds() == null || payload.getCaseIds().isEmpty());
+                    return entityWithMetadata(payload, runId);
+                });
+
+        TestRunDTO created = testRunService.createTestRun(testRun);
+
+        // Cyoda must NOT receive caseIds as an array (would create 155 schema fields → limit exceeded)
+        assertTrue(capturedCaseIdsNull[0], "caseIds array must be null in the Cyoda payload");
+        // Must be stored as a single JSON string field instead
+        assertNotNull(capturedCaseIdsJson[0], "caseIdsJson must be populated in the Cyoda payload");
+
+        // HTTP response must still expose caseIds as a list
+        assertNotNull(created.getCaseIds());
+        assertEquals(155, created.getCaseIds().size());
+        assertNull(created.getCaseIdsJson(), "caseIdsJson must not appear in the HTTP response");
+    }
+
+    @Test
+    void getTestRunById_restoresCaseIdsFromCaseIdsJson() {
+        List<String> expected = List.of("id-a", "id-b", "id-c");
+        TestRunDTO stored = new TestRunDTO();
+        stored.setId(runId);
+        stored.setName("Run");
+        stored.setCaseIds(null);
+        stored.setCaseIdsJson("[\"id-a\",\"id-b\",\"id-c\"]");
+
+        when(entityService.getById(eq(runId), any(), eq(TestRunDTO.class)))
+                .thenReturn(entityWithMetadata(stored, runId));
+
+        Optional<TestRunDTO> result = testRunService.getTestRunById(runId);
+
+        assertTrue(result.isPresent());
+        assertEquals(expected, result.get().getCaseIds(), "caseIds must be restored from caseIdsJson");
+        assertNull(result.get().getCaseIdsJson(), "caseIdsJson must not be exposed in HTTP response");
     }
 }
 

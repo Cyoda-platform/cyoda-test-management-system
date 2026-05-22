@@ -46,6 +46,27 @@ public class TestRunService {
         this.objectMapper = objectMapper;
     }
 
+    private List<String> parseCaseIdsList(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json,
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            log.warn("Failed to parse caseIdsJson: {}", json, e);
+            return null;
+        }
+    }
+
+    private String serializeCaseIdsList(List<String> ids) {
+        if (ids == null || ids.isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(ids);
+        } catch (Exception e) {
+            log.warn("Failed to serialize caseIds list", e);
+            return null;
+        }
+    }
+
     private Map<String, String> parseStepStatuses(String json) {
         if (json == null || json.isEmpty() || "{}".equals(json)) {
             return new HashMap<>();
@@ -84,6 +105,14 @@ public class TestRunService {
     private TestRunDTO withId(EntityWithMetadata<TestRunDTO> result) {
         TestRunDTO entity = result.entity();
         entity.setId(result.getId());
+        // Restore caseIds from caseIdsJson (new storage format) when the array is absent.
+        // Legacy entities stored before this change may still have caseIds as an array — leave those as-is.
+        if ((entity.getCaseIds() == null || entity.getCaseIds().isEmpty())
+                && entity.getCaseIdsJson() != null && !entity.getCaseIdsJson().isBlank()) {
+            entity.setCaseIds(parseCaseIdsList(entity.getCaseIdsJson()));
+        }
+        // Never expose caseIdsJson in HTTP responses — it's a storage implementation detail
+        entity.setCaseIdsJson(null);
         return entity;
     }
 
@@ -118,17 +147,28 @@ public class TestRunService {
         // Persist displayId explicitly — Cyoda's create reload may not return it
         created.setDisplayId(displayId);
 
-        // Now restore caseIds and stepStatuses on the follow-up update
-        if ((savedCaseIds != null && !savedCaseIds.isEmpty()) ||
-            (savedStepStatuses != null && !savedStepStatuses.isEmpty() && !savedStepStatuses.equals("{}"))) {
-            created.setCaseIds(savedCaseIds);
+        // Restore stepStatuses on the follow-up update
+        if (savedStepStatuses != null && !savedStepStatuses.isEmpty() && !savedStepStatuses.equals("{}")) {
             created.setStepStatuses(savedStepStatuses);
+        }
+        // Store caseIds as a JSON string (caseIdsJson) — NOT as a List<String> (array).
+        // A List<String> with N elements creates N indexed schema fields in Cyoda, which hits
+        // the 150-field subscription limit for test runs with >~130 test cases.
+        if (savedCaseIds != null && !savedCaseIds.isEmpty()) {
+            created.setCaseIdsJson(serializeCaseIdsList(savedCaseIds));
         }
 
         // Mark as 'initial' so updateTestRun can detect it and send initialize_run
         // on the first status update (when the user starts executing).
         created.setStatus("initial");
         entityService.update(created.getId(), created, null);
+
+        // Restore caseIds on the returned object for the HTTP response.
+        // caseIdsJson was sent to Cyoda for storage; now expose caseIds as a list to the caller.
+        if (savedCaseIds != null && !savedCaseIds.isEmpty()) {
+            created.setCaseIds(savedCaseIds);
+            created.setCaseIdsJson(null);
+        }
         return created;
     }
 
@@ -243,6 +283,12 @@ public class TestRunService {
                     testRun.setStepStatuses(serializeStepStatuses(existingMap));
                 }
             });
+        }
+
+        // Convert caseIds list to JSON string before storing to avoid Cyoda 150-field limit
+        if (testRun.getCaseIds() != null && !testRun.getCaseIds().isEmpty()) {
+            testRun.setCaseIdsJson(serializeCaseIdsList(testRun.getCaseIds()));
+            testRun.setCaseIds(null);
         }
 
         try {
