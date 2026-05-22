@@ -5,16 +5,14 @@
 #
 # Override file path at runtime: APP_USERS_SEED_FILE=/path/to/custom-seed.yml
 users:
-  - username: admin
-    email: admin@example.com
-    # Replace with: scripts/hash-password.sh <your-admin-password>
-    passwordHash: "REPLACE_ME"
+  - username: victoria
+    email: victoria.sagdieva@cyoda.com
+    passwordHash: "$2y$12$SLrfXvanxySPtsJfhhcMGeGlWmJy29/WHcKkRhfBScmQ9DAdFRAcm"
     roles:
       - ADMIN
 
   - username: tester
     email: tester@example.com
-    # Replace with: scripts/hash-password.sh <your-tester-password>
-    passwordHash: "REPLACE_ME"
+    passwordHash: "$2y$12$OsJO8cLauhkBcstQsqTXi.rUm4f.UJzh0i6vSplElqSKh2jx8p/6C"
     roles:
       - TESTER
