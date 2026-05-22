@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -22,8 +23,10 @@ import java.util.Map;
  * Imports users from users-seed.yml (or the file at APP_USERS_SEED_FILE) at startup.
  * Existing users are skipped — only absent usernames are created.
  * Safe to re-run on every startup.
+ * Disabled in unit-test profile via app.seeder.enabled=false.
  */
 @Component
+@ConditionalOnProperty(name = "app.seeder.enabled", havingValue = "true", matchIfMissing = true)
 public class UserSeederRunner implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(UserSeederRunner.class);

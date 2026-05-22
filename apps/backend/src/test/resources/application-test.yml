@@ -18,16 +18,10 @@ spring:
       resolve-lazily: false
 
 app:
-  users:
-    - username: admin
-      password: admin123
-      role: ADMIN
-    - username: tester
-      password: tester123
-      role: TESTER
+  seeder:
+    enabled: false
   auth:
-    filter:
-      enabled: false
+    secret: test-signing-secret-32-chars-ok!!
   config:
     # Unit test configuration - uses mocked Cyoda server
     # These are dummy values for testing, NOT real credentials

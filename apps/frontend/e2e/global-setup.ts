@@ -10,12 +10,8 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.test') });
 
 export default async function globalSetup() {
   const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173';
-  const username = process.env.TEST_USERNAME;
-  const password = process.env.TEST_PASSWORD;
-
-  if (!username || !password) {
-    throw new Error('TEST_USERNAME and TEST_PASSWORD must be set in .env.test');
-  }
+  const username = process.env.TEST_USERNAME ?? 'test_admin';
+  const password = process.env.TEST_PASSWORD ?? 'admin123';
 
   const browser = await chromium.launch();
   const page = await browser.newPage();
