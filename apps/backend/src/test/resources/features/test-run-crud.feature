@@ -21,7 +21,7 @@ Feature: Test Run CRUD Operations and Lifecycle
     Given a test run with ID exists
     When I GET from "/projects/{projectId}/runs/{runId}"
     Then the response HTTP status is 200
-    And the response body contains "status": "ACTIVE"
+    And the response body contains "status": "active"
 
   Scenario: Get test run with details (includes cases)
     Given a test run with ID and associated test cases exist
@@ -41,22 +41,25 @@ Feature: Test Run CRUD Operations and Lifecycle
     Given a test run with ID exists
     When I POST to "/projects/{projectId}/runs/{runId}/complete"
     Then the response HTTP status is 200
-    And the response body contains "status": "COMPLETED"
+    And the response body contains "status": "completed"
 
   Scenario: Unlock test run with Admin role
     Given a test run with ID exists
+    And the test run is completed
     When I POST to "/projects/{projectId}/runs/{runId}/unlock" with role "Admin"
     Then the response HTTP status is 200
 
   Scenario: Unlock test run with Tester role
     Given a test run with ID exists
+    And the test run is completed
     When I POST to "/projects/{projectId}/runs/{runId}/unlock" with role "Tester"
     Then the response HTTP status is 200
 
-  Scenario: Unlock test run without role returns 403
+  Scenario: Unlock test run without authentication returns 401
     Given a test run with ID exists
+    And the test run is completed
     When I POST to "/projects/{projectId}/runs/{runId}/unlock" without role
-    Then the response HTTP status is 403
+    Then the response HTTP status is 401
 
   Scenario: Delete test run
     Given a test run with ID exists

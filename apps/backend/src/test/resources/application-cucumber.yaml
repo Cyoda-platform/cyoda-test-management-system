@@ -36,7 +36,7 @@ app:
     # gRPC Configuration - Cucumber Tests
     grpc-address: ${CYODA_HOST:localhost:8443}
     grpc-server-port: 443
-    grpc-processor-tag: cucumber-java-test
+    grpc-processor-tag: cyoda_application
 
     # gRPC Channel Configuration - Increased for large test operations
     grpc-max-inbound-message-size: 33554432  # 32MB for very large operations

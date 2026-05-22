@@ -96,19 +96,27 @@ public class TestRunApiSteps {
     }
 
     @Given("a test run with ID exists")
-    public void a_test_run_with_id_exists() {
+    public void a_test_run_with_id_exists() throws Exception {
         String body = "{\"name\":\"Test Run\",\"status\":\"ACTIVE\"}";
         http.post(CONTEXT_PATH + "/projects/" + projectId + "/runs", body);
-        assertEquals(201, http.lastStatus());
+        assertEquals(201, http.lastStatus(), "Create test run failed: " + http.lastBody());
         testRunId = extractField(http.lastBody(), "id");
         createdRunIds.add(testRunId);
-        assertNotNull(testRunId);
+        assertNotNull(testRunId, "testRunId not returned");
+
+        // Trigger initialize_run transition: service detects status=initial and fires it
+        http.put(CONTEXT_PATH + "/projects/" + projectId + "/runs/" + testRunId,
+                "{\"name\":\"Test Run\",\"status\":\"active\"}");
+
+        // Poll until the SnapshotProcessor completes and state becomes 'active' (Cyoda lowercase)
+        waitForStatus(testRunId, "active", 30);
     }
 
     @Given("a test run with ID and associated test cases exist")
-    public void a_test_run_with_id_and_cases_exist() {
+    public void a_test_run_with_id_and_cases_exist() throws Exception {
         a_test_run_with_id_exists();
-        String caseBody = "{\"title\":\"Test Case 1\",\"status\":\"UNTESTED\"}";
+        String caseBody = "{\"title\":\"Test Case 1\",\"status\":\"UNTESTED\","
+                + "\"testCaseId\":\"550e8400-e29b-41d4-a716-000000000001\"}";
         http.post(CONTEXT_PATH + "/projects/" + projectId + "/runs/" + testRunId + "/cases", caseBody);
         testRunCaseId = extractField(http.lastBody(), "id");
     }
@@ -119,13 +127,14 @@ public class TestRunApiSteps {
     }
 
     @Given("a test run case exists")
-    public void a_test_run_case_exists() {
+    public void a_test_run_case_exists() throws Exception {
         a_test_run_with_id_exists();
-        String caseBody = "{\"title\":\"Test Case\",\"status\":\"UNTESTED\"}";
+        String caseBody = "{\"title\":\"Test Case\",\"status\":\"UNTESTED\","
+                + "\"testCaseId\":\"550e8400-e29b-41d4-a716-000000000001\"}";
         http.post(CONTEXT_PATH + "/projects/" + projectId + "/runs/" + testRunId + "/cases", caseBody);
-        assertEquals(201, http.lastStatus());
+        assertEquals(201, http.lastStatus(), "Create test run case failed: " + http.lastBody());
         testRunCaseId = extractField(http.lastBody(), "id");
-        assertNotNull(testRunCaseId);
+        assertNotNull(testRunCaseId, "testRunCaseId not returned");
     }
 
     // ── When ──────────────────────────────────────────────────────────────
@@ -133,14 +142,19 @@ public class TestRunApiSteps {
     @When("I POST to {string}")
     public void i_post_to(String path) {
         String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
-        String body = objectMapper.convertValue(testRunPayload, com.fasterxml.jackson.databind.node.ObjectNode.class).toString();
-        http.post(pathWithId, body);
+        com.fasterxml.jackson.databind.node.ObjectNode node =
+                testRunPayload != null
+                ? objectMapper.convertValue(testRunPayload, com.fasterxml.jackson.databind.node.ObjectNode.class)
+                : objectMapper.createObjectNode();
+        http.post(pathWithId, node.toString());
     }
 
     @When("I POST a test case to {string}")
     public void i_post_a_test_case_to(String path) {
         String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
-        String body = "{\"title\":\"New Test Case\",\"status\":\"UNTESTED\"}";
+        // testCaseId must be a valid UUID — Cyoda schema enforces UUID_TYPE
+        String body = "{\"title\":\"New Test Case\",\"status\":\"UNTESTED\","
+                + "\"testCaseId\":\"550e8400-e29b-41d4-a716-000000000001\"}";
         http.post(pathWithId, body);
     }
 
@@ -153,8 +167,11 @@ public class TestRunApiSteps {
     @When("I PUT to {string}")
     public void i_put_to(String path) {
         String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
-        String body = objectMapper.convertValue(testRunPayload, com.fasterxml.jackson.databind.node.ObjectNode.class).toString();
-        http.put(pathWithId, body);
+        com.fasterxml.jackson.databind.node.ObjectNode node =
+                testRunPayload != null
+                ? objectMapper.convertValue(testRunPayload, com.fasterxml.jackson.databind.node.ObjectNode.class)
+                : objectMapper.createObjectNode();
+        http.put(pathWithId, node.toString());
     }
 
     @When("I POST to {string} with role {string}")
@@ -166,7 +183,9 @@ public class TestRunApiSteps {
     @When("I POST to {string} without role")
     public void i_post_to_without_role(String path) {
         String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
-        http.post(pathWithId, "{}");
+        // Clear token → unauthenticated request → Spring Security returns 401
+        http.clearBearerToken();
+        http.postAnonymous(pathWithId, "{}");
     }
 
     @When("I DELETE from {string}")
@@ -187,7 +206,24 @@ public class TestRunApiSteps {
         http.post(pathWithId, "{}");
     }
 
+    @Given("the test run is completed")
+    public void the_test_run_is_completed() throws Exception {
+        http.post(CONTEXT_PATH + "/projects/" + projectId + "/runs/" + testRunId + "/complete", "{}");
+        assertEquals(200, http.lastStatus(),
+                "Failed to complete test run. Body: " + http.lastBody());
+        waitForStatus(testRunId, "completed", 15);
+    }
+
     // ── Then ──────────────────────────────────────────────────────────────
+
+    @Then("the response body has {string} array")
+    public void the_response_body_has_array_any(String arrayField) throws Exception {
+        JsonNode node = objectMapper.readTree(http.lastBody());
+        assertTrue(node.has(arrayField),
+                "Response missing array '" + arrayField + "'. Body: " + http.lastBody());
+        assertTrue(node.get(arrayField).isArray(),
+                "Field '" + arrayField + "' is not an array. Body: " + http.lastBody());
+    }
 
     @Then("the response body contains {string}: {string}")
     public void the_response_body_contains(String field, String value) throws Exception {
@@ -217,6 +253,21 @@ public class TestRunApiSteps {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
+
+    /** Polls GET /runs/{id} until status matches expected or timeout (seconds). */
+    private void waitForStatus(String runId, String expectedStatus, int timeoutSeconds) throws Exception {
+        String url = CONTEXT_PATH + "/projects/" + projectId + "/runs/" + runId;
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            http.get(url);
+            String status = extractField(http.lastBody(), "status");
+            if (expectedStatus.equalsIgnoreCase(status)) return;
+            Thread.sleep(1000);
+        }
+        String finalStatus = extractField(http.lastBody(), "status");
+        assertEquals(expectedStatus, finalStatus,
+                "Test run did not reach '" + expectedStatus + "' within " + timeoutSeconds + "s");
+    }
 
     private String replacePlaceholders(String path) {
         String result = path;

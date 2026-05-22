@@ -106,17 +106,17 @@ Feature: Defects REST API — CRUD lifecycle
   Scenario: Create a defect linked to a test run — testRunId is persisted
     Given I am logged in as admin
     And I have created a defect testing project named "Run-linked Defect Project"
-    When I create a defect with title "Run-linked Bug" and severity "Major" and testRunId "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    When I create a defect with title "Run-linked Bug" and severity "Major" and testRunId "550e8400-e29b-41d4-a716-446655440099"
     Then the create defect response HTTP status is 201
-    And the defect response body contains field "testRunId" with value "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    And the defect response body contains field "testRunId" with value "550e8400-e29b-41d4-a716-446655440099"
 
   @requires-cyoda
   Scenario: GET defects filtered by testRunId returns only matching defects
     Given I am logged in as admin
     And I have created a defect testing project named "Filter Defects Project"
-    And I have created a defect with title "Run Defect" and severity "Major" and testRunId "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    And I have created a defect with title "Run Defect" and severity "Major" and testRunId "550e8400-e29b-41d4-a716-446655440099"
     And I have created a defect with title "Unrelated Defect" and severity "Minor"
-    When I GET defects for the last created project filtered by testRunId "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    When I GET defects for the last created project filtered by testRunId "550e8400-e29b-41d4-a716-446655440099"
     Then the response HTTP status is 200
     And the filtered defect list contains 1 item
     And the first filtered defect has title "Run Defect"

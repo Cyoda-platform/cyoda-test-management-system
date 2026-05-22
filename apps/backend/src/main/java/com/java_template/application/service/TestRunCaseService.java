@@ -111,6 +111,10 @@ public class TestRunCaseService {
         }
 
         testRunCase.setStatus("UNTESTED");
+        // Cyoda requires steps to be a non-null list — null causes UUID_TYPE schema error
+        if (testRunCase.getSteps() == null) {
+            testRunCase.setSteps(java.util.List.of());
+        }
         return withId(entityService.create(testRunCase));
     }
 
@@ -197,6 +201,7 @@ public class TestRunCaseService {
     public Optional<TestRunCaseDTO> updateTestRunCaseStatus(UUID id, String status) {
         return getTestRunCaseById(id).map(trc -> {
             trc.setStatus(status);
+            if (trc.getSteps() == null) trc.setSteps(java.util.List.of());
             return withId(entityService.update(id, trc, null));
         });
     }
@@ -205,6 +210,7 @@ public class TestRunCaseService {
     public Optional<TestRunCaseDTO> linkBug(UUID id, String bugUrl) {
         return getTestRunCaseById(id).map(trc -> {
             trc.setBugUrl(bugUrl);
+            if (trc.getSteps() == null) trc.setSteps(java.util.List.of());
             return withId(entityService.update(id, trc, null));
         });
     }
