@@ -162,8 +162,7 @@ public class DemoSeederService {
                 .map(att -> CompletableFuture.runAsync(() -> {
                     UUID caseId = caseRefToId.get(att.caseRef);
                     if (caseId == null) { log.warn("[DemoSeeder] Unknown caseRef for attachment: {}", att.caseRef); return; }
-                    AttachmentDTO a = buildAttachment(projectId, caseId, null, att.fileName, att.fileType, att.content, "CASE", null, null);
-                    attachmentService.uploadAttachment(a);
+                    buildAttachment(projectId, caseId, null, att.fileName, att.fileType, att.content, "CASE", null, null);
                     log.info("[DemoSeeder] Attached '{}' to case {}", att.fileName, caseId);
                 }, exec))
                 .toList();
@@ -281,9 +280,8 @@ public class DemoSeederService {
                 .map(ev -> CompletableFuture.runAsync(() -> {
                     UUID caseId = caseRefToId.get(ev.caseRef);
                     if (caseId == null) { log.warn("[DemoSeeder] Unknown caseRef for evidence: {}", ev.caseRef); return; }
-                    AttachmentDTO a = buildAttachment(projectId, caseId, null,
+                    buildAttachment(projectId, caseId, null,
                             ev.fileName, ev.fileType, ev.content, "EVIDENCE", runId, String.valueOf(ev.stepNumber));
-                    attachmentService.uploadAttachment(a);
                     log.info("[DemoSeeder] Attached evidence '{}' to case {} step {}", ev.fileName, caseId, ev.stepNumber);
                 }, exec))
                 .toList();
@@ -337,23 +335,11 @@ public class DemoSeederService {
     private AttachmentDTO buildAttachment(UUID projectId, UUID caseId, UUID defectId,
                                           String fileName, String fileType, String content,
                                           String type, UUID runId, String stepKey) {
-        AttachmentDTO a = new AttachmentDTO();
-        a.setProjectId(projectId);
-        a.setCaseId(caseId);
-        a.setDefectId(defectId);
-        a.setFileName(fileName);
-        a.setFileType(fileType);
-        // Use a nominal demo file size; content is NOT stored in the Cyoda entity
-        // (Cyoda entity schema defines content as nullable-only; actual file data
-        // would be stored via EdgeMessage in production uploads).
-        a.setFileSize(content != null ? content.length() : 1024L);
-        a.setUploadedAt(Instant.now().toString());
-        a.setAttachmentType(type);
-        a.setRunId(runId);
-        a.setStepKey(stepKey);
-        // Do NOT set content — Cyoda entity model only accepts null for this field.
-        // content=null is the default; actual file bytes live in EdgeMessage.
-        return a;
+        // Upload via EdgeMessage so the file is downloadable, not just metadata.
+        return attachmentService.uploadAttachmentFromBase64(
+                projectId, caseId, defectId,
+                fileName, fileType, content,
+                type, runId, stepKey);
     }
 
     private String buildSnapshotData(DemoData data, int passed, int failed, int skipped,

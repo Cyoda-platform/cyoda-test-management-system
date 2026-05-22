@@ -142,6 +142,51 @@ public class AttachmentService {
     }
 
     /**
+     * Uploads an attachment from a base64-encoded string (used by DemoSeederService).
+     * Creates an EdgeMessage with the decoded bytes so the file is downloadable,
+     * then creates the AttachmentDTO entity referencing that EdgeMessage.
+     */
+    public AttachmentDTO uploadAttachmentFromBase64(UUID projectId, UUID caseId, UUID defectId,
+                                                    String fileName, String fileType,
+                                                    String base64Content,
+                                                    String attachmentType, UUID runId,
+                                                    String stepKey) {
+        AttachmentDTO attachment = new AttachmentDTO();
+        attachment.setProjectId(projectId);
+        attachment.setCaseId(caseId);
+        attachment.setDefectId(defectId);
+        attachment.setFileName(fileName);
+        attachment.setFileType(fileType);
+        attachment.setFileSize(base64Content != null ? base64Content.length() : 0L);
+        attachment.setUploadedAt(Instant.now().toString());
+        attachment.setAttachmentType(attachmentType != null ? attachmentType : "CASE");
+        attachment.setRunId(runId);
+        attachment.setStepKey(stepKey);
+
+        try {
+            ObjectNode content = objectMapper.createObjectNode();
+            content.put("fileName", fileName);
+            content.put("fileType", fileType);
+            content.put("fileSize", attachment.getFileSize());
+            content.put("uploadedAt", attachment.getUploadedAt());
+            content.put("data", base64Content);
+
+            ObjectNode metadata = objectMapper.createObjectNode();
+            metadata.put("projectId", projectId.toString());
+            if (caseId != null) metadata.put("caseId", caseId.toString());
+            if (defectId != null) metadata.put("defectId", defectId.toString());
+            metadata.put("contentType", fileType);
+
+            UUID messageId = edgeMessageService.createMessage(EDGE_MESSAGE_SUBJECT, content, metadata);
+            attachment.setMessageId(messageId);
+        } catch (Exception e) {
+            logger.error("❌ EdgeMessage creation failed for demo file '{}': {}", fileName, e.getMessage());
+        }
+
+        return withId(entityService.create(attachment));
+    }
+
+    /**
      * Retrieves attachment metadata by ID.
      */
     public Optional<AttachmentDTO> getAttachmentById(UUID id) {
