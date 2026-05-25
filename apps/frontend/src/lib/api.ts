@@ -224,7 +224,7 @@ export interface BatchImportCase {
 
 export const testCasesApi = {
   list:   (projectId: string, suiteId: string) =>
-    api.get<{ data: TestCase[] }>(`/projects/${projectId}/suites/${suiteId}/cases`),
+    api.get<{ data: TestCase[] }>(`/projects/${projectId}/suites/${suiteId}/cases?size=1000`),
   get:    (projectId: string, suiteId: string, id: string) =>
     api.get<TestCase>(`/projects/${projectId}/suites/${suiteId}/cases/${id}`),
   create: (projectId: string, suiteId: string, body: Partial<TestCase>) =>
