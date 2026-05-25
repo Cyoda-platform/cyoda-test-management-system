@@ -105,12 +105,11 @@ public class TestRunService {
         String displayId = projectCounterService.nextRunDisplayId(testRun.getProjectId());
         testRun.setDisplayId(displayId);
 
-        // Save caseIds and stepStatuses temporarily
-        // Cyoda cannot handle complex types during create, so we'll add them in a follow-up update
-        java.util.List<String> savedCaseIds = testRun.getCaseIds();
+        // Save caseIds and stepStatuses temporarily — cleared before create,
+        // restored in a follow-up update to avoid Cyoda schema validation errors on create.
+        String savedCaseIds = testRun.getCaseIds();
         String savedStepStatuses = testRun.getStepStatuses();
 
-        // Clear them before create to avoid Cyoda schema validation errors
         testRun.setCaseIds(null);
         testRun.setStepStatuses(null);
 
@@ -118,8 +117,8 @@ public class TestRunService {
         // Persist displayId explicitly — Cyoda's create reload may not return it
         created.setDisplayId(displayId);
 
-        // Now restore caseIds and stepStatuses on the follow-up update
-        if ((savedCaseIds != null && !savedCaseIds.isEmpty()) ||
+        // Restore caseIds and stepStatuses on the follow-up update
+        if ((savedCaseIds != null && !savedCaseIds.isBlank()) ||
             (savedStepStatuses != null && !savedStepStatuses.isEmpty() && !savedStepStatuses.equals("{}"))) {
             created.setCaseIds(savedCaseIds);
             created.setStepStatuses(savedStepStatuses);
@@ -201,7 +200,7 @@ public class TestRunService {
         @CacheEvict(value = "allTestRunsByProject", allEntries = true)
     })
     public Optional<TestRunDTO> updateTestRun(UUID id, TestRunDTO testRun) {
-        boolean needsCaseIdsMerge = testRun.getCaseIds() == null || testRun.getCaseIds().isEmpty();
+        boolean needsCaseIdsMerge = testRun.getCaseIds() == null || testRun.getCaseIds().isBlank();
         boolean needsStatusMerge  = testRun.getStepStatuses() == null
                 || testRun.getStepStatuses().isEmpty()
                 || testRun.getStepStatuses().equals("{}");
@@ -227,7 +226,7 @@ public class TestRunService {
             existingOpt.ifPresent(existing -> {
                 if (needsCaseIdsMerge
                         && existing.getCaseIds() != null
-                        && !existing.getCaseIds().isEmpty()) {
+                        && !existing.getCaseIds().isBlank()) {
                     testRun.setCaseIds(existing.getCaseIds());
                 }
                 if (needsStatusMerge

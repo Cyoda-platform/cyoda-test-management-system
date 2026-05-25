@@ -175,7 +175,11 @@ public class DemoSeederService {
         runDTO.setEnvironment(data.testRun.environment);
         runDTO.setBuildVersion(data.testRun.buildVersion);
         runDTO.setDescription(data.testRun.description);
-        runDTO.setCaseIds(new ArrayList<>(allCaseIds));
+        try {
+            runDTO.setCaseIds(objectMapper.writeValueAsString(new ArrayList<>(allCaseIds)));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize caseIds for demo run", e);
+        }
         TestRunDTO run = testRunService.createTestRun(runDTO);
         UUID runId = run.getId();
         log.info("[DemoSeeder] Created TestRun: {}", runId);

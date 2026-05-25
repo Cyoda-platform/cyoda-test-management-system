@@ -54,7 +54,7 @@ class TestRunServiceRaceConditionTest {
         existing.setId(runId);
         existing.setProjectId(projectId);
         existing.setStatus("active");
-        existing.setCaseIds(List.of("case-1"));
+        existing.setCaseIds("[\"case-1\"]");
         existing.setStepStatuses("{\"k\":\"PASSED\"}");
 
         // getTestRunById calls entityService.getById
@@ -85,7 +85,7 @@ class TestRunServiceRaceConditionTest {
         existing.setId(runId);
         existing.setProjectId(projectId);
         existing.setStatus("initial");
-        existing.setCaseIds(List.of("case-1"));
+        existing.setCaseIds("[\"case-1\"]");
         existing.setStepStatuses("{\"k\":\"UNTESTED\"}");
 
         when(entityService.getById(eq(runId), any(), eq(TestRunDTO.class)))

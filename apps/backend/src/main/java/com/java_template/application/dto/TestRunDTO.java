@@ -2,6 +2,15 @@ package com.java_template.application.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.java_template.common.workflow.CyodaEntity;
 import com.java_template.common.workflow.OperationSpecification;
 import lombok.AllArgsConstructor;
@@ -12,8 +21,11 @@ import org.cyoda.cloud.api.event.common.ModelSpec;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Test Run DTO for TMS
@@ -59,12 +71,15 @@ public class TestRunDTO implements CyodaEntity {
     private int untested;
 
     /**
-     * IDs of the test cases selected for this run, captured at creation time.
-     * Stored directly on the run to avoid creating separate TestRunCase entities
-     * (whose Cyoda entity model may not be registered).
+     * IDs of the test cases selected for this run.
+     * Stored in Cyoda as a JSON string (1 schema field) to avoid the 150-field-per-model
+     * subscription limit that array indexing would cause.
+     * HTTP API sends/receives this as a JSON array — the custom ser/deser handles conversion.
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
-    private List<String> caseIds;
+    @JsonDeserialize(using = CaseIdsDeserializer.class)
+    @JsonSerialize(using = CaseIdsSerializer.class)
+    private String caseIds;
 
     /**
      * Flat step-level execution state, stored as JSON string on the run entity to avoid
@@ -85,5 +100,37 @@ public class TestRunDTO implements CyodaEntity {
     public OperationSpecification getModelKey() {
         return new OperationSpecification.Entity(MODEL_SPEC, ENTITY_NAME);
     }
-}
 
+    // ── Custom Jackson ser/deser ───────────────────────────────────────────────
+    // HTTP sends/receives caseIds as a JSON array; Cyoda stores it as a JSON string.
+
+    /** Accepts a JSON array from HTTP requests and converts to a JSON string for Cyoda storage. */
+    public static class CaseIdsDeserializer extends JsonDeserializer<String> {
+        @Override
+        public String deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            if (p.currentToken() == JsonToken.START_ARRAY) {
+                List<String> ids = new ArrayList<>();
+                while (p.nextToken() != JsonToken.END_ARRAY) {
+                    ids.add(p.getText());
+                }
+                if (ids.isEmpty()) return null;
+                return "[" + ids.stream()
+                        .map(id -> "\"" + id.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
+                        .collect(Collectors.joining(",")) + "]";
+            }
+            // Already a string (from Cyoda storage)
+            String text = p.getText();
+            return (text == null || text.isBlank()) ? null : text;
+        }
+    }
+
+    /** Outputs the stored JSON string as a JSON array for HTTP responses. */
+    public static class CaseIdsSerializer extends JsonSerializer<String> {
+        @Override
+        public void serialize(String value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+            if (value == null || value.isBlank()) return;
+            // value is a JSON array string like "[\"id1\",\"id2\"]" — write it raw
+            gen.writeRawValue(value);
+        }
+    }
+}

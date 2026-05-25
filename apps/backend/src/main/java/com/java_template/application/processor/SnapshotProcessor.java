@@ -138,9 +138,22 @@ public class SnapshotProcessor implements CyodaProcessor {
 
     private List<String> parseCaseIds(JsonNode data) {
         JsonNode node = data.get("caseIds");
-        if (node == null || !node.isArray() || node.isEmpty()) return List.of();
-        return objectMapper.convertValue(node,
-                objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+        if (node == null) return List.of();
+        // New format: stored as JSON string "[\"id1\",\"id2\",...]"
+        if (node.isTextual() && !node.asText().isBlank()) {
+            try {
+                return objectMapper.readValue(node.asText(),
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            } catch (Exception e) {
+                log.warn("SnapshotProcessor: failed to parse caseIds string, trying array format", e);
+            }
+        }
+        // Legacy: array format
+        if (node.isArray() && !node.isEmpty()) {
+            return objectMapper.convertValue(node,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+        }
+        return List.of();
     }
 
     private EntityProcessorCalculationResponse successResponse(EntityProcessorCalculationRequest request) {
