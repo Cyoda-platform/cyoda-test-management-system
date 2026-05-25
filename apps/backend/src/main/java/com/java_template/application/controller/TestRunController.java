@@ -1,5 +1,6 @@
 package com.java_template.application.controller;
 
+import com.fasterxml.jackson.annotation.JsonView;
 import com.java_template.application.dto.TestRunDTO;
 import com.java_template.application.dto.TestRunDetailDTO;
 import com.java_template.application.service.TestRunCaseService;
@@ -32,6 +33,7 @@ public class TestRunController {
     }
 
     @PostMapping
+    @JsonView(TestRunDTO.Views.Http.class)
     @Operation(summary = "Create a new test run (snapshot)")
     public ResponseEntity<TestRunDTO> createTestRun(@PathVariable UUID projectId, @Valid @RequestBody TestRunDTO testRun) {
         testRun.setProjectId(projectId);
@@ -40,6 +42,7 @@ public class TestRunController {
     }
 
     @GetMapping
+    @JsonView(TestRunDTO.Views.Http.class)
     @Operation(summary = "Get all test runs for a project")
     public ResponseEntity<PageResult<TestRunDTO>> getTestRunsByProject(
             @PathVariable UUID projectId,
@@ -49,6 +52,7 @@ public class TestRunController {
     }
 
     @GetMapping("/{id}")
+    @JsonView(TestRunDTO.Views.Http.class)
     @Operation(summary = "Get test run by ID")
     public ResponseEntity<TestRunDTO> getTestRun(@PathVariable UUID projectId, @PathVariable UUID id) {
         return testRunService.getTestRunById(id)
@@ -69,6 +73,7 @@ public class TestRunController {
      * mount instead of separate {@code useTestRun} and {@code useTestRunCases} hooks.</p>
      */
     @GetMapping("/{id}/details")
+    @JsonView(TestRunDTO.Views.Http.class)
     @Operation(summary = "Get full run structure (run + all run-cases) in one round-trip")
     public ResponseEntity<TestRunDetailDTO> getTestRunDetails(
             @PathVariable UUID projectId,
@@ -87,6 +92,7 @@ public class TestRunController {
     }
 
     @PutMapping("/{id}")
+    @JsonView(TestRunDTO.Views.Http.class)
     @Operation(summary = "Update a test run")
     public ResponseEntity<TestRunDTO> updateTestRun(@PathVariable UUID projectId, @PathVariable UUID id, @Valid @RequestBody TestRunDTO testRun) {
         testRun.setProjectId(projectId);
@@ -96,6 +102,7 @@ public class TestRunController {
     }
 
     @PostMapping("/{id}/complete")
+    @JsonView(TestRunDTO.Views.Http.class)
     @Operation(summary = "Complete a test run (Tester, Admin)")
     public ResponseEntity<TestRunDTO> completeTestRun(@PathVariable UUID projectId, @PathVariable UUID id) {
         return testRunService.getTestRunById(id)
@@ -106,6 +113,7 @@ public class TestRunController {
     }
 
     @PostMapping("/{id}/unlock")
+    @JsonView(TestRunDTO.Views.Http.class)
     @Operation(summary = "Unlock a completed test run (Tester or Admin)")
     public ResponseEntity<TestRunDTO> unlockTestRun(
             @PathVariable UUID projectId,

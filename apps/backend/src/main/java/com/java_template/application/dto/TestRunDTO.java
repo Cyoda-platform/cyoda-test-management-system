@@ -36,6 +36,17 @@ import java.util.stream.Collectors;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class TestRunDTO implements CyodaEntity {
 
+    /**
+     * Jackson view used by HTTP controllers.
+     * When this view is active (via @JsonView on controller methods), CaseIdsSerializer
+     * writes caseIds as a JSON array for the HTTP response.
+     * When no view is active (i.e. objectMapper.valueToTree() inside EntityService),
+     * it writes caseIds as a quoted JSON string — matching the Cyoda schema type.
+     */
+    public static class Views {
+        public static class Http {}
+    }
+
     public static final String ENTITY_NAME = "TestRun";
     public static final Integer ENTITY_VERSION = 1;
     private static final ModelSpec MODEL_SPEC = new ModelSpec().withName(ENTITY_NAME).withVersion(ENTITY_VERSION);
@@ -124,13 +135,27 @@ public class TestRunDTO implements CyodaEntity {
         }
     }
 
-    /** Outputs the stored JSON string as a JSON array for HTTP responses. */
+    /**
+     * Outputs the stored JSON string either as a JSON array (HTTP responses) or as a
+     * quoted string (Cyoda entity writes).
+     *
+     * Detection: when Spring MVC serializes a @JsonView(Views.Http.class) response,
+     * provider.getActiveView() == Views.Http.class → write raw array.
+     * When EntityService calls objectMapper.valueToTree(entity), no view is active →
+     * write as quoted string to match the Cyoda schema type.
+     */
     public static class CaseIdsSerializer extends JsonSerializer<String> {
         @Override
         public void serialize(String value, JsonGenerator gen, SerializerProvider provider) throws IOException {
             if (value == null || value.isBlank()) return;
-            // value is a JSON array string like "[\"id1\",\"id2\"]" — write it raw
-            gen.writeRawValue(value);
+            Class<?> activeView = provider.getActiveView();
+            if (activeView != null && Views.Http.class.isAssignableFrom(activeView)) {
+                // HTTP response: write as a JSON array so the frontend receives string[]
+                gen.writeRawValue(value);
+            } else {
+                // Cyoda entity write: store as a quoted JSON string (matches schema type)
+                gen.writeString(value);
+            }
         }
     }
 }

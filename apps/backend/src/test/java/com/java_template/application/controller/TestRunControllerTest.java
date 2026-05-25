@@ -1,5 +1,6 @@
 package com.java_template.application.controller;
 
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.TestRunCaseDTO;
 import com.java_template.application.dto.TestRunDTO;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.SpringValidatorAdapter;
@@ -46,12 +48,16 @@ class TestRunControllerTest {
         autoCloseable = MockitoAnnotations.openMocks(this);
         objectMapper = new ObjectMapper();
         objectMapper.findAndRegisterModules();
+        // Mirror application.yml: spring.jackson.mapper.default-view-inclusion=true
+        // Without this, @JsonView on controller methods would exclude all non-annotated fields.
+        objectMapper.configure(MapperFeature.DEFAULT_VIEW_INCLUSION, true);
         projectId = UUID.randomUUID();
         runId = UUID.randomUUID();
         TestRunController controller = new TestRunController(testRunService, testRunCaseService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setValidator(new SpringValidatorAdapter(
                         Validation.buildDefaultValidatorFactory().getValidator()))
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
     }
 

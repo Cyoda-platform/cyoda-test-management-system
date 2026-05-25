@@ -9,6 +9,9 @@ server:
     context-path: /api
 
 spring:
+  jackson:
+    mapper:
+      default-view-inclusion: true
   mvc:
     problemdetails:
       enabled: true
