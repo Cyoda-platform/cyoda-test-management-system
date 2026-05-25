@@ -273,36 +273,6 @@ class SnapshotProcessorTest {
         verify(testRunCaseService, times(2)).createTestRunCase(any());
     }
 
-    @Test
-    @DisplayName("reads caseIds from caseIdsJson string field (avoids Cyoda 150-field limit)")
-    void processesRunWithCaseIdsStoredAsJsonString() throws Exception {
-        UUID testRunId = UUID.randomUUID();
-        UUID projectId = UUID.randomUUID();
-        UUID caseId    = UUID.randomUUID();
-
-        ObjectNode runJson = objectMapper.createObjectNode();
-        runJson.put("projectId", projectId.toString());
-        // New storage format: JSON string instead of array — avoids Cyoda schema field explosion
-        runJson.put("caseIdsJson", "[\"" + caseId + "\"]");
-        // No caseIds array present
-
-        EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
-
-        TestCaseDTO tc = new TestCaseDTO();
-        tc.setId(caseId);
-        tc.setTitle("Login flow");
-        when(testCaseService.getTestCaseById(caseId)).thenReturn(Optional.of(tc));
-
-        TestRunCaseDTO created = new TestRunCaseDTO();
-        created.setId(UUID.randomUUID());
-        when(testRunCaseService.createTestRunCase(any())).thenReturn(created);
-
-        EntityProcessorCalculationResponse response = processor.process(context(request));
-
-        assertTrue(response.getSuccess());
-        verify(testRunCaseService, times(1)).createTestRunCase(any());
-    }
-
     // ---- helpers -----------------------------------------------------------
 
     private EntityProcessorCalculationRequest buildRequest(UUID entityId, ObjectNode data) {

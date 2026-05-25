@@ -60,21 +60,11 @@ public class TestRunDTO implements CyodaEntity {
 
     /**
      * IDs of the test cases selected for this run, captured at creation time.
-     * NOT stored directly in Cyoda — stored via caseIdsJson to avoid the
-     * 150-field-per-model subscription limit (arrays expand to N indexed fields).
-     * Populated by TestRunService after reading from Cyoda.
+     * Stored directly on the run to avoid creating separate TestRunCase entities
+     * (whose Cyoda entity model may not be registered).
      */
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<String> caseIds;
-
-    /**
-     * caseIds serialized as a JSON string for Cyoda storage.
-     * Storing as a single string field avoids the Cyoda subscription limit of
-     * 150 fields per model (a List<String> would expand to N indexed schema fields).
-     * Not exposed in HTTP responses (null-excluded by @JsonInclude NON_NULL on class).
-     */
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    private String caseIdsJson;
 
     /**
      * Flat step-level execution state, stored as JSON string on the run entity to avoid
