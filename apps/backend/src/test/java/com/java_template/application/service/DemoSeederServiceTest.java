@@ -16,7 +16,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import com.java_template.application.dto.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("DemoSeederService")
@@ -35,6 +39,41 @@ class DemoSeederServiceTest {
 
     @InjectMocks
     private DemoSeederService service;
+
+    @Test
+    @DisplayName("transient createTestRun failure does not abort the entire seed")
+    void seed_createTestRunFailure_doesNotAbortSeed() {
+        // Not already seeded
+        lenient().when(projectService.searchProjects(any())).thenReturn(List.of());
+
+        ProjectDTO project = new ProjectDTO();
+        project.setId(UUID.randomUUID());
+        project.setName("E-commerce Platform");
+        when(projectService.createProject(any())).thenReturn(project);
+
+        when(suiteService.createSuite(any())).thenAnswer(inv -> {
+            SuiteDTO s = new SuiteDTO();
+            s.setId(UUID.randomUUID());
+            return s;
+        });
+
+        when(testCaseService.createTestCase(any())).thenAnswer(inv -> {
+            TestCaseDTO tc = new TestCaseDTO();
+            tc.setId(UUID.randomUUID());
+            return tc;
+        });
+
+        // Simulate a transient Cyoda failure on TestRun creation
+        doThrow(new RuntimeException("Cyoda transient failure"))
+                .when(testRunService).createTestRun(any());
+
+        // seed() must complete without propagating the exception
+        assertDoesNotThrow(() -> service.seed(),
+                "transient createTestRun failure must not abort the entire seed");
+
+        verify(projectService).createProject(any());
+        verify(testCaseService, atLeastOnce()).createTestCase(any());
+    }
 
     @Test
     @DisplayName("buildSnapshotData includes id, displayId and createdAt for defects")

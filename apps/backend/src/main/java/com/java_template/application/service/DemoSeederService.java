@@ -180,7 +180,14 @@ public class DemoSeederService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to serialize caseIds for demo run", e);
         }
-        TestRunDTO run = testRunService.createTestRun(runDTO);
+        TestRunDTO run;
+        try {
+            run = testRunService.createTestRun(runDTO);
+        } catch (Exception e) {
+            log.warn("[DemoSeeder] createTestRun failed — skipping run/cases/steps/report: {}", e.getMessage());
+            return Map.of("status", "partial", "projectId", projectId.toString(),
+                          "error", "TestRun creation failed: " + e.getMessage());
+        }
         UUID runId = run.getId();
         log.info("[DemoSeeder] Created TestRun: {}", runId);
         sleep(PHASE_DELAY_MS);

@@ -23,6 +23,8 @@ import java.util.UUID;
 @RequestMapping("/projects/{projectId}/suites/{suiteId}/cases")
 @Tag(name = "Test Cases", description = "Test case management endpoints")
 public class TestCaseController {
+    private static final int MAX_PAGE_SIZE = 1000;
+
     private final TestCaseService testCaseService;
 
     public TestCaseController(TestCaseService testCaseService) {
@@ -49,7 +51,7 @@ public class TestCaseController {
             @PathVariable UUID suiteId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(testCaseService.getTestCasesBySuiteId(suiteId, page, size));
+        return ResponseEntity.ok(testCaseService.getTestCasesBySuiteId(suiteId, page, Math.min(size, MAX_PAGE_SIZE)));
     }
 
     @GetMapping("/{id}")

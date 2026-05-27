@@ -14,9 +14,9 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -76,6 +76,40 @@ class TestRunServiceRaceConditionTest {
 
         // entityService.getById must be called exactly once (not twice)
         verify(entityService, times(1)).getById(eq(runId), any(), eq(TestRunDTO.class));
+    }
+
+    @Test
+    @DisplayName("whitespace-only stepStatuses triggers merge guard (needsStatusMerge must be true)")
+    void whiteSpaceStepStatuses_triggersStatusMerge() {
+        TestRunDTO existing = new TestRunDTO();
+        existing.setId(runId);
+        existing.setProjectId(projectId);
+        existing.setStatus("active");
+        existing.setCaseIds("[\"case-1\"]");
+        existing.setStepStatuses("{\"step1\":\"PASSED\"}");
+
+        when(entityService.getById(eq(runId), any(), eq(TestRunDTO.class)))
+                .thenReturn(wrap(existing, runId));
+
+        // Incoming update has whitespace-only stepStatuses — must trigger merge (not bypass it)
+        TestRunDTO incoming = new TestRunDTO();
+        incoming.setProjectId(projectId);
+        incoming.setStatus("active");
+        incoming.setStepStatuses("   "); // whitespace — must be treated as "not provided"
+
+        //noinspection unchecked
+        doReturn(wrap(incoming, runId)).when(entityService).update(eq(runId), any(), isNull());
+
+        testRunService.updateTestRun(runId, incoming);
+
+        // After merge, the stored stepStatuses must be restored onto incoming
+        org.mockito.ArgumentCaptor<TestRunDTO> captor =
+                org.mockito.ArgumentCaptor.forClass(TestRunDTO.class);
+        verify(entityService).update(eq(runId), captor.capture(), isNull());
+        assertNotNull(captor.getValue().getStepStatuses(),
+                "whitespace stepStatuses must trigger merge, restoring stored value");
+        assertFalse(captor.getValue().getStepStatuses().isBlank(),
+                "merged stepStatuses must not be blank");
     }
 
     @Test

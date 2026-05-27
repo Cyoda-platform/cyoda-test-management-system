@@ -14,11 +14,17 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
 
+import org.mockito.ArgumentCaptor;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -107,6 +113,25 @@ public class TestCaseControllerTest {
         mockMvc.perform(delete("/projects/{projectId}/suites/{suiteId}/cases/{id}", projectId, suiteId, caseId)
                         .requestAttr("role", "TESTER"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("GET /cases?size=5000 — caps effective size at MAX_PAGE_SIZE to prevent Cyoda overload")
+    public void testGetCasesCapsSizeAtMaxPageSize() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID suiteId = UUID.randomUUID();
+
+        when(testCaseService.getTestCasesBySuiteId(any(), anyInt(), anyInt()))
+                .thenReturn(com.java_template.common.dto.PageResult.of(null, java.util.List.of(), 0, 1000, 0L));
+
+        mockMvc.perform(get("/projects/{projectId}/suites/{suiteId}/cases", projectId, suiteId)
+                        .param("size", "5000"))
+                .andExpect(status().isOk());
+
+        // size must be capped — service must NOT be called with 5000
+        ArgumentCaptor<Integer> sizeCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(testCaseService).getTestCasesBySuiteId(eq(suiteId), anyInt(), sizeCaptor.capture());
+        assertTrue(sizeCaptor.getValue() <= 1000, "size must be capped at MAX_PAGE_SIZE");
     }
 
     @Test

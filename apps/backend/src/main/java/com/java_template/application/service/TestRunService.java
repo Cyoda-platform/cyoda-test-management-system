@@ -213,10 +213,8 @@ public class TestRunService {
     public Optional<TestRunDTO> updateTestRun(UUID id, TestRunDTO testRun) {
         boolean needsCaseIdsMerge = testRun.getCaseIds() == null || testRun.getCaseIds().isBlank();
         boolean needsStatusMerge  = testRun.getStepStatuses() == null
-                || testRun.getStepStatuses().isEmpty()
+                || testRun.getStepStatuses().isBlank()
                 || testRun.getStepStatuses().equals("{}");
-
-        final String[] operationName = new String[]{null};
 
         // Single fetch — reused for BOTH transition detection AND merge logic.
         // Previously two separate getTestRunById() calls caused concurrent threads to
@@ -227,41 +225,36 @@ public class TestRunService {
             return Optional.empty();
         }
 
-        existingOpt.ifPresent(existing -> {
-            if ("initial".equals(existing.getStatus())) {
-                operationName[0] = "initialize_run";
-            }
-        });
+        TestRunDTO existing = existingOpt.get();
+        String operationName = "initial".equals(existing.getStatus()) ? "initialize_run" : null;
 
         if (needsCaseIdsMerge || needsStatusMerge) {
-            existingOpt.ifPresent(existing -> {
-                if (needsCaseIdsMerge
-                        && existing.getCaseIds() != null
-                        && !existing.getCaseIds().isBlank()) {
-                    testRun.setCaseIds(existing.getCaseIds());
-                }
-                if (needsStatusMerge
-                        && existing.getStepStatuses() != null
-                        && !existing.getStepStatuses().equals("{}")) {
-                    testRun.setStepStatuses(existing.getStepStatuses());
-                } else if (!needsStatusMerge
-                        && existing.getStepStatuses() != null
-                        && !existing.getStepStatuses().equals("{}")) {
-                    Map<String, String> existingMap = parseStepStatuses(existing.getStepStatuses());
-                    Map<String, String> incomingMap = parseStepStatuses(testRun.getStepStatuses());
-                    existingMap.putAll(incomingMap);
-                    testRun.setStepStatuses(serializeStepStatuses(existingMap));
-                }
-            });
+            if (needsCaseIdsMerge
+                    && existing.getCaseIds() != null
+                    && !existing.getCaseIds().isBlank()) {
+                testRun.setCaseIds(existing.getCaseIds());
+            }
+            if (needsStatusMerge
+                    && existing.getStepStatuses() != null
+                    && !existing.getStepStatuses().equals("{}")) {
+                testRun.setStepStatuses(existing.getStepStatuses());
+            } else if (!needsStatusMerge
+                    && existing.getStepStatuses() != null
+                    && !existing.getStepStatuses().equals("{}")) {
+                Map<String, String> existingMap = parseStepStatuses(existing.getStepStatuses());
+                Map<String, String> incomingMap = parseStepStatuses(testRun.getStepStatuses());
+                existingMap.putAll(incomingMap);
+                testRun.setStepStatuses(serializeStepStatuses(existingMap));
+            }
         }
 
         try {
-            return Optional.of(withId(entityService.update(id, testRun, operationName[0])));
+            return Optional.of(withId(entityService.update(id, testRun, operationName)));
         } catch (Exception e) {
             // If initialize_run fails because another concurrent request already sent it,
             // Cyoda returns "State machine failed". Retry as a plain update so the
             // step-status data is still persisted.
-            if ("initialize_run".equals(operationName[0])
+            if ("initialize_run".equals(operationName)
                     && e.getMessage() != null
                     && e.getMessage().contains("State machine failed")) {
                 log.info("Concurrent initialize_run detected for {}, retrying as plain update", id);

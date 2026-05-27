@@ -154,6 +154,11 @@ public class TestRunDTO implements CyodaEntity {
      */
     public static class CaseIdsSerializer extends JsonSerializer<String> {
         @Override
+        public boolean isEmpty(SerializerProvider provider, String value) {
+            return value == null || value.isBlank();
+        }
+
+        @Override
         public void serialize(String value, JsonGenerator gen, SerializerProvider provider) throws IOException {
             if (value == null || value.isBlank()) return;
             Class<?> activeView = provider.getActiveView();

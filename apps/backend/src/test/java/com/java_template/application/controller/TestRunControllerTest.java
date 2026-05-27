@@ -265,6 +265,21 @@ class TestRunControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    // ---- caseIds serialization + edge cases ---------------------------------
+
+    @Test
+    @DisplayName("GET /{id} omits caseIds field entirely when caseIds is blank (whitespace-only)")
+    void getTestRun_blankCaseIds_fieldAbsentFromResponse() throws Exception {
+        TestRunDTO dto = buildRun("R-blank");
+        dto.setProjectId(projectId);
+        dto.setCaseIds("   "); // blank but non-empty String — triggers the bug
+        when(testRunService.getTestRunById(eq(runId))).thenReturn(Optional.of(dto));
+
+        mockMvc.perform(get("/projects/{pid}/runs/{id}", projectId, runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.caseIds").doesNotExist()); // must be absent, not a broken token
+    }
+
     // ---- caseIds serialization -----------------------------------------------
 
     @Test
