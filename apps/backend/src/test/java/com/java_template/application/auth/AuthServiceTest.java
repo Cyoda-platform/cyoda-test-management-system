@@ -43,7 +43,7 @@ class AuthServiceTest {
     @Test
     void authenticatesActiveUserWithCorrectPassword() {
         String rawPassword = "correct-secret";
-        when(tokenProvider.generateToken(anyString(), anyString())).thenReturn("jwt-token");
+        when(tokenProvider.generateToken(anyString(), anyString(), anyString())).thenReturn("jwt-token");
         when(userService.findByUsername("alice"))
                 .thenReturn(Optional.of(activeUser("alice", rawPassword, "ADMIN")));
 
@@ -55,17 +55,17 @@ class AuthServiceTest {
     }
 
     @Test
-    void tokenSubIsTheCyodaUuidNotTheUsername() {
+    void tokenSubIsTheCyodaUuidAndDisplayNameClaimIsUsername() {
         UUID userId = UUID.randomUUID();
         String rawPassword = "secret";
-        when(tokenProvider.generateToken(anyString(), anyString())).thenReturn("jwt-token");
+        when(tokenProvider.generateToken(anyString(), anyString(), anyString())).thenReturn("jwt-token");
         when(userService.findByUsername("alice"))
                 .thenReturn(Optional.of(activeUser("alice", rawPassword, "TESTER", userId)));
 
         authService.authenticate("alice", rawPassword);
 
-        // generateToken must be called with the UUID string, not the username
-        org.mockito.Mockito.verify(tokenProvider).generateToken(userId.toString(), "TESTER");
+        // generateToken must be called with (uuid, displayName, role) — not just (uuid, role)
+        org.mockito.Mockito.verify(tokenProvider).generateToken(userId.toString(), "alice", "TESTER");
     }
 
     // ── rejection cases ───────────────────────────────────────────────────────

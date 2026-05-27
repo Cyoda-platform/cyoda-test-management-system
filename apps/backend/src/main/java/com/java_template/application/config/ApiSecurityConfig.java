@@ -115,10 +115,13 @@ public class ApiSecurityConfig {
                                         FilterChain chain) throws ServletException, IOException {
             var auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth instanceof JwtAuthenticationToken jwt) {
-                String role = jwt.getToken().getClaimAsString("role");
-                String sub  = jwt.getToken().getClaimAsString("sub");
+                String role            = jwt.getToken().getClaimAsString("role");
+                String sub             = jwt.getToken().getClaimAsString("sub");
+                String displayName     = jwt.getToken().getClaimAsString("username");
                 if (role != null) request.setAttribute("role", role);
-                if (sub  != null) request.setAttribute("username", sub);
+                // Prefer the embedded display name; fall back to sub (userId) for old tokens.
+                String identity = displayName != null ? displayName : sub;
+                if (identity != null) request.setAttribute("username", identity);
             }
             chain.doFilter(request, response);
         }

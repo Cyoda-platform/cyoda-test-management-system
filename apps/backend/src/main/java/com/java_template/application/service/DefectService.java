@@ -76,10 +76,12 @@ public class DefectService {
         String displayId = projectCounterService.nextDefectDisplayId(defect.getProjectId());
         defect.setDisplayId(displayId);
         DefectDTO created = withId(entityService.create(defect));
-        // Persist displayId explicitly — Cyoda's create reload may not return it
-        created.setDisplayId(displayId);
-        entityService.update(created.getId(), created, null);
-        return created;
+        // Cyoda's create response may omit fields set on the input (e.g. source, createdAt).
+        // Copy the assigned ID back onto the fully-populated input object and use that for
+        // the follow-up update so no field is silently lost.
+        defect.setId(created.getId());
+        entityService.update(defect.getId(), defect, null);
+        return defect;
     }
 
     public Optional<DefectDTO> getDefectById(UUID id) {

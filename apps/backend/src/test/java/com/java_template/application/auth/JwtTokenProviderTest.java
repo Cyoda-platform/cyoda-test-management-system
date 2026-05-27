@@ -130,6 +130,16 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    void generateToken_withDisplayName_storesDisplayNameAsClaimNotSubject() {
+        // When a 3-arg token is generated, getDisplayNameFromToken must return the display
+        // name while getUsernameFromToken still returns the userId (JWT sub).
+        String token = provider.generateToken("user-uuid-123", "alice", "ADMIN");
+
+        assertThat(provider.getDisplayNameFromToken(token)).isEqualTo("alice");
+        assertThat(provider.getUsernameFromToken(token)).isEqualTo("user-uuid-123");
+    }
+
+    @Test
     void rejectsUnsignedAlgNoneToken() {
         // Craft a token with alg=none in the header — must always be rejected.
         String header = Base64.getUrlEncoder().withoutPadding()

@@ -116,6 +116,32 @@ class DefectLinkingTest {
     }
 
     @Test
+    @DisplayName("createDefect preserves source and createdAt when Cyoda create response is minimal")
+    void createDefect_preservesSourceAndCreatedAtWhenCyodaResponseIsMinimal() {
+        // Simulate Cyoda returning a minimal entity (source, createdAt, status not present in response)
+        DefectDTO minimal = new DefectDTO(); // no fields set except id (set by withId)
+
+        UUID assignedId = UUID.randomUUID();
+        when(projectCounterService.nextDefectDisplayId(any())).thenReturn("DEF-99");
+        //noinspection unchecked
+        doReturn(entityWithMetadata(minimal, assignedId)).when(entityService).create(any());
+        //noinspection unchecked
+        doReturn(entityWithMetadata(minimal, assignedId)).when(entityService).update(eq(assignedId), any(), isNull());
+
+        DefectDTO input = new DefectDTO();
+        input.setProjectId(UUID.randomUUID());
+        input.setTitle("Login broken");
+        input.setSeverity("Critical");
+        input.setSource("Step 3");
+
+        DefectDTO result = defectService.createDefect(input);
+
+        assertEquals("Step 3", result.getSource(),  "source must survive even if Cyoda omits it from the create response");
+        assertNotNull(result.getCreatedAt(),          "createdAt must survive even if Cyoda omits it from the create response");
+        assertEquals("DEF-99", result.getDisplayId(), "displayId must be the server-generated value");
+    }
+
+    @Test
     @DisplayName("AC: Can view linked defects in run report")
     void testViewDefectsInReport() {
         // Given: a defect linked to a case in a run

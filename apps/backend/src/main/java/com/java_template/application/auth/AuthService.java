@@ -49,7 +49,7 @@ public class AuthService {
 
         String userId = userRecord.getId().toString();
         String role = user.getRoles().isEmpty() ? "" : user.getRoles().get(0);
-        String token = tokenProvider.generateToken(userId, role);
+        String token = tokenProvider.generateToken(userId, username, role);
         long expiresAt = System.currentTimeMillis() + (24 * 60 * 60 * 1000L);
 
         return new LoginResponse(token, username, role, expiresAt);

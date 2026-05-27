@@ -26,15 +26,38 @@ public class JwtTokenProvider {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(String username, String role) {
+    public String generateToken(String userId, String role) {
         Date now = new Date();
         return Jwts.builder()
-                .subject(username)
+                .subject(userId)
                 .claim("role", role)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + EXPIRATION_MS))
                 .signWith(key)
                 .compact();
+    }
+
+    /** Generates a token that also embeds the human-readable display name as a claim. */
+    public String generateToken(String userId, String displayName, String role) {
+        Date now = new Date();
+        return Jwts.builder()
+                .subject(userId)
+                .claim("role", role)
+                .claim("username", displayName)
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + EXPIRATION_MS))
+                .signWith(key)
+                .compact();
+    }
+
+    /** Returns the display-name claim embedded by {@link #generateToken(String, String, String)}, or null. */
+    public String getDisplayNameFromToken(String token) {
+        try {
+            return Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(token).getPayload().get("username", String.class);
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public boolean validateToken(String token) {
