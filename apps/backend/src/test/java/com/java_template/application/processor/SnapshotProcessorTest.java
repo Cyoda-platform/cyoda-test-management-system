@@ -273,6 +273,118 @@ class SnapshotProcessorTest {
         verify(testRunCaseService, times(2)).createTestRunCase(any());
     }
 
+    // ---- caseIds string format (new Cyoda storage format) -----------------
+
+    @Test
+    @DisplayName("creates snapshot when caseIds stored as JSON string (new format)")
+    void createsSnapshotFromStringFormatCaseIds() throws Exception {
+        UUID testRunId = UUID.randomUUID();
+        UUID projectId = UUID.randomUUID();
+        UUID caseId    = UUID.randomUUID();
+
+        ObjectNode runJson = objectMapper.createObjectNode();
+        runJson.put("projectId", projectId.toString());
+        // New format: stored as a quoted JSON string, not an array node
+        runJson.put("caseIds", "[\"" + caseId + "\"]");
+
+        EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
+
+        TestCaseDTO tc = new TestCaseDTO();
+        tc.setId(caseId);
+        tc.setTitle("String-format case");
+        when(testCaseService.getTestCaseById(caseId)).thenReturn(Optional.of(tc));
+
+        TestRunCaseDTO created = new TestRunCaseDTO();
+        created.setId(UUID.randomUUID());
+        when(testRunCaseService.createTestRunCase(any())).thenReturn(created);
+
+        EntityProcessorCalculationResponse response = processor.process(context(request));
+
+        assertTrue(response.getSuccess());
+        verify(testRunCaseService, times(1)).createTestRunCase(any());
+    }
+
+    @Test
+    @DisplayName("creates snapshots for multiple caseIds in JSON string format")
+    void createsSnapshotsForMultipleCasesInStringFormat() throws Exception {
+        UUID testRunId = UUID.randomUUID();
+        UUID projectId = UUID.randomUUID();
+        UUID caseId1   = UUID.randomUUID();
+        UUID caseId2   = UUID.randomUUID();
+
+        ObjectNode runJson = objectMapper.createObjectNode();
+        runJson.put("projectId", projectId.toString());
+        runJson.put("caseIds", "[\"" + caseId1 + "\",\"" + caseId2 + "\"]");
+
+        EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
+
+        TestCaseDTO tc1 = new TestCaseDTO();
+        tc1.setId(caseId1);
+        tc1.setTitle("Case One");
+        TestCaseDTO tc2 = new TestCaseDTO();
+        tc2.setId(caseId2);
+        tc2.setTitle("Case Two");
+        when(testCaseService.getTestCaseById(caseId1)).thenReturn(Optional.of(tc1));
+        when(testCaseService.getTestCaseById(caseId2)).thenReturn(Optional.of(tc2));
+
+        TestRunCaseDTO created = new TestRunCaseDTO();
+        created.setId(UUID.randomUUID());
+        when(testRunCaseService.createTestRunCase(any())).thenReturn(created);
+
+        EntityProcessorCalculationResponse response = processor.process(context(request));
+
+        assertTrue(response.getSuccess());
+        verify(testRunCaseService, times(2)).createTestRunCase(any());
+    }
+
+    @Test
+    @DisplayName("returns success immediately when caseIds is empty JSON string array")
+    void successWhenCaseIdsIsEmptyJsonString() throws Exception {
+        UUID testRunId = UUID.randomUUID();
+        ObjectNode runJson = objectMapper.createObjectNode();
+        runJson.put("projectId", UUID.randomUUID().toString());
+        runJson.put("caseIds", "[]");
+
+        EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
+
+        EntityProcessorCalculationResponse response = processor.process(context(request));
+
+        assertTrue(response.getSuccess());
+        verifyNoInteractions(testCaseService, testRunCaseService);
+    }
+
+    @Test
+    @DisplayName("returns success (no crash) when caseIds string is malformed JSON")
+    void successWhenCaseIdsStringIsMalformed() throws Exception {
+        UUID testRunId = UUID.randomUUID();
+        ObjectNode runJson = objectMapper.createObjectNode();
+        runJson.put("projectId", UUID.randomUUID().toString());
+        runJson.put("caseIds", "not-valid-json[broken");
+
+        EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
+
+        EntityProcessorCalculationResponse response = processor.process(context(request));
+
+        assertTrue(response.getSuccess());
+        verifyNoInteractions(testCaseService, testRunCaseService);
+    }
+
+    @Test
+    @DisplayName("returns success immediately when caseIds is blank string")
+    void successWhenCaseIdsIsBlankString() throws Exception {
+        UUID testRunId = UUID.randomUUID();
+        ObjectNode runJson = objectMapper.createObjectNode();
+        runJson.put("projectId", UUID.randomUUID().toString());
+        runJson.put("caseIds", "   ");
+
+        EntityProcessorCalculationRequest request = buildRequest(testRunId, runJson);
+
+        EntityProcessorCalculationResponse response = processor.process(context(request));
+
+        assertTrue(response.getSuccess());
+        verifyNoInteractions(testCaseService, testRunCaseService);
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     private EntityProcessorCalculationRequest buildRequest(UUID entityId, ObjectNode data) {

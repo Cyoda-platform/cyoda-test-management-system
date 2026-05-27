@@ -127,7 +127,18 @@ public class TestRunService {
         // Mark as 'initial' so updateTestRun can detect it and send initialize_run
         // on the first status update (when the user starts executing).
         created.setStatus("initial");
-        entityService.update(created.getId(), created, null);
+        try {
+            entityService.update(created.getId(), created, null);
+        } catch (Exception e) {
+            log.error("createTestRun: follow-up update failed for {}, attempting cleanup", created.getId(), e);
+            try {
+                entityService.deleteById(created.getId());
+            } catch (Exception cleanup) {
+                log.error("createTestRun: cleanup also failed for {}, entity may be orphaned",
+                        created.getId(), cleanup);
+            }
+            throw e;
+        }
         return created;
     }
 

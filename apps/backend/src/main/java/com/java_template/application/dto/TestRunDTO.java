@@ -143,6 +143,14 @@ public class TestRunDTO implements CyodaEntity {
      * provider.getActiveView() == Views.Http.class → write raw array.
      * When EntityService calls objectMapper.valueToTree(entity), no view is active →
      * write as quoted string to match the Cyoda schema type.
+     *
+     * CONTRACT: Cyoda writes rely on EntityService never activating a Jackson view when
+     * calling objectMapper.valueToTree(). If common/EntityServiceImpl is ever changed to
+     * use a view-aware serialization call, caseIds will be stored as a raw array in Cyoda
+     * instead of a quoted string, silently violating the schema.
+     * Related: application.yml spring.jackson.mapper.default-view-inclusion=true is
+     * required so non-@JsonView fields (id, name, status, …) are included in @JsonView
+     * HTTP responses. Removing it breaks ALL TestRun controller endpoints.
      */
     public static class CaseIdsSerializer extends JsonSerializer<String> {
         @Override

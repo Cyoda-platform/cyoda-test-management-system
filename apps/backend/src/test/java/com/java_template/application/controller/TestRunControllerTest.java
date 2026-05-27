@@ -21,10 +21,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.SpringValidatorAdapter;
 
+import org.mockito.ArgumentCaptor;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -260,6 +263,91 @@ class TestRunControllerTest {
 
         mockMvc.perform(delete("/projects/{pid}/runs/{id}", projectId, runId))
                 .andExpect(status().isNotFound());
+    }
+
+    // ---- caseIds serialization -----------------------------------------------
+
+    @Test
+    @DisplayName("GET /{id} returns caseIds as JSON array (not quoted string)")
+    void getTestRun_caseIdsReturnedAsJsonArray() throws Exception {
+        UUID caseId = UUID.randomUUID();
+        TestRunDTO dto = buildRun("R1");
+        dto.setProjectId(projectId);
+        dto.setCaseIds("[\"" + caseId + "\"]");
+        when(testRunService.getTestRunById(eq(runId))).thenReturn(Optional.of(dto));
+
+        mockMvc.perform(get("/projects/{pid}/runs/{id}", projectId, runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.caseIds").isArray())
+                .andExpect(jsonPath("$.caseIds[0]").value(caseId.toString()));
+    }
+
+    @Test
+    @DisplayName("GET /{id} response includes non-@JsonView fields (id, name, status) — tests default-view-inclusion=true")
+    void getTestRun_nonViewFieldsIncludedInResponse() throws Exception {
+        TestRunDTO dto = buildRun("View Test Run");
+        dto.setProjectId(projectId);
+        dto.setStatus("active");
+        when(testRunService.getTestRunById(eq(runId))).thenReturn(Optional.of(dto));
+
+        mockMvc.perform(get("/projects/{pid}/runs/{id}", projectId, runId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(runId.toString()))
+                .andExpect(jsonPath("$.name").value("View Test Run"))
+                .andExpect(jsonPath("$.status").value("active"));
+    }
+
+    @Test
+    @DisplayName("POST with caseIds array deserializes to string in service call")
+    void createTestRun_caseIdsArrayDeserializedToString() throws Exception {
+        UUID caseId = UUID.randomUUID();
+        String requestBody = """
+                {
+                  "name": "Run With Cases",
+                  "caseIds": ["%s"]
+                }
+                """.formatted(caseId);
+
+        TestRunDTO returned = buildRun("Run With Cases");
+        when(testRunService.createTestRun(any())).thenReturn(returned);
+
+        mockMvc.perform(post("/projects/{pid}/runs", projectId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isCreated());
+
+        // Verify that the service received caseIds as a JSON string, not a List
+        ArgumentCaptor<TestRunDTO> captor = ArgumentCaptor.forClass(TestRunDTO.class);
+        verify(testRunService).createTestRun(captor.capture());
+        String caseIdsReceived = captor.getValue().getCaseIds();
+        assertNotNull(caseIdsReceived, "caseIds must not be null after deserialization");
+        assertTrue(caseIdsReceived.contains(caseId.toString()),
+                "caseIds JSON string must contain the submitted UUID");
+    }
+
+    @Test
+    @DisplayName("PUT with empty caseIds array is treated as 'not provided' (preserves stored value via merge guard)")
+    void updateTestRun_emptyCaseIdsArrayTreatedAsNotProvided() throws Exception {
+        String requestBody = """
+                {
+                  "name": "Updated Run",
+                  "caseIds": []
+                }
+                """;
+
+        TestRunDTO returned = buildRun("Updated Run");
+        when(testRunService.updateTestRun(eq(runId), any())).thenReturn(Optional.of(returned));
+
+        mockMvc.perform(put("/projects/{pid}/runs/{id}", projectId, runId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isOk());
+
+        // [] deserializes to null via CaseIdsDeserializer — service sees null, triggers merge guard
+        ArgumentCaptor<TestRunDTO> captor = ArgumentCaptor.forClass(TestRunDTO.class);
+        verify(testRunService).updateTestRun(eq(runId), captor.capture());
+        assertNull(captor.getValue().getCaseIds(),
+                "empty array [] must deserialize to null so merge guard preserves stored caseIds");
     }
 
     private TestRunDTO buildRun(String name) {

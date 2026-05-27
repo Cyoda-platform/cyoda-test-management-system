@@ -145,7 +145,7 @@ public class SnapshotProcessor implements CyodaProcessor {
                 return objectMapper.readValue(node.asText(),
                         objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
             } catch (Exception e) {
-                log.warn("SnapshotProcessor: failed to parse caseIds string, trying array format", e);
+                log.error("SnapshotProcessor: caseIds string is malformed for testRun, no snapshots will be created: {}", e.getMessage());
             }
         }
         // Legacy: array format
