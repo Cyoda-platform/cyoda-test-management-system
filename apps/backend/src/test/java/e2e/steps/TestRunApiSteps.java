@@ -194,9 +194,12 @@ public class TestRunApiSteps {
     @When("I POST to {string} without role")
     public void i_post_to_without_role(String path) {
         String pathWithId = CONTEXT_PATH + replacePlaceholders(path);
-        // Clear token → unauthenticated request → Spring Security returns 401
+        // Temporarily clear the token so Spring Security returns 401, then restore it
+        // so the @After cleanup hook can still authenticate and delete created resources.
+        String savedToken = http.getBearerToken();
         http.clearBearerToken();
         http.postAnonymous(pathWithId, "{}");
+        http.setBearerToken(savedToken);
     }
 
     @When("I DELETE from {string}")

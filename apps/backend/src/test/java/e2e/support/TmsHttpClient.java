@@ -55,6 +55,10 @@ public class TmsHttpClient {
         this.bearerToken = token;
     }
 
+    public String getBearerToken() {
+        return bearerToken;
+    }
+
     public void clearBearerToken() {
         this.bearerToken = null;
     }
