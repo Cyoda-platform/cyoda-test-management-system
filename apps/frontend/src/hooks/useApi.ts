@@ -135,7 +135,15 @@ export function useDeleteProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => projectsApi.delete(id),
-    onSuccess:  () => qc.invalidateQueries({ queryKey: keys.projects.lists() }),
+    onSuccess: (_data, id) => {
+      qc.setQueriesData(
+        { queryKey: keys.projects.lists() },
+        (old: { data: { id: string }[] } | undefined) => {
+          if (!old) return old;
+          return { ...old, data: (old.data ?? []).filter(p => p.id !== id) };
+        },
+      );
+    },
   });
 }
 
@@ -587,8 +595,15 @@ export function useDeleteTestRun() {
   return useMutation({
     mutationFn: ({ projectId, id }: { projectId: string; id: string }) =>
       testRunsApi.delete(projectId, id),
-    onSuccess: (_data, { projectId }) =>
-      qc.invalidateQueries({ queryKey: keys.runs.all(projectId) }),
+    onSuccess: (_data, { projectId, id }) => {
+      qc.setQueriesData(
+        { queryKey: keys.runs.all(projectId) },
+        (old: { data: { id: string }[] } | undefined) => {
+          if (!old) return old;
+          return { ...old, data: (old.data ?? []).filter(r => r.id !== id) };
+        },
+      );
+    },
   });
 }
 
