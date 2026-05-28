@@ -3,6 +3,7 @@ package com.java_template.application.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.DefectDTO;
 import com.java_template.application.service.DefectService;
+import com.java_template.common.dto.PageResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
@@ -12,13 +13,14 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = DefectController.class,
@@ -145,6 +147,27 @@ class DefectRoleAccessControlTest {
 
         mockMvc.perform(delete("/projects/{projectId}/defects/{id}", projectId, defectId))
                 .andExpect(status().isForbidden());
+    }
+
+    // ---- cross-project isolation ----
+
+    @Test
+    void getDefectsByTestRunId_filtersOutDefectsBelongingToOtherProject() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID foreignProjectId = UUID.randomUUID();
+        UUID testRunId = UUID.randomUUID();
+
+        // Service returns a defect that belongs to a *different* project
+        DefectDTO foreignDefect = new DefectDTO();
+        foreignDefect.setId(UUID.randomUUID());
+        foreignDefect.setProjectId(foreignProjectId);
+        when(defectService.getDefectsByTestRunId(eq(testRunId), anyInt(), anyInt()))
+                .thenReturn(PageResult.of(null, List.of(foreignDefect), 0, 100, 1L));
+
+        mockMvc.perform(get("/projects/{pid}/defects", projectId)
+                        .param("testRunId", testRunId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty()); // foreign defect must be filtered out
     }
 
     // ---- helpers ----

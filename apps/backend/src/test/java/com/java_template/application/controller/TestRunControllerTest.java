@@ -190,7 +190,7 @@ class TestRunControllerTest {
     }
 
     @Test
-    @DisplayName("POST /{id}/complete — found — returns 200")
+    @DisplayName("POST /{id}/complete — found — returns 200 (with TESTER role)")
     void completeTestRun_found_returns200() throws Exception {
         TestRunDTO dto = buildRun("R1");
         dto.setProjectId(projectId);
@@ -198,17 +198,19 @@ class TestRunControllerTest {
         when(testRunService.getTestRunById(eq(runId))).thenReturn(Optional.of(dto));
         when(testRunService.completeTestRun(eq(runId))).thenReturn(Optional.of(dto));
 
-        mockMvc.perform(post("/projects/{pid}/runs/{id}/complete", projectId, runId))
+        mockMvc.perform(post("/projects/{pid}/runs/{id}/complete", projectId, runId)
+                        .requestAttr("role", "TESTER"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("COMPLETED"));
     }
 
     @Test
-    @DisplayName("POST /{id}/complete — not found — returns 404")
+    @DisplayName("POST /{id}/complete — not found — returns 404 (with TESTER role)")
     void completeTestRun_notFound_returns404() throws Exception {
         when(testRunService.getTestRunById(any())).thenReturn(Optional.empty());
 
-        mockMvc.perform(post("/projects/{pid}/runs/{id}/complete", projectId, runId))
+        mockMvc.perform(post("/projects/{pid}/runs/{id}/complete", projectId, runId)
+                        .requestAttr("role", "TESTER"))
                 .andExpect(status().isNotFound());
     }
 
@@ -248,21 +250,57 @@ class TestRunControllerTest {
     }
 
     @Test
-    @DisplayName("DELETE /{id} — exists — returns 204")
-    void deleteTestRun_exists_returns204() throws Exception {
-        when(testRunService.deleteTestRun(eq(runId))).thenReturn(true);
-
+    @DisplayName("DELETE /{id} — no role — returns 403")
+    void deleteTestRun_noRole_returns403() throws Exception {
         mockMvc.perform(delete("/projects/{pid}/runs/{id}", projectId, runId))
+                .andExpect(status().isForbidden());
+        verify(testRunService, never()).deleteTestRun(any());
+    }
+
+    @Test
+    @DisplayName("DELETE /{id} — TESTER role — returns 204")
+    void deleteTestRun_testerRole_returns204() throws Exception {
+        when(testRunService.deleteTestRun(eq(runId))).thenReturn(true);
+        mockMvc.perform(delete("/projects/{pid}/runs/{id}", projectId, runId)
+                        .requestAttr("role", "TESTER"))
                 .andExpect(status().isNoContent());
     }
 
     @Test
-    @DisplayName("DELETE /{id} — not found — returns 404")
+    @DisplayName("DELETE /{id} — ADMIN role — returns 204")
+    void deleteTestRun_adminRole_returns204() throws Exception {
+        when(testRunService.deleteTestRun(eq(runId))).thenReturn(true);
+        mockMvc.perform(delete("/projects/{pid}/runs/{id}", projectId, runId)
+                        .requestAttr("role", "ADMIN"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("DELETE /{id} — exists — returns 204 (with ADMIN role)")
+    void deleteTestRun_exists_returns204() throws Exception {
+        when(testRunService.deleteTestRun(eq(runId))).thenReturn(true);
+
+        mockMvc.perform(delete("/projects/{pid}/runs/{id}", projectId, runId)
+                        .requestAttr("role", "ADMIN"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("DELETE /{id} — not found — returns 404 (with ADMIN role)")
     void deleteTestRun_notFound_returns404() throws Exception {
         when(testRunService.deleteTestRun(eq(runId))).thenReturn(false);
 
-        mockMvc.perform(delete("/projects/{pid}/runs/{id}", projectId, runId))
+        mockMvc.perform(delete("/projects/{pid}/runs/{id}", projectId, runId)
+                        .requestAttr("role", "ADMIN"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST /{id}/complete — no role — returns 403")
+    void completeTestRun_noRole_returns403() throws Exception {
+        mockMvc.perform(post("/projects/{pid}/runs/{id}/complete", projectId, runId))
+                .andExpect(status().isForbidden());
+        verify(testRunService, never()).completeTestRun(any());
     }
 
     // ---- caseIds serialization + edge cases ---------------------------------

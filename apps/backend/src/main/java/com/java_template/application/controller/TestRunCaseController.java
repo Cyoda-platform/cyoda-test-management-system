@@ -64,7 +64,7 @@ public class TestRunCaseController {
             @PathVariable UUID projectId,
             @PathVariable UUID runId,
             @PathVariable UUID id,
-            @RequestBody TestRunCaseDTO testRunCase) {
+            @Valid @RequestBody TestRunCaseDTO testRunCase) {
         return testRunCaseService.updateTestRunCaseStatus(id, testRunCase.getStatus())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());

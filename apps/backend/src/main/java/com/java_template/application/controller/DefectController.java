@@ -3,6 +3,7 @@ package com.java_template.application.controller;
 import com.java_template.application.dto.DefectDTO;
 import com.java_template.application.service.DefectService;
 import com.java_template.common.dto.PageResult;
+import java.util.List;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -53,7 +54,12 @@ public class DefectController {
         // This allows the Run Execution view to reload its defect table after a page refresh
         // without pulling the entire project defect list.
         if (testRunId != null) {
-            return ResponseEntity.ok(defectService.getDefectsByTestRunId(testRunId, page, size));
+            PageResult<DefectDTO> result = defectService.getDefectsByTestRunId(testRunId, page, size);
+            List<DefectDTO> filtered = result.data().stream()
+                    .filter(d -> projectId.equals(d.getProjectId()))
+                    .toList();
+            return ResponseEntity.ok(PageResult.of(result.searchId(), filtered,
+                    result.pageNumber(), result.pageSize(), (long) filtered.size()));
         }
         return ResponseEntity.ok(defectService.getDefectsByProjectId(projectId, page, size));
     }

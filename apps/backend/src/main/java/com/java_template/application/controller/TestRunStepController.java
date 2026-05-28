@@ -72,7 +72,7 @@ public class TestRunStepController {
             @PathVariable UUID runId,
             @PathVariable UUID caseId,
             @PathVariable UUID id,
-            @RequestBody TestRunStepDTO testRunStep) {
+            @Valid @RequestBody TestRunStepDTO testRunStep) {
         return testRunStepService.updateTestRunStepStatus(id, testRunStep.getStatus())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());

@@ -6,6 +6,7 @@ import com.java_template.application.dto.TestRunStepDTO;
 import com.java_template.application.service.AttachmentService;
 import com.java_template.application.service.TestRunStepService;
 import com.java_template.common.dto.PageResult;
+import jakarta.validation.Validation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.SpringValidatorAdapter;
 
 import java.util.List;
 import java.util.Optional;
@@ -51,7 +53,10 @@ class TestRunStepControllerTest {
         caseId = UUID.randomUUID();
         stepId = UUID.randomUUID();
         mockMvc = MockMvcBuilders.standaloneSetup(
-                new TestRunStepController(testRunStepService, attachmentService)).build();
+                new TestRunStepController(testRunStepService, attachmentService))
+                .setValidator(new SpringValidatorAdapter(
+                        Validation.buildDefaultValidatorFactory().getValidator()))
+                .build();
     }
 
     @AfterEach
@@ -137,6 +142,19 @@ class TestRunStepControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("PUT /{id} — actualResult exceeds 2000 chars — returns 400")
+    void updateTestRunStep_actualResultTooLong_returns400() throws Exception {
+        TestRunStepDTO dto = buildStep();
+        dto.setActualResult("x".repeat(2001));
+
+        mockMvc.perform(put("/projects/{pid}/runs/{rid}/cases/{cid}/steps/{id}",
+                        projectId, runId, caseId, stepId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dto)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -104,7 +104,14 @@ public class TestRunController {
     @PostMapping("/{id}/complete")
     @JsonView(TestRunDTO.Views.Http.class)
     @Operation(summary = "Complete a test run (Tester, Admin)")
-    public ResponseEntity<TestRunDTO> completeTestRun(@PathVariable UUID projectId, @PathVariable UUID id) {
+    public ResponseEntity<TestRunDTO> completeTestRun(
+            @PathVariable UUID projectId,
+            @PathVariable UUID id,
+            HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (role == null || (!"TESTER".equals(role) && !"ADMIN".equals(role))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         return testRunService.getTestRunById(id)
                 .filter(tr -> tr.getProjectId().equals(projectId))
                 .flatMap(tr -> testRunService.completeTestRun(id))
@@ -132,8 +139,15 @@ public class TestRunController {
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete a test run")
-    public ResponseEntity<Void> deleteTestRun(@PathVariable UUID projectId, @PathVariable UUID id) {
+    @Operation(summary = "Delete a test run (Tester, Admin)")
+    public ResponseEntity<Void> deleteTestRun(
+            @PathVariable UUID projectId,
+            @PathVariable UUID id,
+            HttpServletRequest request) {
+        String role = (String) request.getAttribute("role");
+        if (role == null || (!"TESTER".equals(role) && !"ADMIN".equals(role))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         if (testRunService.deleteTestRun(id)) {
             return ResponseEntity.noContent().build();
         }
