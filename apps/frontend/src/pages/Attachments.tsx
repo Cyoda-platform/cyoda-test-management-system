@@ -101,8 +101,12 @@ const Attachments = () => {
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => attachmentsApi.delete(projectId!, id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['attachments', projectId] });
+    onSuccess: (_, deletedId) => {
+      qc.setQueryData(['attachments', projectId], (old: { data: Attachment[] } | Attachment[] | undefined) => {
+        if (!old) return old;
+        if (Array.isArray(old)) return old.filter(a => a.id !== deletedId);
+        return { ...old, data: (old.data ?? []).filter(a => a.id !== deletedId) };
+      });
       toast.success('Attachment deleted');
       setDeleteTarget(null);
     },
