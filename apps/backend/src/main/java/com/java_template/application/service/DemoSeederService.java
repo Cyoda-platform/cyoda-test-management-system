@@ -3,6 +3,7 @@ package com.java_template.application.service;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.java_template.application.dto.*;
+import com.java_template.common.dto.PageResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
@@ -77,16 +78,15 @@ public class DemoSeederService {
     // ── Public API ────────────────────────────────────────────────────────────
 
     public Map<String, Object> seed() {
-        // 1. Idempotency guard
-        List<ProjectDTO> existing = projectService.searchProjects(DEMO_PROJECT_NAME);
-        if (existing.stream().anyMatch(p -> DEMO_PROJECT_NAME.equals(p.getName()))) {
-            UUID existingId = existing.stream()
-                    .filter(p -> DEMO_PROJECT_NAME.equals(p.getName()))
-                    .findFirst().map(ProjectDTO::getId).orElse(null);
-            log.info("[DemoSeeder] Demo project already exists: {}", existingId);
+        // 1. Idempotency guard — skip if ANY projects exist (not just the demo project).
+        // This ensures the seeder only runs on a completely fresh Cyoda tenant.
+        // If the user has created their own projects, or previously deleted the demo,
+        // we do not re-seed automatically.
+        PageResult<ProjectDTO> allProjects = projectService.getAllProjects(0, 1);
+        if (allProjects.totalElements() > 0) {
+            log.info("[DemoSeeder] Cyoda already has {} project(s) — skipping demo seed.", allProjects.totalElements());
             return Map.of("status", "skipped",
-                          "message", "Demo project '" + DEMO_PROJECT_NAME + "' already exists.",
-                          "projectId", String.valueOf(existingId));
+                          "message", "Skipped: Cyoda already contains projects.");
         }
 
         try {

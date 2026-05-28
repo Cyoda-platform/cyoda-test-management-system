@@ -14,14 +14,14 @@ import java.util.Map;
  * Automatically seeds the "E-commerce Platform" demo project once,
  * right after the application is fully started.
  *
- * Disabled by default — enable with {@code app.demo.seed-on-startup=true}.
- * In normal deployments the demo project is seeded by running {@code seed-demo.sh}
- * after the application is up, not automatically on every startup.
+ * Enabled by default — disable with {@code APP_DEMO_SEED_ON_STARTUP=false} in the environment.
+ * Safe to leave enabled in production: the seed is skipped silently if Cyoda already
+ * contains any projects (i.e. it only runs once, on a completely fresh tenant).
  *
- * Idempotent: if the demo project already exists the seed is skipped silently.
+ * Idempotent: if Cyoda is non-empty the seed is skipped silently.
  */
 @Component
-@ConditionalOnProperty(name = "app.demo.seed-on-startup", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(name = "app.demo.seed-on-startup", havingValue = "true", matchIfMissing = true)
 public class DemoSeederRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DemoSeederRunner.class);
@@ -50,8 +50,7 @@ public class DemoSeederRunner {
                     log.info("[DemoSeederRunner] Demo project seeded successfully. projectId={}, runId={}",
                             result.get("projectId"), result.get("runId"));
                 } else {
-                    log.info("[DemoSeederRunner] Demo project already exists — seed skipped. projectId={}",
-                            result.get("projectId"));
+                    log.info("[DemoSeederRunner] Cyoda already has projects — seed skipped.");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

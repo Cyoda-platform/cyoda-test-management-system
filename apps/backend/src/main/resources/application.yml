@@ -39,9 +39,9 @@ app:
   # Override with APP_USERS_SEED_FILE=/path/to/file for vault-mounted secrets.
   seed-file: ${APP_USERS_SEED_FILE:}
   demo:
-    # Set to true to auto-seed the demo project on startup.
-    # Normally keep false and run seed-demo.sh once after deploy instead.
-    seed-on-startup: false
+    # Auto-seeds the demo project on first startup (idempotent — skips if already exists).
+    # Set APP_DEMO_SEED_ON_STARTUP=false in .env to disable (e.g. in production).
+    seed-on-startup: ${APP_DEMO_SEED_ON_STARTUP:true}
   auth:
     # Local PoC JWT signing secret. Set APP_AUTH_SECRET in any real environment.
     # MIGRATION: Delete this entire block when switching to a real IdP and add:

@@ -17,9 +17,11 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.java_template.application.dto.*;
+import com.java_template.common.dto.PageResult;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,10 +43,47 @@ class DemoSeederServiceTest {
     private DemoSeederService service;
 
     @Test
+    @DisplayName("seed skips if ANY projects already exist (not just the demo project)")
+    void seed_skipsIfAnyProjectsExist() {
+        // Cyoda already has a user-created project (not the demo project)
+        ProjectDTO userProject = new ProjectDTO();
+        userProject.setId(UUID.randomUUID());
+        userProject.setName("My Real Project");
+        PageResult<ProjectDTO> nonEmpty = PageResult.of(null, List.of(userProject), 0, 1, 1L);
+        when(projectService.getAllProjects(anyInt(), anyInt())).thenReturn(nonEmpty);
+
+        Map<String, Object> result = service.seed();
+
+        assertEquals("skipped", result.get("status"));
+        verify(projectService, never()).createProject(any());
+    }
+
+    @Test
+    @DisplayName("seed runs if Cyoda is completely empty (no projects at all)")
+    void seed_runsIfCyodaIsEmpty() {
+        PageResult<ProjectDTO> empty = PageResult.of(null, List.of(), 0, 1, 0L);
+        when(projectService.getAllProjects(anyInt(), anyInt())).thenReturn(empty);
+
+        ProjectDTO created = new ProjectDTO();
+        created.setId(UUID.randomUUID());
+        created.setName("E-commerce Platform");
+        when(projectService.createProject(any())).thenReturn(created);
+        lenient().when(suiteService.createSuite(any())).thenAnswer(inv -> { SuiteDTO s = new SuiteDTO(); s.setId(UUID.randomUUID()); return s; });
+        lenient().when(testCaseService.createTestCase(any())).thenAnswer(inv -> { TestCaseDTO tc = new TestCaseDTO(); tc.setId(UUID.randomUUID()); tc.setDisplayId("TC-1"); return tc; });
+        // testRunService returns null — seed handles it gracefully (partial result)
+        lenient().when(testRunService.createTestRun(any())).thenThrow(new RuntimeException("Cyoda unavailable"));
+
+        service.seed();
+
+        verify(projectService).createProject(any());
+    }
+
+    @Test
     @DisplayName("transient createTestRun failure does not abort the entire seed")
     void seed_createTestRunFailure_doesNotAbortSeed() {
-        // Not already seeded
-        lenient().when(projectService.searchProjects(any())).thenReturn(List.of());
+        // Cyoda is empty — seed should proceed
+        PageResult<ProjectDTO> empty = PageResult.of(null, List.of(), 0, 1, 0L);
+        lenient().when(projectService.getAllProjects(anyInt(), anyInt())).thenReturn(empty);
 
         ProjectDTO project = new ProjectDTO();
         project.setId(UUID.randomUUID());
