@@ -793,8 +793,15 @@ export function useDeleteReport() {
   return useMutation({
     mutationFn: ({ projectId, id }: { projectId: string; id: string }) =>
       reportsApi.delete(projectId, id),
-    onSuccess: (_data, { projectId }) =>
-      qc.invalidateQueries({ queryKey: keys.reports.all(projectId) }),
+    onSuccess: (_data, { projectId, id }) => {
+      qc.setQueriesData(
+        { queryKey: keys.reports.all(projectId) },
+        (old: { data: { id: string }[] } | undefined) => {
+          if (!old) return old;
+          return { ...old, data: (old.data ?? []).filter(r => r.id !== id) };
+        },
+      );
+    },
   });
 }
 
