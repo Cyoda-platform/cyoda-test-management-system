@@ -633,7 +633,9 @@ const Defects = () => {
           </div>
           <DialogFooter className="mt-4">
             <Button variant="ghost" onClick={() => { resetForm(); setCreateOpen(false); }} disabled={isCreating}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={isCreating}>{isCreating ? 'Creating...' : 'Create Defect'}</Button>
+            <Button onClick={handleCreate} disabled={isCreating}>
+              {isCreating ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Creating…</> : 'Create Defect'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

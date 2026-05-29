@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, FileText, Image, File, X } from 'lucide-react';
+import { Upload, FileText, Image, File, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const labelCls = 'text-[10px] font-semibold text-muted-foreground uppercase mb-1.5 block font-mono tracking-widest';
@@ -236,12 +236,15 @@ const CreateDefectModal = ({ open, onOpenChange, caseId, caseTitle, stepIdx, sou
         </div>
 
         <div className="flex justify-end gap-2 mt-4">
-          <Button variant="ghost" onClick={() => handleClose(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => handleClose(false)} disabled={isSubmitting}>Cancel</Button>
           <Button
             onClick={handleSubmit}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
+            disabled={isSubmitting}
           >
-            Create Defect
+            {isSubmitting
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Creating…</>
+              : 'Create Defect'}
           </Button>
         </div>
       </DialogContent>
