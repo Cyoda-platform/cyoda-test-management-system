@@ -120,3 +120,27 @@ Feature: Defects REST API — CRUD lifecycle
     Then the response HTTP status is 200
     And the filtered defect list contains 1 item
     And the first filtered defect has title "Run Defect"
+
+  @requires-cyoda
+  Scenario: TESTER can create a defect — expects 201
+    Given I am logged in as tester
+    And I have created a defect testing project named "Tester Create Defect Project"
+    When I create a defect with title "Tester Bug" and severity "Minor"
+    Then the create defect response HTTP status is 201
+
+  @requires-cyoda
+  Scenario: TESTER can update a defect — expects 200
+    Given I am logged in as admin
+    And I have created a defect testing project named "Tester Update Defect Project"
+    And I have created a defect with title "Update Me" and severity "Major"
+    When I log in as tester and update that defect severity to "Critical"
+    Then the response HTTP status is 200
+    And the defect response body contains field "severity" with value "Critical"
+
+  @requires-cyoda
+  Scenario: TESTER cannot delete a defect — expects 403
+    Given I am logged in as admin
+    And I have created a defect testing project named "Tester Delete Forbidden Project"
+    And I have created a defect with title "Forbidden Delete" and severity "Minor"
+    When I log in as tester and try to delete that defect
+    Then the delete defect response HTTP status is 403

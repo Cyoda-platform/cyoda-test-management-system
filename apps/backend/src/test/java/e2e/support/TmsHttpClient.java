@@ -95,6 +95,15 @@ public class TmsHttpClient {
         return exchange(path, HttpMethod.DELETE, null);
     }
 
+    public ResponseEntity<String> postMultipart(String path, org.springframework.util.MultiValueMap<String, Object> parts) {
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
+        if (bearerToken != null) headers.setBearerAuth(bearerToken);
+        org.springframework.http.HttpEntity<org.springframework.util.MultiValueMap<String, Object>> entity =
+                new org.springframework.http.HttpEntity<>(parts, headers);
+        return executeAndCapture(path, HttpMethod.POST, entity);
+    }
+
     // ── Accessors ─────────────────────────────────────────────────────────
 
     public ResponseEntity<String> getLastResponse() {
@@ -123,7 +132,7 @@ public class TmsHttpClient {
         return executeAndCapture(path, method, entity);
     }
 
-    private ResponseEntity<String> executeAndCapture(String path, HttpMethod method, HttpEntity<String> entity) {
+    private ResponseEntity<String> executeAndCapture(String path, HttpMethod method, HttpEntity<?> entity) {
         String url = "http://localhost:" + serverPort + path;
         try {
             lastResponse = restTemplate.exchange(url, method, entity, String.class);

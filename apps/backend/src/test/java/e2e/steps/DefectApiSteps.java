@@ -216,6 +216,39 @@ public class DefectApiSteps {
         createdDefectIds.remove(id);  // already deleted — skip @After cleanup
     }
 
+    @When("I log in as tester and update that defect severity to {string}")
+    public void i_log_in_as_tester_and_update_that_defect_severity_to(String newSeverity) throws Exception {
+        assertNotNull(lastDefectResponse, "Cannot update — no defect has been created yet");
+        String id = extractField(lastDefectResponse.getBody(), "id");
+        assertNotNull(id, "Cannot update — defect id not found in last response");
+        loginAs("test_tester", "tester123");
+
+        JsonNode current = objectMapper.readTree(lastDefectResponse.getBody());
+        String title = current.has("title") ? current.get("title").asText() : "Defect";
+        String description = current.has("description") && !current.get("description").isNull()
+                ? current.get("description").asText() : "";
+        String status = current.has("status") && !current.get("status").isNull()
+                ? current.get("status").asText() : "Open";
+
+        String updateBody = String.format(
+                "{\"title\":\"%s\",\"description\":\"%s\",\"severity\":\"%s\",\"status\":\"%s\"}",
+                escapeJson(title), escapeJson(description), newSeverity, escapeJson(status));
+
+        lastDefectResponse = http.put(
+                CONTEXT_PATH + "/projects/" + createdProjectId + "/defects/" + id, updateBody);
+    }
+
+    @When("I log in as tester and try to delete that defect")
+    public void i_log_in_as_tester_and_try_to_delete_that_defect() throws Exception {
+        assertNotNull(lastDefectResponse, "Cannot DELETE — no defect has been created yet");
+        String id = extractField(lastDefectResponse.getBody(), "id");
+        assertNotNull(id, "Cannot DELETE — defect id not found in last response");
+        loginAs("test_tester", "tester123");
+        http.delete(CONTEXT_PATH + "/projects/" + createdProjectId + "/defects/" + id);
+        // Do NOT remove from createdDefectIds — delete is expected to fail (403),
+        // so @After cleanup still needs to handle this defect.
+    }
+
     // ── Then ──────────────────────────────────────────────────────────────
 
     @Then("the create defect response HTTP status is {int}")
@@ -286,6 +319,14 @@ public class DefectApiSteps {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
+
+    private void loginAs(String username, String password) {
+        String body = "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}";
+        http.postAnonymous(CONTEXT_PATH + "/auth/login", body);
+        String token = extractField(http.lastBody(), "token");
+        assertNotNull(token, "Login failed for " + username + ": " + http.lastBody());
+        http.setBearerToken(token);
+    }
 
     private String buildDefectBody(String title, String severity, String testRunId) {
         StringBuilder sb = new StringBuilder("{");
