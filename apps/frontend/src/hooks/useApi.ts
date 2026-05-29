@@ -207,9 +207,23 @@ export function useDeleteSuite() {
   return useMutation({
     mutationFn: ({ projectId, id }: { projectId: string; id: string }) =>
       suitesApi.delete(projectId, id),
-    onSuccess: (_data, { projectId }) => {
-      qc.invalidateQueries({ queryKey: keys.suites.all(projectId) });
-      qc.invalidateQueries({ queryKey: keys.repository.all(projectId) });
+    onSuccess: (_data, { projectId, id }) => {
+      // Remove suite immediately from cache — don't refetch (Cyoda eventual consistency
+      // would return the deleted suite for a few seconds after deletion).
+      qc.setQueryData(
+        keys.repository.all(projectId),
+        (old: { suites: { id: string }[] } | undefined) => {
+          if (!old) return old;
+          return { ...old, suites: old.suites.filter(s => s.id !== id) };
+        },
+      );
+      qc.setQueriesData(
+        { queryKey: keys.suites.all(projectId) },
+        (old: { data: { id: string }[] } | undefined) => {
+          if (!old) return old;
+          return { ...old, data: (old.data ?? []).filter(s => s.id !== id) };
+        },
+      );
     },
   });
 }
