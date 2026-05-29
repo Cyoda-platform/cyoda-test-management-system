@@ -129,8 +129,9 @@ public class ApiSecurityConfig {
 
     private JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        // Map the 'roles' claim to GrantedAuthority with ROLE_ prefix
-        authoritiesConverter.setAuthoritiesClaimName("roles");
+        // JWT tokens issued by JwtTokenProvider contain a single "role" claim (e.g. "ADMIN", "TESTER").
+        // Must match the claim name exactly — "roles" (plural) would silently yield no authorities.
+        authoritiesConverter.setAuthoritiesClaimName("role");
         authoritiesConverter.setAuthorityPrefix("ROLE_");
 
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
