@@ -75,6 +75,8 @@ public class DefectApiSteps {
     public void cleanupCreatedDefects() {
         // Bottom-up deletion: defects before project (per SCHEMA_AND_WORKFLOW_IMPORT.md)
         if (createdProjectId != null) {
+            // Cleanup always needs admin — tester cannot delete defects or projects.
+            try { loginAs("test_admin", "admin123"); } catch (Exception ignored) {}
             for (String defectId : createdDefectIds) {
                 try {
                     http.delete(CONTEXT_PATH + "/projects/" + createdProjectId + "/defects/" + defectId);
@@ -98,6 +100,10 @@ public class DefectApiSteps {
 
     @Given("I have created a defect testing project named {string}")
     public void i_have_created_a_defect_testing_project(String name) throws Exception {
+        // Project creation always requires admin — save and restore the caller's token so
+        // scenarios that switch to tester before calling this step work correctly.
+        String savedToken = http.getBearerToken();
+        loginAs("test_admin", "admin123");
         String body = "{\"name\":\"" + name + "\",\"description\":\"E2E defect test project\"}";
         ResponseEntity<String> response = http.post(CONTEXT_PATH + "/projects", body);
         assertEquals(201, response.getStatusCode().value(),
@@ -106,6 +112,8 @@ public class DefectApiSteps {
         createdProjectId = extractField(response.getBody(), "id");
         assertNotNull(createdProjectId,
                 "Project creation response did not contain 'id'. Body: " + response.getBody());
+        if (savedToken != null) http.setBearerToken(savedToken);
+        else http.clearBearerToken();
     }
 
     @Given("I have created a defect with title {string} and severity {string}")
