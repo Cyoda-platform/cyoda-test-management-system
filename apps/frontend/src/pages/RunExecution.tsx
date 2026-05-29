@@ -57,6 +57,7 @@ import { isUuid, formatDate } from '@/lib/utils';
 import { AuthenticatedImage, AuthenticatedPdf } from '@/components/AttachmentPreview';
 import { isImageType, isPdfType, isPreviewableType } from '@/lib/attachmentUtils';
 import type { DefectData } from '@/components/CreateDefectModal';
+import { buildSuitesFromRunCases } from '@/lib/runSuites';
 
 type StepStatus = 'untested' | 'passed' | 'failed' | 'skipped';
 
@@ -227,49 +228,7 @@ const RunExecution = () => {
    */
   const filteredSuitesWithCases = useMemo(() => {
     if (runCases.length > 0) {
-      // Build suite name + case data lookups from live repository.
-      // Used as a fallback for snapshot fields that may be absent on older
-      // TestRunCase records (created before initialize_run started snapshotting
-      // all fields). For soft-deleted cases `liveCase` will be undefined, so
-      // the snapshot fields are used exclusively — that's the fix.
-      const suiteNameById = new Map(
-        (repositoryData?.suites ?? []).map((s) => [s.id, s.name]),
-      );
-      const liveCaseById = new Map(
-        (repositoryData?.suites ?? []).flatMap((s) => s.cases).map((c) => [c.id, c]),
-      );
-
-      // Group run cases by suiteId, preserving insertion order.
-      const bySuite = new Map<string, typeof runCases>();
-      for (const rc of runCases) {
-        const sid = rc.suiteId ?? 'unknown';
-        if (!bySuite.has(sid)) bySuite.set(sid, []);
-        bySuite.get(sid)!.push(rc);
-      }
-
-      return Array.from(bySuite.entries()).map(([suiteId, cases]) => ({
-        id: suiteId,
-        name: suiteNameById.get(suiteId) ?? 'Unknown Suite',
-        cases: cases.map((rc) => {
-          const live = liveCaseById.get(rc.testCaseId);
-          return {
-            id: rc.testCaseId,
-            title: rc.title || live?.title || '',
-            description: rc.description ?? live?.description ?? '',
-            preconditions: rc.preconditions ?? live?.preconditions ?? '',
-            priority: ((rc.priority ?? live?.priority ?? 'MEDIUM') as 'HIGH' | 'MEDIUM' | 'LOW'),
-            displayId: rc.displayId ?? live?.displayId ?? '',
-            // Prefer snapshot steps; fall back to live repo for old records
-            // where initialize_run didn't yet copy steps.
-            steps: rc.steps?.length ? rc.steps : (live?.steps ?? []),
-            suiteId,
-            projectId: live?.projectId ?? '',
-            status: rc.status,
-            sortOrder: live?.sortOrder ?? 0,
-            deleted: false,
-          };
-        }),
-      }));
+      return buildSuitesFromRunCases(runCases, repositoryData?.suites ?? []);
     }
 
     // Fallback: live repository data filtered by run.caseIds.
