@@ -214,43 +214,65 @@ const RunExecution = () => {
   }, [getRunCaseTestCaseId, runCases]);
 
   /**
-   * Filter the repository suites/cases to only those selected for this run.
+   * Build the suite/case tree for this run.
    *
-   * Priority order for determining which cases belong to this run:
-   *   1. `run.caseIds` — the snapshot saved on the run entity at creation time.
-   *   2. `runCases`    — the DB-backed TestRunCase records (fallback when caseIds is absent,
-   *                      e.g. runs created before the caseIds field was introduced).
-   *   3. All repository cases — last resort only when neither source has data yet.
+   * Primary path: build entirely from TestRunCase snapshot data (title,
+   * description, preconditions, priority, displayId, steps are all snapshotted
+   * at initialize_run time). This makes locked runs immune to soft-deletion of
+   * repository cases/suites — the snapshots survive even after the originals
+   * are deleted.
    *
-   * Using `runCases` as the primary fallback prevents the "all project cases appear"
-   * regression that occurred when a run was created without caseIds being stored.
+   * Fallback path: live repository data filtered by run.caseIds, used only
+   * when runCases haven't loaded yet (initial render window).
    */
   const filteredSuitesWithCases = useMemo(() => {
-    // Build the authoritative set of case UUIDs for this run.
-    let runCaseIdSet: Set<string> | null = null;
-
-    if (run?.caseIds && run.caseIds.length > 0) {
-      // Preferred: the snapshot on the run entity.
-      runCaseIdSet = new Set(run.caseIds);
-    } else if (runCases.length > 0) {
-      // Fallback: derive from DB-backed TestRunCase records.
-      runCaseIdSet = new Set(
-        runCases
-          .map((rc) => getRunCaseTestCaseId(rc))
-          .filter(Boolean),
+    if (runCases.length > 0) {
+      // Build suite name lookup from live repository (best-effort; falls back to
+      // "Unknown Suite" when the suite has been deleted from the repository).
+      const suiteNameById = new Map(
+        (repositoryData?.suites ?? []).map((s) => [s.id, s.name]),
       );
+
+      // Group run cases by suiteId, preserving insertion order.
+      const bySuite = new Map<string, typeof runCases>();
+      for (const rc of runCases) {
+        const sid = rc.suiteId ?? 'unknown';
+        if (!bySuite.has(sid)) bySuite.set(sid, []);
+        bySuite.get(sid)!.push(rc);
+      }
+
+      return Array.from(bySuite.entries()).map(([suiteId, cases]) => ({
+        id: suiteId,
+        name: suiteNameById.get(suiteId) ?? 'Unknown Suite',
+        cases: cases.map((rc) => ({
+          id: rc.testCaseId,
+          title: rc.title ?? '',
+          description: rc.description ?? '',
+          preconditions: rc.preconditions ?? '',
+          priority: (rc.priority ?? 'MEDIUM') as 'HIGH' | 'MEDIUM' | 'LOW',
+          displayId: rc.displayId ?? '',
+          steps: rc.steps ?? [],
+          suiteId,
+          projectId: '',
+          status: rc.status,
+          sortOrder: 0,
+          deleted: false,
+        })),
+      }));
     }
 
-    // If we have an authoritative set, filter the repository accordingly.
+    // Fallback: live repository data filtered by run.caseIds.
+    let runCaseIdSet: Set<string> | null = null;
+    if (run?.caseIds && run.caseIds.length > 0) {
+      runCaseIdSet = new Set(run.caseIds);
+    }
     if (runCaseIdSet && runCaseIdSet.size > 0) {
       return suitesWithCases
         .map((s) => ({ ...s, cases: s.cases.filter((c) => runCaseIdSet!.has(c.id)) }))
         .filter((s) => s.cases.length > 0);
     }
-
-    // Last resort: show everything (backward compatibility / data not yet loaded).
     return suitesWithCases;
-  }, [getRunCaseTestCaseId, suitesWithCases, run, runCases]);
+  }, [runCases, repositoryData?.suites, suitesWithCases, run]);
 
   // Flat list of cases in this run (for indexed access)
   const allCases = useMemo(() =>

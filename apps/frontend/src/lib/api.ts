@@ -551,6 +551,14 @@ export interface TestRunCase {
   suiteId: string;
   /** Title from the original test case */
   title: string;
+  /** Snapshot: description from the original test case */
+  description?: string;
+  /** Snapshot: preconditions from the original test case */
+  preconditions?: string;
+  /** Snapshot: priority from the original test case */
+  priority?: string;
+  /** Snapshot: display ID from the original test case */
+  displayId?: string;
   /** Optional ISO timestamp when execution started */
   startedAt?: string;
   /** Optional ISO timestamp when execution completed */
