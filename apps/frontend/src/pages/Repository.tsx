@@ -1667,8 +1667,14 @@ const Repository = () => {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-6">
-            <Button variant="outline" size="sm" onClick={() => setDeleteModalOpen(false)}>Cancel</Button>
-            <Button size="sm" variant="destructive" onClick={handleDelete}>Delete</Button>
+            <Button variant="outline" size="sm" onClick={() => setDeleteModalOpen(false)}
+              disabled={deleteSuiteMut.isPending || deleteCaseMut.isPending}>Cancel</Button>
+            <Button size="sm" variant="destructive" onClick={handleDelete}
+              disabled={deleteSuiteMut.isPending || deleteCaseMut.isPending}>
+              {(deleteSuiteMut.isPending || deleteCaseMut.isPending)
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />Deleting…</>
+                : 'Delete'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
