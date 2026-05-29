@@ -77,9 +77,9 @@ const Projects = () => {
       onSuccess: () => {
         toast.success('Project deleted');
         setDeleteProject(null);
-        // Invalidate current page to refetch updated list
-        queryClient.invalidateQueries({ queryKey: keys.projects.list(page) });
-        // If we deleted the last item on a page beyond 0, go back one page
+        // setQueriesData in useDeleteProject already removed the item from cache.
+        // Do NOT invalidateQueries here — refetch brings the deleted item back
+        // due to Cyoda eventual consistency.
         if (projects.length === 1 && page > 0) {
           setPage(page - 1);
         }
