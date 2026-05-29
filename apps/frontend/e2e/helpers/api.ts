@@ -236,6 +236,49 @@ export async function deleteTestRun(
   assertOk(res.status(), null, 'deleteTestRun');
 }
 
+/** Creates a test run without waiting for SnapshotProcessor — enough to appear in the runs list. */
+export async function createTestRunDirect(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  name = `E2E Run ${Date.now()}`,
+): Promise<{ id: string; name: string }> {
+  const res = await api.post(`${BASE}/projects/${projectId}/runs`, {
+    data: { name, environment: 'E2E', buildVersion: '1.0.0', description: 'E2E test', caseIds: [] },
+    headers: { ...headers, 'Content-Type': 'application/json' },
+  });
+  const body = await res.json();
+  assertOk(res.status(), body, 'createTestRunDirect');
+  return { id: body.id, name };
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export async function createReport(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  name = `E2E Report ${Date.now()}`,
+): Promise<{ id: string; name: string }> {
+  const res = await api.post(`${BASE}/projects/${projectId}/reports`, {
+    data: { name, type: 'Summary', description: 'E2E test report', selectedRuns: [], sections: {} },
+    headers: { ...headers, 'Content-Type': 'application/json' },
+  });
+  const body = await res.json();
+  assertOk(res.status(), body, 'createReport');
+  return { id: body.id, name };
+}
+
+export async function deleteReport(
+  api: APIRequestContext,
+  headers: Record<string, string>,
+  projectId: string,
+  reportId: string,
+): Promise<void> {
+  const res = await api.delete(`${BASE}/projects/${projectId}/reports/${reportId}`, { headers });
+  if (res.status() !== 204 && res.status() !== 404) assertOk(res.status(), null, 'deleteReport');
+}
+
 // ── Defects ───────────────────────────────────────────────────────────────────
 
 export async function createDefect(

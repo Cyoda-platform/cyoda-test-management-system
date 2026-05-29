@@ -260,6 +260,7 @@ const TestRuns = () => {
                       <Pencil className="h-4 w-4" strokeWidth={1.5} />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      data-testid="run-delete-btn"
                       onClick={() => { setDeleteTarget(run); setDeleteOpen(true); }}>
                       <Trash2 className="h-4 w-4" strokeWidth={1.5} />
                     </Button>
