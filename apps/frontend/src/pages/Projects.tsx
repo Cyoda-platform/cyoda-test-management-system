@@ -259,6 +259,7 @@ const Projects = () => {
         onClose={() => setCreateOpen(false)}
         onSave={handleCreate}
         mode="create"
+        isLoading={createProject.isPending}
       />
       {editProject && (
         <ProjectModal
@@ -268,6 +269,7 @@ const Projects = () => {
           mode="edit"
           initialName={editProject.name}
           initialDescription={editProject.description}
+          isLoading={updateProject.isPending}
           projectId={editProject.id}
           projectIndex={[...projects].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).findIndex((p) => p.id === editProject.id)}
         />

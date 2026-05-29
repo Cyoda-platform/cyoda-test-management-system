@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Loader2 } from 'lucide-react';
 
 interface ProjectModalProps {
   open: boolean;
@@ -16,9 +17,10 @@ interface ProjectModalProps {
   initialDescription?: string;
   projectId?: string;
   projectIndex?: number;
+  isLoading?: boolean;
 }
 
-const ProjectModal = ({ open, onClose, onSave, mode, initialName = '', initialDescription = '', projectId, projectIndex }: ProjectModalProps) => {
+const ProjectModal = ({ open, onClose, onSave, mode, initialName = '', initialDescription = '', projectId, projectIndex, isLoading = false }: ProjectModalProps) => {
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
 
@@ -60,9 +62,11 @@ const ProjectModal = ({ open, onClose, onSave, mode, initialName = '', initialDe
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit" className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0">
-              {mode === 'create' ? 'Create Project' : 'Save Changes'}
+            <Button type="button" variant="ghost" onClick={onClose} disabled={isLoading}>Cancel</Button>
+            <Button type="submit" className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground border-0" disabled={isLoading}>
+              {isLoading
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />{mode === 'create' ? 'Creating…' : 'Saving…'}</>
+                : mode === 'create' ? 'Create Project' : 'Save Changes'}
             </Button>
           </DialogFooter>
         </form>
