@@ -46,6 +46,7 @@ public class AttachmentApiSteps {
     @After
     public void cleanupAttachments() {
         if (projectId == null) return;
+        loginAs("test_admin", "admin123");
         if (lastAttachmentId != null) {
             try { http.delete(CTX + "/projects/" + projectId + "/attachments/" + lastAttachmentId); }
             catch (Exception e) { log.warn("[Cleanup] attachment {}: {}", lastAttachmentId, e.getMessage()); }
@@ -130,6 +131,13 @@ public class AttachmentApiSteps {
         JsonNode root = objectMapper.readTree(http.lastBody());
         assertTrue(root.has(field) && root.get(field).isArray(),
                 "Expected '" + field + "' array in: " + http.lastBody());
+    }
+
+    private void loginAs(String username, String password) {
+        http.postAnonymous(CTX + "/auth/login",
+                "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}");
+        String token = extractField(http.lastBody(), "token");
+        if (token != null) http.setBearerToken(token);
     }
 
     private String extractField(String json, String field) {

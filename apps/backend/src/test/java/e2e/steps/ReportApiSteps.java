@@ -44,6 +44,7 @@ public class ReportApiSteps {
     @After
     public void cleanupReports() {
         if (projectId == null) return;
+        loginAs("test_admin", "admin123");
         for (String id : reportIds) {
             try { http.delete(CTX + "/projects/" + projectId + "/reports/" + id); }
             catch (Exception e) { log.warn("[Cleanup] report {}: {}", id, e.getMessage()); }
@@ -104,6 +105,13 @@ public class ReportApiSteps {
         JsonNode root = objectMapper.readTree(http.lastBody());
         assertTrue(root.has(field) && root.get(field).isArray(),
                 "Expected '" + field + "' array in: " + http.lastBody());
+    }
+
+    private void loginAs(String username, String password) {
+        http.postAnonymous(CTX + "/auth/login",
+                "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}");
+        String token = extractField(http.lastBody(), "token");
+        if (token != null) http.setBearerToken(token);
     }
 
     private String extractField(String json, String field) {

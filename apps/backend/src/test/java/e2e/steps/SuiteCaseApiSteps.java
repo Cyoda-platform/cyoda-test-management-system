@@ -47,6 +47,7 @@ public class SuiteCaseApiSteps {
     @After
     public void cleanupSuites() {
         if (projectId == null) return;
+        loginAs("test_admin", "admin123");
         for (String id : suiteIds) {
             try { http.delete(CTX + "/projects/" + projectId + "/suites/" + id); }
             catch (Exception e) { log.warn("[Cleanup] suite {}: {}", id, e.getMessage()); }
