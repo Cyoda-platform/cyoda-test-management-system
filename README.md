@@ -67,7 +67,9 @@ See [`apps/backend/SCHEMA_AND_WORKFLOW_IMPORT.md`](apps/backend/SCHEMA_AND_WORKF
 
 Users are stored as entities in Cyoda and seeded at startup from `apps/backend/src/main/resources/users-seed.yml`.
 
-Passwords must be **bcrypt hashes** — never plaintext. Generate a hash:
+Passwords must be **bcrypt hashes** — never plaintext. The plaintext password (e.g. `mysecretpassword`) is what you type at login — it is never stored anywhere in the project. Only the bcrypt hash goes into `users-seed.yml`. Keep your password in a safe place.
+
+Generate a hash:
 
 ```bash
 ./scripts/hash-password.sh your-password
