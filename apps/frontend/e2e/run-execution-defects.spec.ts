@@ -111,10 +111,11 @@ test.describe('RunExecution defects', () => {
   test('create defect via bug button on step', async ({ page }) => {
     await goToRun(page);
 
-    // Click the bug button on the second step
+    // Click the bug button on a step — test 1 marks step 1 as FAILED (defect created),
+    // so the first remaining bug button belongs to the next untested step.
     const bugBtns = page.getByTestId('step-bug-btn');
     await expect(bugBtns.first()).toBeVisible({ timeout: 10_000 });
-    await bugBtns.nth(1).click();
+    await bugBtns.first().click();
 
     const dialog = page.getByRole('dialog', { name: /create defect/i });
     await expect(dialog).toBeVisible({ timeout: 5_000 });
