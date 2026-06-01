@@ -123,8 +123,9 @@ public class DemoSeederService {
         log.info("[DemoSeeder] Created project: {}", projectId);
 
         // STEP 2-3 – Suites + TestCases (parallel per suite)
-        ConcurrentHashMap<String, UUID>     caseRefToId   = new ConcurrentHashMap<>();
-        ConcurrentHashMap<String, DemoCase> caseRefToData = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, UUID>     caseRefToId     = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, UUID>     caseRefToSuiteId = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, DemoCase> caseRefToData   = new ConcurrentHashMap<>();
         List<String> allCaseIds = Collections.synchronizedList(new ArrayList<>());
 
         List<CompletableFuture<Void>> suiteFutures = data.suites.stream()
@@ -148,6 +149,7 @@ public class DemoSeederService {
                         tc.setSteps(toStepDTOs(caseData.steps));
                         TestCaseDTO created = testCaseService.createTestCase(tc);
                         caseRefToId.put(caseData.ref, created.getId());
+                        caseRefToSuiteId.put(caseData.ref, suiteId);
                         caseRefToData.put(caseData.ref, caseData);
                         allCaseIds.add(created.getId().toString());
                         log.info("[DemoSeeder] Created case '{}' [{}]: {}", caseData.title, caseData.ref, created.getId());
@@ -201,11 +203,12 @@ public class DemoSeederService {
 
         List<CompletableFuture<Void>> trcFutures = new ArrayList<>(caseRefToId.entrySet()).stream()
                 .map(entry -> CompletableFuture.runAsync(() -> {
-                    String   ref    = entry.getKey();
-                    UUID     caseId = entry.getValue();
-                    DemoCase cd     = caseRefToData.get(ref);
+                    String   ref     = entry.getKey();
+                    UUID     caseId  = entry.getValue();
+                    UUID     suiteId = caseRefToSuiteId.get(ref);
+                    DemoCase cd      = caseRefToData.get(ref);
 
-                    TestRunCaseDTO trc = buildTestRunCase(runId, caseId, projectId, cd);
+                    TestRunCaseDTO trc = buildTestRunCase(runId, caseId, projectId, suiteId, cd);
                     TestRunCaseDTO createdTrc = testRunCaseService.createTestRunCase(trc);
                     UUID trcId = createdTrc.getId();
                     caseRefToRunCaseId.put(ref, trcId);
@@ -330,11 +333,12 @@ public class DemoSeederService {
                 .toList();
     }
 
-    private TestRunCaseDTO buildTestRunCase(UUID runId, UUID caseId, UUID projectId, DemoCase cd) {
+    private TestRunCaseDTO buildTestRunCase(UUID runId, UUID caseId, UUID projectId, UUID suiteId, DemoCase cd) {
         TestRunCaseDTO trc = new TestRunCaseDTO();
         trc.setTestRunId(runId);
         trc.setTestCaseId(caseId);
         trc.setProjectId(projectId);
+        trc.setSuiteId(suiteId);
         trc.setTitle(cd.title);
         trc.setDescription(cd.description);
         trc.setPreconditions(cd.preconditions);

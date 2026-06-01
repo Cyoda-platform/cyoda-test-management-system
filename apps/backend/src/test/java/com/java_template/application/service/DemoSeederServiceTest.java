@@ -115,6 +115,36 @@ class DemoSeederServiceTest {
     }
 
     @Test
+    @DisplayName("buildTestRunCase sets suiteId so RunExecution shows suite name instead of Unknown Suite")
+    void buildTestRunCase_setsSuiteId() throws Exception {
+        Method method = DemoSeederService.class.getDeclaredMethod(
+                "buildTestRunCase",
+                UUID.class, UUID.class, UUID.class, UUID.class, DemoSeederService.DemoCase.class
+        );
+        method.setAccessible(true);
+
+        UUID runId     = UUID.randomUUID();
+        UUID caseId    = UUID.randomUUID();
+        UUID projectId = UUID.randomUUID();
+        UUID suiteId   = UUID.randomUUID();
+
+        DemoSeederService.DemoCase cd = new DemoSeederService.DemoCase();
+        cd.title        = "Login test";
+        cd.description  = "desc";
+        cd.preconditions = "";
+        cd.priority     = "HIGH";
+        cd.steps        = List.of();
+        cd.stepOutcomes = List.of();
+        cd.runOutcome   = "UNTESTED";
+        cd.ref          = "case-login";
+
+        TestRunCaseDTO result = (TestRunCaseDTO) method.invoke(service, runId, caseId, projectId, suiteId, cd);
+
+        assertEquals(suiteId, result.getSuiteId(),
+                "suiteId must be propagated to TestRunCaseDTO so RunExecution displays correct suite name");
+    }
+
+    @Test
     @DisplayName("buildSnapshotData includes id, displayId and createdAt for defects")
     void buildSnapshotData_includesFullDefectFields() throws Exception {
         DemoSeederService.DemoData data = new DemoSeederService.DemoData();
