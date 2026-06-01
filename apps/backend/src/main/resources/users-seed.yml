@@ -16,3 +16,9 @@ users:
     passwordHash: "$2y$12$OsJO8cLauhkBcstQsqTXi.rUm4f.UJzh0i6vSplElqSKh2jx8p/6C"
     roles:
       - TESTER
+
+  - username: test_admin
+    email: test_admin@example.com
+    passwordHash: "$2a$12$oJvu/DU4b0pBvDcthRQK1.u07dy90JdtWHwOulGuLq0aXAf0C2Qb6"
+    roles:
+      - ADMIN
